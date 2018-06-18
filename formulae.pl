@@ -13,3 +13,5 @@ fif(and(inFridge(X),
     hasFreshness(X)),
   conclusion(fresh(X))).
 
+immediateposlit.
+
