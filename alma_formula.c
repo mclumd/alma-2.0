@@ -33,11 +33,19 @@ void generate_alma_trees(mpc_ast_t *tree, alma_node **alma_trees, size_t *size) 
   // Expects almaformula production to be children of top level of AST
   // If the grammar changes such that top-level rule doesn't lead to almaformula,
   // this will have to be changed.
+  *size = 0;
   for (int i = 0; i < tree->children_num; i++) {
-    // TODO, obtain # trees from almaformula count in children
-    // call single_alma_tree on alma_trees[i] per tree
+    if (strstr(tree->children[i]->tag, "almaformula") != NULL)
+      (*size)++;
   }
-  // TODO
+  *alma_trees = malloc(sizeof(alma_node) * *size);
+  int index = 0;
+  for (int i = 0; i < tree->children_num; i++) {
+    if (strstr(tree->children[i]->tag, "almaformula") != NULL) {
+      single_alma_tree(tree->children[i]->children[0], *alma_trees + index);
+      index++;
+    }
+  }
 }
 
 // Note: expects alma_tree to be allocated by caller of function
