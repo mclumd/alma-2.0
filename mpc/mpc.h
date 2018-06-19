@@ -286,6 +286,7 @@ mpc_ast_t *mpc_ast_tag(mpc_ast_t *a, const char *t);
 mpc_ast_t *mpc_ast_state(mpc_ast_t *a, mpc_state_t s);
 
 void mpc_ast_delete(mpc_ast_t *a);
+void mpc_ast_print_depth(mpc_ast_t *a, int d, FILE *fp);
 void mpc_ast_print(mpc_ast_t *a);
 void mpc_ast_print_to(mpc_ast_t *a, FILE *fp);
 

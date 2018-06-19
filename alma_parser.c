@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "mpc/mpc.h"
+#include "alma_formula.h"
 
 int main(int argc, char **argv) {
   
@@ -52,62 +53,26 @@ int main(int argc, char **argv) {
     Poslit, Listofterms, Term, Predname, Constant, Funcname, Variable,
     Prologconst, NULL);
 
-  /*
-  // Given file, parse assuming a single full ALMA formula per line
-  if (argc > 1) {
-    FILE * fp;
-    char * line = NULL;
-    size_t len = 0;
-    ssize_t read;
-
-    fp = fopen(argv[1], "r");
-    if (fp == NULL)
-      exit(EXIT_FAILURE);
-
-    while ((read = getline(&line, &len, fp)) != -1) {
-      int parse = 0;
-      for (int i = 0; i < read; i++) {
-        if (isalnum(line[i])) {
-          parse = 1;
-          break;
-        }
-      }
-
-      if (parse) {
-        if (mpc_parse(argv[1], line, Alma, &r)) {
-          mpc_ast_print(r.output);
-          mpc_ast_delete(r.output);
-        }
-        else {
-          mpc_err_print(r.error);
-          mpc_err_delete(r.error);
-        }
-      }
-    }
-
-    fclose(fp);
-    if (line)
-      free(line);
-  }
-  else {
-    if (mpc_parse_pipe("<stdin>", stdin, Alma, &r)) {
-      mpc_ast_print(r.output);
-      mpc_ast_delete(r.output);
-    }
-    else {
-      mpc_err_print(r.error);
-      mpc_err_delete(r.error);
-    }
-  }*/
-
   int result;
   if (argc > 1)
     result = mpc_parse_contents(argv[1], Alma, &r);
   else
     result = mpc_parse_pipe("<stdin>", stdin, Alma, &r);
   if (result) {
-    mpc_ast_print(r.output);
-    mpc_ast_delete(r.output);
+    alma_node *formulas;
+    size_t formula_count;
+    generate_alma_trees(r.output, &formulas, &formula_count);
+    for (int i = 0; i < formula_count; i++) {
+      alma_print(formulas[i]);
+      printf("\n");
+    }
+
+    for (int i = 0; i < formula_count; i++) {
+      free_alma_tree(formulas + i);
+    }
+    // Currently free entire AST tree because nothing further is done with alma_trees
+    // TODO: Write selective AST deletion based on parts unused in formulas
+    //mpc_ast_delete(r.output);
   }
   else {
     mpc_err_print(r.error);

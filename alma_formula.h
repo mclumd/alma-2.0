@@ -35,6 +35,11 @@ void alma_function_init(alma_node *node, mpc_ast_t *ast);
 void alma_fol_init(alma_fol fol, alma_operator op, alma_node *arg1, alma_node *arg2, if_tag *tag);
 
 void generate_alma_trees(mpc_ast_t *tree, alma_node **alma_trees, size_t *size);
-void single_alma_tree(mpc_ast_t *almaformula, alma_node *alma_tree);
+
+void alma_print(alma_node node);
+
+void free_alma_tree(alma_node *node);
+
+void mpc_ast_delete_selective(mpc_ast_t *a);
 
 #endif
