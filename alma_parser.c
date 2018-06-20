@@ -4,7 +4,7 @@
 #include "alma_formula.h"
 
 int main(int argc, char **argv) {
-  
+
   mpc_result_t r;
 
   mpc_parser_t* Alma  = mpc_new("alma");
@@ -67,12 +67,12 @@ int main(int argc, char **argv) {
       printf("\n");
     }
 
+    mpc_ast_delete_selective(r.output);
+    // Must free these AFTER delete_selective, as that checks
     for (int i = 0; i < formula_count; i++) {
       free_alma_tree(formulas + i);
     }
-    // Currently free entire AST tree because nothing further is done with alma_trees
-    // TODO: Write selective AST deletion based on parts unused in formulas
-    //mpc_ast_delete(r.output);
+    free(formulas);
   }
   else {
     mpc_err_print(r.error);

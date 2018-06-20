@@ -149,6 +149,7 @@ static void alma_print_rec(alma_node node, int indent) {
     printf("%sFUNCTION:\n", spacing);
     mpc_ast_print_depth(node.data.function->contents, indent, stdout);
   }
+  free(spacing);
 }
 
 void alma_print(alma_node node) {
@@ -184,20 +185,20 @@ void free_alma_tree(alma_node *node) {
 
 
 void mpc_ast_delete_selective(mpc_ast_t *a) {
-  
+
   int i;
-  
+
   if (a == NULL) { return; }
-  
-  for (i = 0; i < a->children_num; i++) {
-    if (/* TODO, only delete if not poslit node used elsewhere  */) {
-      mpc_ast_delete(a->children[i]);
+
+  if (strstr(a->tag, "poslit") == NULL) {
+    for (i = 0; i < a->children_num; i++) {
+      mpc_ast_delete_selective(a->children[i]);
     }
+
+    free(a->children);
+    free(a->tag);
+    free(a->contents);
+    free(a);
   }
-  
-  free(a->children);
-  free(a->tag);
-  free(a->contents);
-  free(a);
-  
+
 }
