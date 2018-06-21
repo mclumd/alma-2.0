@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -std=c99 -pedantic-errors -Wall -Werror -Wshadow -Wpedantic -g
+CFLAGS = -std=c11 -pedantic-errors -Wall -Werror -Wshadow -Wpedantic -g
 
 all: alma_parser.x
 

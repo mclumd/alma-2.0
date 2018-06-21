@@ -64,6 +64,12 @@ int main(int argc, char **argv) {
     generate_alma_trees(r.output, &formulas, &formula_count);
     for (int i = 0; i < formula_count; i++) {
       alma_print(formulas[i]);
+      printf("Rewritten without conditionals:\n");
+      eliminate_conditionals(formulas + i);
+      alma_print(formulas[i]);
+      printf("Rewritten with negation moved inwards:\n");
+      negation_inwards(formulas + i);
+      alma_print(formulas[i]);
       printf("\n");
     }
 

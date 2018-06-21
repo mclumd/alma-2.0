@@ -5,11 +5,12 @@
 
 typedef enum node_type {FOL, FUNCTION} node_type;
 typedef enum alma_operator {NOT, OR, AND, IF} alma_operator;
-typedef enum if_tag {FIF, BIF} if_tag;
+typedef enum if_tag {FIF, BIF} if_tag; // TODO: Singleton tag instead of mallocing
 
 struct alma_fol;
 struct alma_function;
 
+// TODO: Clean up with anonymous union for C11
 typedef struct alma_node {
   node_type type;
   union {
@@ -32,13 +33,15 @@ typedef struct alma_function {
 } alma_function;
 
 void alma_function_init(alma_node *node, mpc_ast_t *ast);
-void alma_fol_init(alma_fol fol, alma_operator op, alma_node *arg1, alma_node *arg2, if_tag *tag);
+void alma_fol_init(alma_node *node, alma_operator op, alma_node *arg1, alma_node *arg2, if_tag *tag);
 
 void generate_alma_trees(mpc_ast_t *tree, alma_node **alma_trees, size_t *size);
+void free_alma_tree(alma_node *node);
+
+void eliminate_conditionals(alma_node *node);
+void negation_inwards(alma_node *node);
 
 void alma_print(alma_node node);
-
-void free_alma_tree(alma_node *node);
 
 void mpc_ast_delete_selective(mpc_ast_t *a);
 

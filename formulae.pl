@@ -15,3 +15,4 @@ fif(and(inFridge(X),
 
 immediateposlit.
 
+if(not(a), b).
