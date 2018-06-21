@@ -7,17 +7,17 @@
 
 void alma_function_init(alma_node *node, mpc_ast_t *ast) {
   node->type = FUNCTION;
-  node->data.function = malloc(sizeof(alma_function));
-  node->data.function->contents = ast;
+  node->function = malloc(sizeof(alma_function));
+  node->function->contents = ast;
 }
 
-void alma_fol_init(alma_node *node, alma_operator op, alma_node *arg1, alma_node *arg2, if_tag *tag) {
+void alma_fol_init(alma_node *node, alma_operator op, alma_node *arg1, alma_node *arg2, if_tag tag) {
   node->type = FOL;
-  node->data.fol = malloc(sizeof(alma_fol));
-  node->data.fol->op = op;
-  node->data.fol->arg1 = arg1;
-  node->data.fol->arg2 = arg2;
-  node->data.fol->tag = tag;
+  node->fol = malloc(sizeof(alma_fol));
+  node->fol->op = op;
+  node->fol->arg1 = arg1;
+  node->fol->arg2 = arg2;
+  node->fol->tag = tag;
 }
 
 alma_operator op_from_contents(char *contents) {
@@ -49,11 +49,11 @@ static void single_alma_tree(mpc_ast_t *almaformula, alma_node *alma_tree) {
     // TODO: Refactor with alma_fol_init
     else {
       alma_tree->type = FOL;
-      alma_tree->data.fol = malloc(sizeof(alma_fol));
-      alma_fol *fol = alma_tree->data.fol;
+      alma_tree->fol = malloc(sizeof(alma_fol));
+      alma_fol *fol = alma_tree->fol;
 
       fol->op = op_from_contents(almaformula->children[0]->contents);
-      fol->tag = NULL;
+      fol->tag = NONE;
 
       // Set arg1 based on children
       fol->arg1 = malloc(sizeof(alma_node));
@@ -63,8 +63,7 @@ static void single_alma_tree(mpc_ast_t *almaformula, alma_node *alma_tree) {
         // Set arg2 for fformula conclusion
         fol->arg2 = malloc(sizeof(alma_node));
         single_alma_tree(almaformula->children[4], fol->arg2);
-        fol->tag = malloc(sizeof(if_tag));
-        *fol->tag = FIF;
+        fol->tag = FIF;
       }
       else {
         // Set arg2 if operation is binary or/and/if
@@ -79,10 +78,8 @@ static void single_alma_tree(mpc_ast_t *almaformula, alma_node *alma_tree) {
             fol->arg2 = NULL;
             break;
         }
-        if (strstr(almaformula->tag, "bformula") != NULL) {
-          fol->tag = malloc(sizeof(if_tag));
-          *fol->tag = BIF;
-        }
+        if (strstr(almaformula->tag, "bformula") != NULL)
+          fol->tag = BIF;
       }
     }
   }
@@ -114,16 +111,14 @@ static void free_node(alma_node *node, int freeself) {
   if (node == NULL)
     return;
 
-  if (node->type == FOL && node->data.fol != NULL) {
-    free_node(node->data.fol->arg1, 1);
-    free_node(node->data.fol->arg2, 1);
-    if (node->data.fol->tag != NULL)
-      free(node->data.fol->tag);
-    free(node->data.fol);
+  if (node->type == FOL && node->fol != NULL) {
+    free_node(node->fol->arg1, 1);
+    free_node(node->fol->arg2, 1);
+    free(node->fol);
   }
-  else if (node->type == FUNCTION && node->data.function != NULL) {
-    mpc_ast_delete(node->data.function->contents);
-    free(node->data.function);
+  else if (node->type == FUNCTION && node->function != NULL) {
+    mpc_ast_delete(node->function->contents);
+    free(node->function);
   }
 
   if (freeself)
@@ -137,18 +132,18 @@ void free_alma_tree(alma_node *node) {
 
 void eliminate_conditionals(alma_node *node) {
   if (node != NULL && node->type == FOL) {
-    if (node->data.fol->op == IF) {
+    if (node->fol->op == IF) {
       alma_node *new_negation = malloc(sizeof(alma_node));
-      alma_fol_init(new_negation, NOT, node->data.fol->arg1, NULL, NULL);
+      alma_fol_init(new_negation, NOT, node->fol->arg1, NULL, NONE);
 
-      node->data.fol->op = OR;
-      node->data.fol->arg1 = new_negation;
-      eliminate_conditionals(new_negation->data.fol->arg1);
+      node->fol->op = OR;
+      node->fol->arg1 = new_negation;
+      eliminate_conditionals(new_negation->fol->arg1);
     }
     else {
-      eliminate_conditionals(node->data.fol->arg1);
+      eliminate_conditionals(node->fol->arg1);
     }
-    eliminate_conditionals(node->data.fol->arg2);
+    eliminate_conditionals(node->fol->arg2);
   }
 }
 
@@ -156,56 +151,57 @@ void eliminate_conditionals(alma_node *node) {
 // If a FOL operator of IF is encountered, returns immediately
 void negation_inwards(alma_node *node) {
   if (node != NULL && node->type == FOL) {
-    if (node->data.fol->op == NOT) {
-      alma_node *notarg = node->data.fol->arg1;
+    if (node->fol->op == NOT) {
+      alma_node *notarg = node->fol->arg1;
       if (notarg->type == FOL) {
         // TODO: Refactor common and/or case
-        switch (notarg->data.fol->op) {
+        switch (notarg->fol->op) {
           case AND: {
             // New nodes for result of DeMorgan's
             alma_node *negated_arg1 = malloc(sizeof(alma_node));
-            alma_fol_init(negated_arg1, NOT, notarg->data.fol->arg1, NULL, NULL);
+            alma_fol_init(negated_arg1, NOT, notarg->fol->arg1, NULL, NONE);
             alma_node *negated_arg2 = malloc(sizeof(alma_node));
-            alma_fol_init(negated_arg2, NOT, notarg->data.fol->arg2, NULL, NULL);
+            alma_fol_init(negated_arg2, NOT, notarg->fol->arg2, NULL, NONE);
             // Free unused AND
-            notarg->data.fol->arg1 = NULL;
-            notarg->data.fol->arg2 = NULL;
+            notarg->fol->arg1 = NULL;
+            notarg->fol->arg2 = NULL;
             free_node(notarg, 1);
             // Adjust node to be OR instead of NOT
-            node->data.fol->op = OR;
-            node->data.fol->arg1 = negated_arg1;
-            node->data.fol->arg2 = negated_arg2;
+            node->fol->op = OR;
+            node->fol->arg1 = negated_arg1;
+            node->fol->arg2 = negated_arg2;
             break;
           }
           case OR: {
             // New nodes for result of DeMorgan's
             alma_node *negated_arg1 = malloc(sizeof(alma_node));
-            alma_fol_init(negated_arg1, NOT, notarg->data.fol->arg1, NULL, NULL);
+            alma_fol_init(negated_arg1, NOT, notarg->fol->arg1, NULL, NONE);
             alma_node *negated_arg2 = malloc(sizeof(alma_node));
-            alma_fol_init(negated_arg2, NOT, notarg->data.fol->arg2, NULL, NULL);
+            alma_fol_init(negated_arg2, NOT, notarg->fol->arg2, NULL, NONE);
             // Free unused AND
-            notarg->data.fol->arg1 = NULL;
-            notarg->data.fol->arg2 = NULL;
+            notarg->fol->arg1 = NULL;
+            notarg->fol->arg2 = NULL;
             free_node(notarg, 1);
             // Adjust node to be AND instead of NOT
-            node->data.fol->op = AND;
-            node->data.fol->arg1 = negated_arg1;
-            node->data.fol->arg2 = negated_arg2;
+            node->fol->op = AND;
+            node->fol->arg1 = negated_arg1;
+            node->fol->arg2 = negated_arg2;
             break;
           }
           case IF:
             return;
           case NOT: {
-            free(node->data.fol);
+            free(node->fol);
             // Removal of double negation
-            if (notarg->data.fol->arg1->type == FOL) {
-              node->data.fol = notarg->data.fol->arg1->data.fol;
+            if (notarg->fol->arg1->type == FOL) {
+              node->fol = notarg->fol->arg1->fol;
+              notarg->fol->arg1->fol = NULL;
             }
             else {
               node->type = FUNCTION;
-              node->data.function = notarg->data.fol->arg1->data.function;
+              node->function = notarg->fol->arg1->function;
+              notarg->fol->arg1->function = NULL;
             }
-            notarg->data.fol->arg1 = NULL;
             free_node(notarg, 1);
             // Recurse on current node
             negation_inwards(node);
@@ -214,8 +210,8 @@ void negation_inwards(alma_node *node) {
         }
       }
     }
-    negation_inwards(node->data.fol->arg1);
-    negation_inwards(node->data.fol->arg2);
+    negation_inwards(node->fol->arg1);
+    negation_inwards(node->fol->arg2);
   }
 }
 
@@ -228,7 +224,7 @@ static void alma_print_rec(alma_node node, int indent) {
 
   if (node.type == FOL) {
     char *op;
-    switch (node.data.fol->op) {
+    switch (node.fol->op) {
       case NOT:
         op = "NOT"; break;
       case OR:
@@ -239,13 +235,15 @@ static void alma_print_rec(alma_node node, int indent) {
         op = "IF"; break;
     }
 
-    if (node.data.fol->tag != NULL) {
+    if (node.fol->tag != NONE) {
       char *tag = "";
-      switch (*node.data.fol->tag) {
+      switch (node.fol->tag) {
         case FIF:
           tag = "FIF"; break;
         case BIF:
           tag = "BIF"; break;
+        case NONE:
+          tag = "NONE"; break;
       }
       printf("%sFOL: %s, tag: %s\n", spacing, op, tag);
     }
@@ -253,15 +251,15 @@ static void alma_print_rec(alma_node node, int indent) {
       printf("%sFOL: %s\n", spacing, op);
     }
 
-    alma_print_rec(*node.data.fol->arg1, indent+1);
-    if (node.data.fol->arg2 != NULL) {
-      alma_print_rec(*node.data.fol->arg2, indent+1);
+    alma_print_rec(*node.fol->arg1, indent+1);
+    if (node.fol->arg2 != NULL) {
+      alma_print_rec(*node.fol->arg2, indent+1);
     }
   }
   // Currently, invoke mpc_ast printing on ast for alma_function
   else {
     printf("%sFUNCTION:\n", spacing);
-    //mpc_ast_print_depth(node.data.function->contents, indent, stdout);
+    //mpc_ast_print_depth(node.function->contents, indent, stdout);
   }
   free(spacing);
 }
