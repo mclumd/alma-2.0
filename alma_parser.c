@@ -60,7 +60,7 @@ int main(int argc, char **argv) {
     result = mpc_parse_pipe("<stdin>", stdin, Alma, &r);
   if (result) {
     alma_node *formulas;
-    size_t formula_count;
+    int formula_count;
     generate_alma_trees(r.output, &formulas, &formula_count);
     for (int i = 0; i < formula_count; i++) {
       alma_print(formulas[i]);

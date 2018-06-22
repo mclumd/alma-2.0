@@ -4,6 +4,41 @@
 #include "alma_formula.h"
 
 // TODO: Longer term, check for error codes of library functions used
+// TODO: Functions to return error instead of void
+
+void mpc_ast_delete_selective(mpc_ast_t *a) {
+  if (a == NULL)
+    return;
+
+  if (strstr(a->tag, "poslit") == NULL) {
+    for (int i = 0; i < a->children_num; i++) {
+      mpc_ast_delete_selective(a->children[i]);
+    }
+
+    free(a->children);
+    free(a->tag);
+    free(a->contents);
+    free(a);
+  }
+}
+
+mpc_ast_t* mpc_ast_copy(mpc_ast_t *a) {
+  mpc_ast_t *copy = malloc(sizeof(mpc_ast_t));
+
+  copy->tag = malloc(sizeof(char) * (strlen(a->tag)+1));
+  strcpy(copy->tag, a->tag);
+  copy->contents = malloc(sizeof(char) * (strlen(a->contents)+1));
+  strcpy(copy->contents, a->contents);
+  copy->state = a->state;
+  copy->children_num = a->children_num;
+  copy->children = malloc(sizeof(mpc_ast_t*) * copy->children_num);
+  for (int i = 0; i < copy->children_num; i++) {
+    copy->children[i] = mpc_ast_copy(a->children[i]);
+  }
+
+  return copy;
+}
+
 
 void alma_function_init(alma_node *node, mpc_ast_t *ast) {
   node->type = FUNCTION;
@@ -86,7 +121,7 @@ static void single_alma_tree(mpc_ast_t *almaformula, alma_node *alma_tree) {
 }
 
 // Top-level, given an AST for entire ALMA file parse
-void generate_alma_trees(mpc_ast_t *tree, alma_node **alma_trees, size_t *size) {
+void generate_alma_trees(mpc_ast_t *tree, alma_node **alma_trees, int *size) {
   // Expects almaformula production to be children of top level of AST
   // If the grammar changes such that top-level rule doesn't lead to almaformula,
   // this will have to be changed.
@@ -105,7 +140,6 @@ void generate_alma_trees(mpc_ast_t *tree, alma_node **alma_trees, size_t *size) 
     }
   }
 }
-
 
 static void free_node(alma_node *node, int freeself) {
   if (node == NULL)
@@ -127,6 +161,43 @@ static void free_node(alma_node *node, int freeself) {
 
 void free_alma_tree(alma_node *node) {
   free_node(node, 0);
+}
+
+// Space for copy must be allocated before call
+// If original is null and space is allocated for copy, probably will have memory issues
+// So may make sense to just crash on null dereference instead of checking that
+// TODO: Error return for failure?
+void copy_alma_tree(alma_node *original, alma_node *copy) {
+  copy->type = original->type;
+  // FOL case
+  if (original->type == FOL) {
+    if (original->fol == NULL) {
+      copy->fol = NULL;
+    }
+    else {
+      copy->fol = malloc(sizeof(alma_fol));
+      copy->fol->op = original->fol->op;
+      if (original->fol->arg1 != NULL) {
+        copy->fol->arg1 = malloc(sizeof(alma_node));
+        copy_alma_tree(original->fol->arg1, copy->fol->arg1);
+      }
+      if (original->fol->arg2 != NULL) {
+        copy->fol->arg2 = malloc(sizeof(alma_node));
+        copy_alma_tree(original->fol->arg2, copy->fol->arg2);
+      }
+      copy->fol->tag = original->fol->tag;
+    }
+  }
+  // Function case
+  else {
+    if (original->function == NULL) {
+      copy->function = NULL;
+    }
+    else {
+      copy->function = malloc(sizeof(alma_function));
+      copy->function->contents = mpc_ast_copy(original->function->contents);
+    }
+  }
 }
 
 
@@ -157,7 +228,7 @@ void negation_inwards(alma_node *node) {
         // TODO: Refactor common and/or case
         switch (notarg->fol->op) {
           case AND: {
-            // New nodes for result of DeMorgan's
+            // New nodes for result of De Morgan's
             alma_node *negated_arg1 = malloc(sizeof(alma_node));
             alma_fol_init(negated_arg1, NOT, notarg->fol->arg1, NULL, NONE);
             alma_node *negated_arg2 = malloc(sizeof(alma_node));
@@ -173,7 +244,7 @@ void negation_inwards(alma_node *node) {
             break;
           }
           case OR: {
-            // New nodes for result of DeMorgan's
+            // New nodes for result of De Morgan's
             alma_node *negated_arg1 = malloc(sizeof(alma_node));
             alma_fol_init(negated_arg1, NOT, notarg->fol->arg1, NULL, NONE);
             alma_node *negated_arg2 = malloc(sizeof(alma_node));
@@ -212,6 +283,28 @@ void negation_inwards(alma_node *node) {
     }
     negation_inwards(node->fol->arg1);
     negation_inwards(node->fol->arg2);
+  }
+}
+
+// If argument is in negation normal form, converts to CNF from there
+// Does not modify anything contained inside of a NOT fol node
+void dist_or_over_and(alma_node *node) {
+  if (node != NULL && node->type == FOL) {
+    if (node->fol->op == OR) {
+      if (node->fol->arg1->type == FOL && node->fol->arg1->fol->op == AND) {
+        // Distribute arg2 over arg1
+        // TODO
+      }
+      // If both are AND, after distributing arg2 over arg1, the conjunction of arg2
+      // will appear lower in the tree, and dealt with in a later call.
+      // Thus, the case below can safely be mutually exclusive.
+      else if (node->fol->arg2->type == FOL && node->fol->arg2->fol->op == AND) {
+        // Distribute arg1 over arg2
+        // TODO
+      }
+    }
+    dist_or_over_and(node->fol->arg1);
+    dist_or_over_and(node->fol->arg2);
   }
 }
 
@@ -266,24 +359,4 @@ static void alma_print_rec(alma_node node, int indent) {
 
 void alma_print(alma_node node) {
   alma_print_rec(node, 0);
-}
-
-
-void mpc_ast_delete_selective(mpc_ast_t *a) {
-
-  int i;
-
-  if (a == NULL) { return; }
-
-  if (strstr(a->tag, "poslit") == NULL) {
-    for (i = 0; i < a->children_num; i++) {
-      mpc_ast_delete_selective(a->children[i]);
-    }
-
-    free(a->children);
-    free(a->tag);
-    free(a->contents);
-    free(a);
-  }
-
 }
