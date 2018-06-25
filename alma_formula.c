@@ -6,6 +6,8 @@
 // TODO: Longer term, check for error codes of library functions used
 // TODO: Functions to return error instead of void
 
+// TODO: Tag management when rewriting needs to be considered more carefully
+
 void mpc_ast_delete_selective(mpc_ast_t *a) {
   if (a == NULL)
     return;
@@ -141,6 +143,7 @@ void generate_alma_trees(mpc_ast_t *tree, alma_node **alma_trees, int *size) {
   }
 }
 
+// If freeself is false, does NOT free the top-level alma_node
 static void free_node(alma_node *node, int freeself) {
   if (node == NULL)
     return;
@@ -159,6 +162,8 @@ static void free_node(alma_node *node, int freeself) {
     free(node);
 }
 
+// Frees an alma_node EXCEPT for top-level
+// If the entire node should be freed, call free_node with freeself true instead!
 void free_alma_tree(alma_node *node) {
   free_node(node, 0);
 }
@@ -177,14 +182,23 @@ void copy_alma_tree(alma_node *original, alma_node *copy) {
     else {
       copy->fol = malloc(sizeof(alma_fol));
       copy->fol->op = original->fol->op;
+
       if (original->fol->arg1 != NULL) {
         copy->fol->arg1 = malloc(sizeof(alma_node));
         copy_alma_tree(original->fol->arg1, copy->fol->arg1);
       }
+      else {
+        copy->fol->arg1 = NULL;
+      }
+
       if (original->fol->arg2 != NULL) {
         copy->fol->arg2 = malloc(sizeof(alma_node));
         copy_alma_tree(original->fol->arg2, copy->fol->arg2);
       }
+      else {
+        copy->fol->arg2 = NULL;
+      }
+
       copy->fol->tag = original->fol->tag;
     }
   }
@@ -290,22 +304,66 @@ void negation_inwards(alma_node *node) {
 // Does not modify anything contained inside of a NOT fol node
 void dist_or_over_and(alma_node *node) {
   if (node != NULL && node->type == FOL) {
+    dist_or_over_and(node->fol->arg1);
+    dist_or_over_and(node->fol->arg2);
     if (node->fol->op == OR) {
       if (node->fol->arg1->type == FOL && node->fol->arg1->fol->op == AND) {
-        // Distribute arg2 over arg1
-        // TODO
+        // WLOG, (P /\ Q) \/ R
+
+        // Create (P \/ R)
+        alma_node *arg1_or = malloc(sizeof(alma_node));
+        alma_fol_init(arg1_or, OR, node->fol->arg1->fol->arg1, node->fol->arg2, NONE);
+
+        // Create (Q \/ R)
+        alma_node *arg2_copy = malloc(sizeof(alma_node));
+        copy_alma_tree(node->fol->arg2, arg2_copy);
+        alma_node *arg2_or = malloc(sizeof(alma_node));
+        alma_fol_init(arg2_or, OR, node->fol->arg1->fol->arg2, arg2_copy, NONE);
+
+        // Free old conjunction
+        node->fol->arg1->fol->arg1 = NULL;
+        node->fol->arg1->fol->arg2 = NULL;
+        free_node(node->fol->arg1, 1);
+
+        // Adjust node to conjunction
+        node->fol->op = AND;
+        node->fol->arg1 = arg1_or;
+        node->fol->arg2 = arg2_or;
       }
       // If both are AND, after distributing arg2 over arg1, the conjunction of arg2
       // will appear lower in the tree, and dealt with in a later call.
       // Thus, the case below can safely be mutually exclusive.
       else if (node->fol->arg2->type == FOL && node->fol->arg2->fol->op == AND) {
-        // Distribute arg1 over arg2
-        // TODO
+        // WLOG, P \/ (Q /\ R)
+
+        // Create (P \/ Q)
+        alma_node *arg1_or = malloc(sizeof(alma_node));
+        alma_fol_init(arg1_or, OR, node->fol->arg1, node->fol->arg2->fol->arg1, NONE);
+
+        // Create (P \/ R)
+        alma_node *arg1_copy = malloc(sizeof(alma_node));
+        copy_alma_tree(node->fol->arg1, arg1_copy);
+        alma_node *arg2_or = malloc(sizeof(alma_node));
+        alma_fol_init(arg2_or, OR, arg1_copy, node->fol->arg2->fol->arg2, NONE);
+
+        // Free old conjunction
+        node->fol->arg2->fol->arg1 = NULL;
+        node->fol->arg2->fol->arg2 = NULL;
+        free_node(node->fol->arg2, 1);
+
+        // Adjust node to conjunction
+        node->fol->op = AND;
+        node->fol->arg1 = arg1_or;
+        node->fol->arg2 = arg2_or;
       }
     }
-    dist_or_over_and(node->fol->arg1);
-    dist_or_over_and(node->fol->arg2);
   }
+}
+
+void make_cnf(alma_node *node) {
+  eliminate_conditionals(node);
+  negation_inwards(node);
+  dist_or_over_and(node);
 }
 
 

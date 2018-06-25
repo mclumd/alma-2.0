@@ -47,6 +47,7 @@ void copy_alma_tree(alma_node *original, alma_node *copy);
 void eliminate_conditionals(alma_node *node);
 void negation_inwards(alma_node *node);
 void dist_or_over_and(alma_node *node);
+void make_cnf(alma_node *node);
 
 void alma_print(alma_node node);
 
