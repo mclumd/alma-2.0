@@ -2909,7 +2909,7 @@ mpc_ast_t *mpc_ast_state(mpc_ast_t *a, mpc_state_t s) {
   return a;
 }
 
-void mpc_ast_print_depth(mpc_ast_t *a, int d, FILE *fp) {
+static void mpc_ast_print_depth(mpc_ast_t *a, int d, FILE *fp) {
   
   int i;
   
