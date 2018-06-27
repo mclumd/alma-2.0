@@ -2,6 +2,8 @@ fif(and(if(not(t(A)), t(B)), atom), conclusion(thing)).
 
 if(and(if(not(t(A)), t(B)), atom), thing).
 
+if(and(if(not(t(x)), t(B)), atom), thing).
+
 if(a,b).
 
 if(contra(Y, X, Z), parentsof(Y, Y)).

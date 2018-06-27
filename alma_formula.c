@@ -42,12 +42,6 @@ mpc_ast_t* mpc_ast_copy(mpc_ast_t *a) {
 }
 
 
-void alma_function_init(alma_node *node, mpc_ast_t *ast) {
-  node->type = FUNCTION;
-  node->function = malloc(sizeof(alma_function));
-  node->function->contents = ast;
-}
-
 void alma_fol_init(alma_node *node, alma_operator op, alma_node *arg1, alma_node *arg2, if_tag tag) {
   node->type = FOL;
   node->fol = malloc(sizeof(alma_fol));
@@ -57,7 +51,65 @@ void alma_fol_init(alma_node *node, alma_operator op, alma_node *arg1, alma_node
   node->fol->tag = tag;
 }
 
-alma_operator op_from_contents(char *contents) {
+void alma_term_init(alma_term *term, mpc_ast_t *ast) {
+  if (strstr(ast->children[0]->tag, "variable") != NULL) {
+    term->type = VARIABLE;
+    term->variable = malloc(sizeof(alma_variable));
+    term->variable->name = malloc(sizeof(char) * (strlen(ast->children[0]->contents)+1));
+    strcpy(term->variable->name, ast->children[0]->contents);
+  }
+  else if (strstr(ast->children[0]->tag, "constant") != NULL) {
+    term->type = CONSTANT;
+    term->constant = malloc(sizeof(alma_constant));
+    term->constant->name = malloc(sizeof(char) * (strlen(ast->children[0]->contents)+1));
+    strcpy(term->constant->name, ast->children[0]->contents);
+  }
+  else {
+    term->type = FUNCTION;
+    term->function = malloc(sizeof(alma_function));
+    alma_function_init(term->function, ast->children[0]->children[2]);
+  }
+}
+
+void alma_function_init(alma_function *func, mpc_ast_t *ast) {
+  // Function with no terms
+  if (ast->children_num == 0) {
+    func->name = malloc(sizeof(char) * (strlen(ast->contents)+1));
+    strcpy(func->name, ast->contents);
+    func->term_count = 0;
+    func->terms = NULL;
+  }
+  // Otherwise, populate terms
+  else {
+    func->name = malloc(sizeof(char) * (strlen(ast->children[0]->contents)+1));
+    strcpy(func->name, ast->children[0]->contents);
+    func->term_count = 0;
+    func->terms = NULL; // Needed for realloc behavior
+    mpc_ast_t *termlist = ast->children[2];
+    // Trace down tree through all nested listofterm
+    while (termlist->children_num > 0) {
+      func->term_count++;
+      func->terms = realloc(func->terms, sizeof(alma_term) * func->term_count);
+      alma_term_init(func->terms+(func->term_count-1), termlist->children[0]);
+      // Loop on other listofterm nested
+      termlist = termlist->children[2];
+    }
+    // Handle terminating term
+    func->term_count++;
+    func->terms = realloc(func->terms, sizeof(alma_term) * func->term_count);
+    alma_term_init(func->terms+(func->term_count-1), termlist);
+
+  }
+}
+
+void alma_predicate_init(alma_node *node, mpc_ast_t *ast) {
+  node->type = PREDICATE;
+  node->predicate = malloc(sizeof(alma_function));
+  alma_function_init(node->predicate, ast);
+}
+
+
+static alma_operator op_from_contents(char *contents) {
   // Probably should use something better than default NOT
   alma_operator result = NOT;
   if (strstr(contents, "or") != NULL)
@@ -73,14 +125,14 @@ alma_operator op_from_contents(char *contents) {
 static void single_alma_tree(mpc_ast_t *almaformula, alma_node *alma_tree) {
   // Match tag containing poslit as function
   if (strstr(almaformula->tag, "poslit") != NULL) {
-    alma_function_init(alma_tree, almaformula);
+    alma_predicate_init(alma_tree, almaformula);
   }
   // Match nested pieces of formula/fformula/bformula/conjform rules, recursively operate on
   // Probably needs regular expressions to avoid problems with rules having string "formula"
   else if (strstr(almaformula->tag, "formula") != NULL || strstr(almaformula->tag, "conjform") != NULL) {
     // Case for formula producing just a positive literal
     if (strstr(almaformula->children[0]->tag, "poslit") != NULL) {
-      alma_function_init(alma_tree, almaformula->children[0]);
+      alma_predicate_init(alma_tree, almaformula->children[0]);
     }
     // Otherwise, formula derives to FOL contents
     // TODO: Refactor with alma_fol_init
@@ -153,9 +205,10 @@ static void free_node(alma_node *node, int freeself) {
     free_node(node->fol->arg2, 1);
     free(node->fol);
   }
-  else if (node->type == FUNCTION && node->function != NULL) {
-    mpc_ast_delete(node->function->contents);
-    free(node->function);
+  else if (node->type == PREDICATE && node->predicate != NULL) {
+    //mpc_ast_delete(node->predicate->contents);
+    // TODO: New freeing methods for alma_term/function/others
+    free(node->predicate);
   }
 
   if (freeself)
@@ -204,12 +257,13 @@ void copy_alma_tree(alma_node *original, alma_node *copy) {
   }
   // Function case
   else {
-    if (original->function == NULL) {
-      copy->function = NULL;
+    if (original->predicate == NULL) {
+      copy->predicate = NULL;
     }
     else {
-      copy->function = malloc(sizeof(alma_function));
-      copy->function->contents = mpc_ast_copy(original->function->contents);
+      copy->predicate = malloc(sizeof(alma_function));
+      // TODO: New copying methods for alma_term/function/others
+      //copy->predicate->contents = mpc_ast_copy(original->predicate->contents);
     }
   }
 }
@@ -283,9 +337,9 @@ void negation_inwards(alma_node *node) {
               notarg->fol->arg1->fol = NULL;
             }
             else {
-              node->type = FUNCTION;
-              node->function = notarg->fol->arg1->function;
-              notarg->fol->arg1->function = NULL;
+              node->type = PREDICATE;
+              node->predicate = notarg->fol->arg1->predicate;
+              notarg->fol->arg1->predicate = NULL;
             }
             free_node(notarg, 1);
             // Recurse on current node
@@ -407,10 +461,10 @@ static void alma_print_rec(alma_node node, int indent) {
       alma_print_rec(*node.fol->arg2, indent+1);
     }
   }
-  // Currently, invoke mpc_ast printing on ast for alma_function
+  // Currently, invoke mpc_ast printing on ast for alma_predicate
   else {
-    printf("%sFUNCTION:\n", spacing);
-    //mpc_ast_print_depth(node.function->contents, indent, stdout);
+    printf("%sPREDICATE:\n", spacing);
+    //mpc_ast_print_depth(node.predicate->contents, indent, stdout);
   }
   free(spacing);
 }

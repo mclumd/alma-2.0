@@ -24,6 +24,7 @@ int main(int argc, char **argv) {
   mpc_parser_t* Variable = mpc_new("variable");
   mpc_parser_t* Prologconst = mpc_new("prologconst");
 
+  // TODO: Add to, allowing Prolog comments to be ignored, and other more general features
   mpca_lang(MPCA_LANG_DEFAULT,
     "                                                            "
     " alma         : /^/ <almaformula>* /$/ ;                    "
