@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
     " neglit       : \"not(\" <poslit> ')' ;                     "
     " poslit       : <predname> '(' <listofterms> ')'            "
     "              | <predname> ;                                "
-    " listofterms  : <term> ',' <listofterms> | <term> ;         "
+    " listofterms  : <term> (',' <term>)* ;                      "
     " term         : <funcname> '(' <listofterms> ')'            "
     "              | <variable> | <constant> ;                   "
     " predname     : <prologconst> ;                             "
@@ -63,18 +63,10 @@ int main(int argc, char **argv) {
     alma_node *formulas;
     int formula_count;
     generate_alma_trees(r.output, &formulas, &formula_count);
+    mpc_ast_delete(r.output);
+
     for (int i = 0; i < formula_count; i++) {
       alma_print(formulas[i]);
-
-      /*printf("Rewritten without conditionals:\n");
-      eliminate_conditionals(formulas+i);
-      alma_print(formulas[i]);
-      printf("Rewritten with negation moved inwards:\n");
-      negation_inwards(formulas+i);
-      alma_print(formulas[i]);
-      printf("Distributed OR over AND:\n");
-      dist_or_over_and(formulas+i);
-      alma_print(formulas[i]);*/
 
       printf("CNF equivalent:\n");
       make_cnf(formulas+i);
@@ -82,11 +74,8 @@ int main(int argc, char **argv) {
       printf("\n");
     }
 
-    mpc_ast_delete_selective(r.output);
-    // Must free these AFTER delete_selective, as that checks poslit part freed in alma tree
-    for (int i = 0; i < formula_count; i++) {
+    for (int i = 0; i < formula_count; i++)
       free_alma_tree(formulas+i);
-    }
     free(formulas);
   }
   else {

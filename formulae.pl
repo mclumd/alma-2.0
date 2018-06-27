@@ -7,7 +7,7 @@ if(and(if(not(t(x)), t(B)), atom), thing).
 if(a,b).
 
 if(contra(Y, X, Z), parentsof(Y, Y)).
-if(contra(Y, X, Z), parentsof(X, X)).
+if(contra(f(Y), X, z), parentsof(X, X)).
 
 fif(penguin(X), conclusion(not(fly(X)))).
 

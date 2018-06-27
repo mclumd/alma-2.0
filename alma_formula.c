@@ -8,39 +8,6 @@
 
 // TODO: Tag management when rewriting needs to be considered more carefully
 
-void mpc_ast_delete_selective(mpc_ast_t *a) {
-  if (a == NULL)
-    return;
-
-  if (strstr(a->tag, "poslit") == NULL) {
-    for (int i = 0; i < a->children_num; i++) {
-      mpc_ast_delete_selective(a->children[i]);
-    }
-
-    free(a->children);
-    free(a->tag);
-    free(a->contents);
-    free(a);
-  }
-}
-
-mpc_ast_t* mpc_ast_copy(mpc_ast_t *a) {
-  mpc_ast_t *copy = malloc(sizeof(mpc_ast_t));
-
-  copy->tag = malloc(sizeof(char) * (strlen(a->tag)+1));
-  strcpy(copy->tag, a->tag);
-  copy->contents = malloc(sizeof(char) * (strlen(a->contents)+1));
-  strcpy(copy->contents, a->contents);
-  copy->state = a->state;
-  copy->children_num = a->children_num;
-  copy->children = malloc(sizeof(mpc_ast_t*) * copy->children_num);
-  for (int i = 0; i < copy->children_num; i++) {
-    copy->children[i] = mpc_ast_copy(a->children[i]);
-  }
-
-  return copy;
-}
-
 
 void alma_fol_init(alma_node *node, alma_operator op, alma_node *arg1, alma_node *arg2, if_tag tag) {
   node->type = FOL;
@@ -52,27 +19,27 @@ void alma_fol_init(alma_node *node, alma_operator op, alma_node *arg1, alma_node
 }
 
 void alma_term_init(alma_term *term, mpc_ast_t *ast) {
-  if (strstr(ast->children[0]->tag, "variable") != NULL) {
+  if (strstr(ast->tag, "variable") != NULL) {
     term->type = VARIABLE;
     term->variable = malloc(sizeof(alma_variable));
-    term->variable->name = malloc(sizeof(char) * (strlen(ast->children[0]->contents)+1));
-    strcpy(term->variable->name, ast->children[0]->contents);
+    term->variable->name = malloc(sizeof(char) * (strlen(ast->contents)+1));
+    strcpy(term->variable->name, ast->contents);
   }
-  else if (strstr(ast->children[0]->tag, "constant") != NULL) {
+  else if (strstr(ast->tag, "constant") != NULL) {
     term->type = CONSTANT;
     term->constant = malloc(sizeof(alma_constant));
-    term->constant->name = malloc(sizeof(char) * (strlen(ast->children[0]->contents)+1));
-    strcpy(term->constant->name, ast->children[0]->contents);
+    term->constant->name = malloc(sizeof(char) * (strlen(ast->contents)+1));
+    strcpy(term->constant->name, ast->contents);
   }
   else {
     term->type = FUNCTION;
     term->function = malloc(sizeof(alma_function));
-    alma_function_init(term->function, ast->children[0]->children[2]);
+    alma_function_init(term->function, ast);
   }
 }
 
 void alma_function_init(alma_function *func, mpc_ast_t *ast) {
-  // Function with no terms
+  // Case with no terms
   if (ast->children_num == 0) {
     func->name = malloc(sizeof(char) * (strlen(ast->contents)+1));
     strcpy(func->name, ast->contents);
@@ -85,20 +52,22 @@ void alma_function_init(alma_function *func, mpc_ast_t *ast) {
     strcpy(func->name, ast->children[0]->contents);
     func->term_count = 0;
     func->terms = NULL; // Needed for realloc behavior
-    mpc_ast_t *termlist = ast->children[2];
-    // Trace down tree through all nested listofterm
-    while (termlist->children_num > 0) {
-      func->term_count++;
-      func->terms = realloc(func->terms, sizeof(alma_term) * func->term_count);
-      alma_term_init(func->terms+(func->term_count-1), termlist->children[0]);
-      // Loop on other listofterm nested
-      termlist = termlist->children[2];
-    }
-    // Handle terminating term
-    func->term_count++;
-    func->terms = realloc(func->terms, sizeof(alma_term) * func->term_count);
-    alma_term_init(func->terms+(func->term_count-1), termlist);
 
+    mpc_ast_t *termlist = ast->children[2];
+    // Case for single term in listofterms
+    if (termlist->children_num == 0 || strstr(termlist->tag, "|term") != NULL) {
+      func->term_count = 1;
+      func->terms = malloc(sizeof(alma_term));
+      alma_term_init(func->terms, termlist);
+    }
+    // Listofterms with multiple terms
+    else {
+      func->term_count = (termlist->children_num+1)/2;
+      func->terms = malloc(sizeof(alma_term) * func->term_count);
+      for (int i = 0; i < func->term_count; i++) {
+        alma_term_init(func->terms+i, termlist->children[i*2]);
+      }
+    }
   }
 }
 
@@ -195,6 +164,32 @@ void generate_alma_trees(mpc_ast_t *tree, alma_node **alma_trees, int *size) {
   }
 }
 
+static void free_function(alma_function *func) {
+  if (func == NULL)
+    return;
+
+  free(func->name);
+  for (int i = 0; i < func->term_count; i++) {
+    switch (func->terms[i].type) {
+      case VARIABLE: {
+        free(func->terms[i].variable->name);
+        free(func->terms[i].variable);
+        break;
+      }
+      case CONSTANT: {
+        free(func->terms[i].constant->name);
+        free(func->terms[i].constant);
+        break;
+      }
+      case FUNCTION: {
+        free_function(func->terms[i].function);
+      }
+    }
+  }
+  free(func->terms);
+  free(func);
+}
+
 // If freeself is false, does NOT free the top-level alma_node
 static void free_node(alma_node *node, int freeself) {
   if (node == NULL)
@@ -206,9 +201,7 @@ static void free_node(alma_node *node, int freeself) {
     free(node->fol);
   }
   else if (node->type == PREDICATE && node->predicate != NULL) {
-    //mpc_ast_delete(node->predicate->contents);
-    // TODO: New freeing methods for alma_term/function/others
-    free(node->predicate);
+    free_function(node->predicate);
   }
 
   if (freeself)
@@ -219,6 +212,45 @@ static void free_node(alma_node *node, int freeself) {
 // If the entire node should be freed, call free_node with freeself true instead!
 void free_alma_tree(alma_node *node) {
   free_node(node, 0);
+}
+
+// Space for copy must be allocated before call
+void copy_alma_term(alma_term *original, alma_term *copy) {
+  switch (original->type) {
+    case VARIABLE: {
+      copy->variable = malloc(sizeof(alma_variable));
+      copy->variable->name = malloc(sizeof(char) * (strlen(original->variable->name)+1));
+      strcpy(copy->variable->name, original->variable->name);
+      break;
+    }
+    case CONSTANT: {
+      copy->constant = malloc(sizeof(alma_constant));
+      copy->constant->name = malloc(sizeof(char) * (strlen(original->constant->name)+1));
+      strcpy(copy->variable->name, original->constant->name);
+      break;
+    }
+    case FUNCTION: {
+      copy->function = malloc(sizeof(alma_function));
+      copy_alma_function(original->function, copy->function);
+      break;
+    }
+  }
+}
+
+// Space for copy must be allocated before call
+void copy_alma_function(alma_function *original, alma_function *copy) {
+  copy->name = malloc(sizeof(char) * (strlen(original->name)+1));
+  strcpy(copy->name, original->name);
+  copy->term_count = original->term_count;
+  if (original->terms == NULL) {
+    copy->terms = NULL;
+  }
+  else {
+    copy->terms = malloc(sizeof(alma_term) * copy->term_count);
+    for (int i = 0; i < copy->term_count; i++) {
+      copy_alma_term(original->terms+i, copy->terms+i);
+    }
+  }
 }
 
 // Space for copy must be allocated before call
@@ -262,8 +294,7 @@ void copy_alma_tree(alma_node *original, alma_node *copy) {
     }
     else {
       copy->predicate = malloc(sizeof(alma_function));
-      // TODO: New copying methods for alma_term/function/others
-      //copy->predicate->contents = mpc_ast_copy(original->predicate->contents);
+      copy_alma_function(original->predicate, copy->predicate);
     }
   }
 }
@@ -420,6 +451,34 @@ void make_cnf(alma_node *node) {
   dist_or_over_and(node);
 }
 
+static void alma_function_print(alma_function *func);
+
+static void alma_term_print(alma_term *term) {
+  switch (term->type) {
+    case VARIABLE:
+      printf("%s", term->variable->name);
+      break;
+    case CONSTANT:
+      printf("%s", term->constant->name);
+      break;
+    case FUNCTION:
+      alma_function_print(term->function);
+      break;
+  }
+}
+
+static void alma_function_print(alma_function *func) {
+  printf("%s", func->name);
+  if (func->term_count > 0) {
+    printf("(");
+    for (int i = 0; i < func->term_count; i++) {
+      if (i > 0)
+        printf(", ");
+      alma_term_print(func->terms + i);
+    }
+    printf(")");
+  }
+}
 
 static void alma_print_rec(alma_node node, int indent) {
   char *spacing = malloc(sizeof(char) * indent*2 + 1);
@@ -461,10 +520,10 @@ static void alma_print_rec(alma_node node, int indent) {
       alma_print_rec(*node.fol->arg2, indent+1);
     }
   }
-  // Currently, invoke mpc_ast printing on ast for alma_predicate
   else {
-    printf("%sPREDICATE:\n", spacing);
-    //mpc_ast_print_depth(node.predicate->contents, indent, stdout);
+    printf("%sPREDICATE: ", spacing);
+    alma_function_print(node.predicate);
+    printf("\n");
   }
   free(spacing);
 }

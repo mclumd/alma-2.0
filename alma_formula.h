@@ -3,12 +3,6 @@
 
 #include "mpc/mpc.h"
 
-// Additional functions for working with mpc library
-void mpc_ast_delete_selective(mpc_ast_t *a);
-mpc_ast_t* mpc_ast_copy(mpc_ast_t *a);
-
-// Everything else for manipulating ALMA formulas
-
 typedef enum node_type {FOL, PREDICATE} node_type;
 
 struct alma_fol;
@@ -61,6 +55,8 @@ typedef struct alma_constant {
   char *name;
 } alma_constant;
 
+// TODO: Determine which of these should have static linkage
+
 void alma_fol_init(alma_node *node, alma_operator op, alma_node *arg1, alma_node *arg2, if_tag tag);
 void alma_term_init(alma_term *term, mpc_ast_t *ast);
 void alma_function_init(alma_function *func, mpc_ast_t *ast);
@@ -68,6 +64,8 @@ void alma_predicate_init(alma_node *node, mpc_ast_t *ast);
 
 void generate_alma_trees(mpc_ast_t *tree, alma_node **alma_trees, int *size);
 void free_alma_tree(alma_node *node);
+void copy_alma_term(alma_term *original, alma_term *copy);
+void copy_alma_function(alma_function *original, alma_function *copy);
 void copy_alma_tree(alma_node *original, alma_node *copy);
 
 void eliminate_conditionals(alma_node *node);
