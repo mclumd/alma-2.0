@@ -66,17 +66,21 @@ int main(int argc, char **argv) {
     mpc_ast_delete(r.output);
 
     for (int i = 0; i < formula_count; i++) {
-      alma_print(formulas[i]);
-
-      printf("CNF equivalent:\n");
+      //alma_print(formulas+i);
+      //printf("CNF equivalent:\n");
       make_cnf(formulas+i);
-      alma_print(formulas[i]);
-      printf("\n");
+      //alma_print(formulas+i);
+      //printf("\n");
     }
 
+    kb *alma_kb;
+    flatten(formulas, formula_count, &alma_kb);
     for (int i = 0; i < formula_count; i++)
       free_alma_tree(formulas+i);
     free(formulas);
+    kb_print(alma_kb);
+
+    free_kb(alma_kb);
   }
   else {
     mpc_err_print(r.error);

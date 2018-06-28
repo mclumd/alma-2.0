@@ -55,13 +55,14 @@ typedef struct alma_constant {
   char *name;
 } alma_constant;
 
-// TODO: Determine which of these should have static linkage
+// TODO: Determine which of this file's functions should have static linkage
 
 void alma_fol_init(alma_node *node, alma_operator op, alma_node *arg1, alma_node *arg2, if_tag tag);
 void alma_term_init(alma_term *term, mpc_ast_t *ast);
 void alma_function_init(alma_function *func, mpc_ast_t *ast);
 void alma_predicate_init(alma_node *node, mpc_ast_t *ast);
 
+// TODO: Manage pointers better to get away from double pointer usage
 void generate_alma_trees(mpc_ast_t *tree, alma_node **alma_trees, int *size);
 void free_alma_tree(alma_node *node);
 void copy_alma_term(alma_term *original, alma_term *copy);
@@ -73,6 +74,26 @@ void negation_inwards(alma_node *node);
 void dist_or_over_and(alma_node *node);
 void make_cnf(alma_node *node);
 
-void alma_print(alma_node node);
+void alma_print(alma_node *node);
+
+typedef struct clause {
+  int pos_count;
+  int neg_count;
+  alma_function **pos_lits;
+  alma_function **neg_lits;
+  if_tag tag;
+} clause;
+
+// Simple definition for now, likely to expand significantly in future
+typedef struct kb {
+  int reserved; // Dynamic length array
+  int num_clauses;
+  clause **clauses;
+} kb;
+
+void flatten(alma_node *trees, int num_trees, kb **collection);
+void free_kb(kb *collection);
+
+void kb_print(kb *collection);
 
 #endif
