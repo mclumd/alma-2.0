@@ -216,12 +216,17 @@ void free_alma_tree(alma_node *node) {
 }
 
 // Space for copy must be allocated before call
+void copy_alma_var(alma_variable *original, alma_variable *copy) {
+  copy->name = malloc(sizeof(char) * (strlen(original->name)+1));
+  strcpy(copy->name, original->name);
+}
+
+// Space for copy must be allocated before call
 void copy_alma_term(alma_term *original, alma_term *copy) {
   switch (original->type) {
     case VARIABLE: {
       copy->variable = malloc(sizeof(alma_variable));
-      copy->variable->name = malloc(sizeof(char) * (strlen(original->variable->name)+1));
-      strcpy(copy->variable->name, original->variable->name);
+      copy_alma_var(original->variable, copy->variable);
       break;
     }
     case CONSTANT: {

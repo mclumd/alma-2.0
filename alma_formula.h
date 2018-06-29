@@ -62,9 +62,11 @@ void alma_term_init(alma_term *term, mpc_ast_t *ast);
 void alma_function_init(alma_function *func, mpc_ast_t *ast);
 void alma_predicate_init(alma_node *node, mpc_ast_t *ast);
 
-// TODO: Manage pointers better to get away from double pointer usage
+// TODO: Manage pointers better to get away from double pointer usage?
+// Or is it stylistically better to keep them?
 void generate_alma_trees(mpc_ast_t *tree, alma_node **alma_trees, int *size);
 void free_alma_tree(alma_node *node);
+void copy_alma_var(alma_variable *original, alma_variable *copy);
 void copy_alma_term(alma_term *original, alma_term *copy);
 void copy_alma_function(alma_function *original, alma_function *copy);
 void copy_alma_tree(alma_node *original, alma_node *copy);
