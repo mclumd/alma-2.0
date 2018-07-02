@@ -170,25 +170,28 @@ static void free_function(alma_function *func) {
     return;
 
   free(func->name);
-  for (int i = 0; i < func->term_count; i++) {
-    switch (func->terms[i].type) {
-      case VARIABLE: {
-        free(func->terms[i].variable->name);
-        free(func->terms[i].variable);
-        break;
-      }
-      case CONSTANT: {
-        free(func->terms[i].constant->name);
-        free(func->terms[i].constant);
-        break;
-      }
-      case FUNCTION: {
-        free_function(func->terms[i].function);
-      }
-    }
-  }
+  for (int i = 0; i < func->term_count; i++)
+    free_term(func->terms+i);
   free(func->terms);
   free(func);
+}
+
+void free_term(alma_term *term) {
+  switch (term->type) {
+    case VARIABLE: {
+      free(term->variable->name);
+      free(term->variable);
+      break;
+    }
+    case CONSTANT: {
+      free(term->constant->name);
+      free(term->constant);
+      break;
+    }
+    case FUNCTION: {
+      free_function(term->function);
+    }
+  }
 }
 
 // If freeself is false, does NOT free the top-level alma_node
@@ -223,6 +226,7 @@ void copy_alma_var(alma_variable *original, alma_variable *copy) {
 
 // Space for copy must be allocated before call
 void copy_alma_term(alma_term *original, alma_term *copy) {
+  copy->type = original->type;
   switch (original->type) {
     case VARIABLE: {
       copy->variable = malloc(sizeof(alma_variable));
@@ -459,7 +463,7 @@ void make_cnf(alma_node *node) {
 
 static void alma_function_print(alma_function *func);
 
-static void alma_term_print(alma_term *term) {
+void alma_term_print(alma_term *term) {
   switch (term->type) {
     case VARIABLE:
       printf("%s", term->variable->name);

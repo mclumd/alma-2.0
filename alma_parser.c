@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include "mpc/mpc.h"
 #include "alma_formula.h"
+#include "alma_unify.h"
 
 int main(int argc, char **argv) {
 
@@ -78,7 +79,14 @@ int main(int argc, char **argv) {
     for (int i = 0; i < formula_count; i++)
       free_alma_tree(formulas+i);
     free(formulas);
-    kb_print(alma_kb);
+    //kb_print(alma_kb);
+
+    // Unify test
+    binding_list *theta;
+    theta = malloc(sizeof(binding_list));
+    pred_unify(alma_kb->clauses[12]->pos_lits[0], alma_kb->clauses[13]->pos_lits[0], theta);
+    print_bindings(theta);
+    cleanup_bindings(theta);
 
     free_kb(alma_kb);
   }

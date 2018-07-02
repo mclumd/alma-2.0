@@ -76,6 +76,7 @@ void negation_inwards(alma_node *node);
 void dist_or_over_and(alma_node *node);
 void make_cnf(alma_node *node);
 
+void alma_term_print(alma_term *term);
 void alma_print(alma_node *node);
 
 typedef struct clause {
@@ -94,6 +95,7 @@ typedef struct kb {
 } kb;
 
 void flatten(alma_node *trees, int num_trees, kb **collection);
+void free_term(alma_term *term);
 void free_kb(kb *collection);
 
 void kb_print(kb *collection);
