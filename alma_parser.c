@@ -1,13 +1,9 @@
-#include <stdio.h>
-#include <stdlib.h>
 #include "mpc/mpc.h"
-#include "alma_formula.h"
-#include "alma_unify.h"
 
-int main(int argc, char **argv) {
-
-  mpc_result_t r;
-
+// Attempts to open filename and parse contents according to ALMA language
+// Boolean return for success or failure of parse
+// If the parse was successful, AST is a valid pointer to the result
+int alma_parse(char *filename, mpc_ast_t **ast) {
   mpc_parser_t* Alma  = mpc_new("alma");
   mpc_parser_t* Almaformula  = mpc_new("almaformula");
   mpc_parser_t* Formula = mpc_new("formula");
@@ -55,49 +51,19 @@ int main(int argc, char **argv) {
     Poslit, Listofterms, Term, Predname, Constant, Funcname, Variable,
     Prologconst, NULL);
 
-  int result;
-  if (argc > 1)
-    result = mpc_parse_contents(argv[1], Alma, &r);
-  else
-    result = mpc_parse_pipe("<stdin>", stdin, Alma, &r);
-  if (result) {
-    alma_node *formulas;
-    int formula_count;
-    generate_alma_trees(r.output, &formulas, &formula_count);
-    mpc_ast_delete(r.output);
-
-    for (int i = 0; i < formula_count; i++) {
-      //alma_print(formulas+i);
-      //printf("CNF equivalent:\n");
-      make_cnf(formulas+i);
-      //alma_print(formulas+i);
-      //printf("\n");
-    }
-
-    kb *alma_kb;
-    flatten(formulas, formula_count, &alma_kb);
-    for (int i = 0; i < formula_count; i++)
-      free_alma_tree(formulas+i);
-    free(formulas);
-    //kb_print(alma_kb);
-
-    // Unify test
-    binding_list *theta;
-    theta = malloc(sizeof(binding_list));
-    pred_unify(alma_kb->clauses[12]->pos_lits[0], alma_kb->clauses[13]->pos_lits[0], theta);
-    print_bindings(theta);
-    cleanup_bindings(theta);
-
-    free_kb(alma_kb);
-  }
-  else {
-    mpc_err_print(r.error);
-    mpc_err_delete(r.error);
-  }
-
+  mpc_result_t r;
+  int result = mpc_parse_contents(filename, Alma, &r);
   mpc_cleanup(16, Alma, Almaformula, Formula, FFormula, BFormula, Conjform,
     Literal, Neglit, Poslit, Listofterms, Term, Predname, Constant,
     Funcname, Variable, Prologconst);
 
-  return 0;
+  if (result) {
+    *ast = r.output;
+    return 1;
+  }
+  else {
+    mpc_err_print(r.error);
+    mpc_err_delete(r.error);
+    return 0;
+  }
 }

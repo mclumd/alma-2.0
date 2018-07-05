@@ -14,10 +14,13 @@ static alma_term* bindings_contain(binding_list *theta, alma_variable *var) {
 }
 
 static int occurs_check(binding_list *theta, alma_variable *var, alma_term *x) {
-  alma_term *res;
   // If x is a bound variable, occurs-check what it's bound to
-  if (x->type == VARIABLE && (res = bindings_contain(theta, x->variable)) != NULL) {
-    return occurs_check(theta, var, res);
+  if (x->type == VARIABLE) {
+    if (strcmp(x->variable->name, var->name) == 0)
+      return 1;
+    alma_term *res;
+    if ((res = bindings_contain(theta, x->variable)) != NULL)
+      return occurs_check(theta, var, res);
   }
   // In function case occurs-check each argument
   else if (x->type == FUNCTION){
@@ -89,7 +92,12 @@ static int unify_var(alma_term *varterm, alma_term *x, binding_list *theta) {
 
 // Unification function based on algorithm in AIMA book
 int unify(alma_term *x, alma_term *y, binding_list *theta) {
-  if (x->type == VARIABLE) {
+  // Unification succeeds without changing theta if trying to unify variable with itself
+  if (x->type == VARIABLE && y->type == VARIABLE
+      && strcmp(x->variable->name, y->variable->name) == 0) {
+    return 1;
+  }
+  else if (x->type == VARIABLE) {
     return unify_var(x, y, theta);
   }
   else if (y->type == VARIABLE) {
@@ -147,6 +155,7 @@ void cleanup_bindings(binding_list *theta) {
     free(theta->list[i].var->name);
     free(theta->list[i].var);
     free_term(theta->list[i].term);
+    free(theta->list[i].term);
   }
   free(theta->list);
   // Free theta itself too?

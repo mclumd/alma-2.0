@@ -20,7 +20,7 @@ typedef enum alma_operator {NOT, OR, AND, IF} alma_operator;
 typedef enum if_tag {NONE, FIF, BIF} if_tag;
 
 typedef struct alma_fol {
-  alma_operator op; // Which arguments are used is implicit in operator
+  alma_operator op; // Which arguments are used is implicit based on operator
   alma_node *arg1; // Holds antecedent when op is IF
   alma_node *arg2; // Holds consequent when op is IF
   if_tag tag;

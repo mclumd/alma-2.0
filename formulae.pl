@@ -1,6 +1,6 @@
 fif(and(if(not(t(A)), t(B)), atom), conclusion(thing)).
 
-if(and(if(not(t(A)), t(B)), atom), athing(b(c(f,g,h,i,j,k)))).
+if(and(if(not(t(A)), t(B)), atom), athing(b(c(f,g,h,i,j,B)))).
 
 if(and(if(not(t(x)), t(B)), atom), thing).
 
@@ -19,5 +19,10 @@ immediateposlit.
 
 if(not(a), b).
 
-knows(mary(Z), X, Y).
-knows(A, stuff, A).
+q(Z,Z).
+q(p(X, Y, a), p(Y, X, X)).
+
+q(p(X,Y),p(Y,X)).
+
+knows(mary(Z), X, mary(arg), athing(b(c(f,g,h,i,j,k))), Y).
+knows(A, stuff, Y, athing(b(c(f,g,h,i,j,B))), A).

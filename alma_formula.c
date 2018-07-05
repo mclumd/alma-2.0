@@ -176,6 +176,7 @@ static void free_function(alma_function *func) {
   free(func);
 }
 
+// Does not free alloc for term pointer itself, due to how terms are allocated in alma_function
 void free_term(alma_term *term) {
   switch (term->type) {
     case VARIABLE: {
