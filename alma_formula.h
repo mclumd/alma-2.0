@@ -23,7 +23,7 @@ typedef struct alma_fol {
   alma_operator op; // Which arguments are used is implicit based on operator
   alma_node *arg1; // Holds antecedent when op is IF
   alma_node *arg2; // Holds consequent when op is IF
-  if_tag tag;
+  if_tag tag; // Used to record FIF/BIF tag for later use
 } alma_fol;
 
 typedef struct alma_function {
@@ -64,8 +64,9 @@ void alma_predicate_init(alma_node *node, mpc_ast_t *ast);
 
 // TODO: Manage pointers better to get away from double pointer usage?
 // Or is it stylistically better to keep them?
-void generate_alma_trees(mpc_ast_t *tree, alma_node **alma_trees, int *size);
+void generate_alma_trees(mpc_ast_t *ast, alma_node **alma_trees, int *size);
 void free_alma_tree(alma_node *node);
+
 void copy_alma_var(alma_variable *original, alma_variable *copy);
 void copy_alma_term(alma_term *original, alma_term *copy);
 void copy_alma_function(alma_function *original, alma_function *copy);

@@ -8,7 +8,7 @@
 
 // TODO: Tag management when rewriting needs to be considered more carefully
 
-
+// Constructs ALMA FOL operator (i.e. AND/OR/NOT/IF) from arguments
 void alma_fol_init(alma_node *node, alma_operator op, alma_node *arg1, alma_node *arg2, if_tag tag) {
   node->type = FOL;
   node->fol = malloc(sizeof(alma_fol));
@@ -18,6 +18,8 @@ void alma_fol_init(alma_node *node, alma_operator op, alma_node *arg1, alma_node
   node->fol->tag = tag;
 }
 
+// Recursively constructs ALMA FOL term representation of AST argument into term pointer
+// First argument must be allocated by caller
 void alma_term_init(alma_term *term, mpc_ast_t *ast) {
   if (strstr(ast->tag, "variable") != NULL) {
     term->type = VARIABLE;
@@ -38,15 +40,17 @@ void alma_term_init(alma_term *term, mpc_ast_t *ast) {
   }
 }
 
+// Recursively constructs ALMA FOL function representation of AST argument into ALMA function pointer
+// First argument must be allocated by caller
 void alma_function_init(alma_function *func, mpc_ast_t *ast) {
-  // Case with no terms
+  // Case for function containing no terms
   if (ast->children_num == 0) {
     func->name = malloc(sizeof(char) * (strlen(ast->contents)+1));
     strcpy(func->name, ast->contents);
     func->term_count = 0;
     func->terms = NULL;
   }
-  // Otherwise, populate terms
+  // Otherwise, terms exist and should be populated in ALMA instance
   else {
     func->name = malloc(sizeof(char) * (strlen(ast->children[0]->contents)+1));
     strcpy(func->name, ast->children[0]->contents);
@@ -60,7 +64,7 @@ void alma_function_init(alma_function *func, mpc_ast_t *ast) {
       func->terms = malloc(sizeof(alma_term));
       alma_term_init(func->terms, termlist);
     }
-    // Listofterms with multiple terms
+    // Case for listofterms with multiple terms
     else {
       func->term_count = (termlist->children_num+1)/2;
       func->terms = malloc(sizeof(alma_term) * func->term_count);
@@ -71,6 +75,9 @@ void alma_function_init(alma_function *func, mpc_ast_t *ast) {
   }
 }
 
+// Constructs ALMA FOL representation of a predicate:
+// an ALMA node whose union is used to hold an ALMA function that describes the predicate
+// First argument must be allocated by caller
 void alma_predicate_init(alma_node *node, mpc_ast_t *ast) {
   node->type = PREDICATE;
   node->predicate = malloc(sizeof(alma_function));
@@ -78,8 +85,9 @@ void alma_predicate_init(alma_node *node, mpc_ast_t *ast) {
 }
 
 
+// Contents should contain one of not/or/and/if
 static alma_operator op_from_contents(char *contents) {
-  // Probably should use something better than default NOT
+  // TODO Probably should use something better than default NOT
   alma_operator result = NOT;
   if (strstr(contents, "or") != NULL)
     result = OR;
@@ -90,54 +98,53 @@ static alma_operator op_from_contents(char *contents) {
   return result;
 }
 
-// Note: expects alma_tree to be allocated by caller of function
-static void single_alma_tree(mpc_ast_t *almaformula, alma_node *alma_tree) {
+// Given an MPC AST pointer, constructs an ALMA tree to a FOL representation of the AST
+// First argument must be allocated by caller
+static void alma_tree_init(alma_node *alma_tree, mpc_ast_t *ast) {
   // Match tag containing poslit as function
-  if (strstr(almaformula->tag, "poslit") != NULL) {
-    alma_predicate_init(alma_tree, almaformula);
+  if (strstr(ast->tag, "poslit") != NULL) {
+    alma_predicate_init(alma_tree, ast);
   }
   // Match nested pieces of formula/fformula/bformula/conjform rules, recursively operate on
-  // Probably needs regular expressions to avoid problems with rules having string "formula"
-  else if (strstr(almaformula->tag, "formula") != NULL || strstr(almaformula->tag, "conjform") != NULL) {
+  // Dependent on only formula/fformula/bformula productions containing string formula within an almaformula tree
+  else if (strstr(ast->tag, "formula") != NULL || strstr(ast->tag, "conjform") != NULL) {
     // Case for formula producing just a positive literal
-    if (strstr(almaformula->children[0]->tag, "poslit") != NULL) {
-      alma_predicate_init(alma_tree, almaformula->children[0]);
+    if (strstr(ast->children[0]->tag, "poslit") != NULL) {
+      alma_predicate_init(alma_tree, ast->children[0]);
     }
     // Otherwise, formula derives to FOL contents
-    // TODO: Refactor with alma_fol_init
     else {
       alma_tree->type = FOL;
       alma_tree->fol = malloc(sizeof(alma_fol));
-      alma_fol *fol = alma_tree->fol;
 
-      fol->op = op_from_contents(almaformula->children[0]->contents);
-      fol->tag = NONE;
+      alma_tree->fol->op = op_from_contents(ast->children[0]->contents);
+      alma_tree->fol->tag = NONE;
 
       // Set arg1 based on children
-      fol->arg1 = malloc(sizeof(alma_node));
-      single_alma_tree(almaformula->children[1], fol->arg1);
+      alma_tree->fol->arg1 = malloc(sizeof(alma_node));
+      alma_tree_init(alma_tree->fol->arg1, ast->children[1]);
 
-      if (strstr(almaformula->tag, "fformula") != NULL) {
+      if (strstr(ast->tag, "fformula") != NULL) {
         // Set arg2 for fformula conclusion
-        fol->arg2 = malloc(sizeof(alma_node));
-        single_alma_tree(almaformula->children[4], fol->arg2);
-        fol->tag = FIF;
+        alma_tree->fol->arg2 = malloc(sizeof(alma_node));
+        alma_tree_init(alma_tree->fol->arg2, ast->children[4]);
+        alma_tree->fol->tag = FIF;
       }
       else {
         // Set arg2 if operation is binary or/and/if
-        switch (fol->op) {
+        switch (alma_tree->fol->op) {
           case OR:
           case AND:
           case IF:
-            fol->arg2 = malloc(sizeof(alma_node));
-            single_alma_tree(almaformula->children[3], fol->arg2);
+            alma_tree->fol->arg2 = malloc(sizeof(alma_node));
+            alma_tree_init(alma_tree->fol->arg2, ast->children[3]);
             break;
           case NOT:
-            fol->arg2 = NULL;
+            alma_tree->fol->arg2 = NULL;
             break;
         }
-        if (strstr(almaformula->tag, "bformula") != NULL)
-          fol->tag = BIF;
+        if (strstr(ast->tag, "bformula") != NULL)
+          alma_tree->fol->tag = BIF;
       }
     }
   }
@@ -145,21 +152,22 @@ static void single_alma_tree(mpc_ast_t *almaformula, alma_node *alma_tree) {
 
 // Top-level, given an AST for entire ALMA file parse
 // alma_trees must be freed by caller
-void generate_alma_trees(mpc_ast_t *tree, alma_node **alma_trees, int *size) {
+void generate_alma_trees(mpc_ast_t *ast, alma_node **alma_trees, int *size) {
   // Expects almaformula production to be children of top level of AST
   // If the grammar changes such that top-level rule doesn't lead to almaformula,
-  // this will have to be changed.
+  // this will have to be changed
   *size = 0;
-  for (int i = 0; i < tree->children_num; i++) {
-    if (strstr(tree->children[i]->tag, "almaformula") != NULL)
+  // Only count children that contain an almaformula production
+  for (int i = 0; i < ast->children_num; i++) {
+    if (strstr(ast->children[i]->tag, "almaformula") != NULL)
       (*size)++;
   }
   *alma_trees = malloc(sizeof(alma_node) * *size);
 
   int index = 0;
-  for (int i = 0; i < tree->children_num; i++) {
-    if (strstr(tree->children[i]->tag, "almaformula") != NULL) {
-      single_alma_tree(tree->children[i]->children[0], *alma_trees + index);
+  for (int i = 0; i < ast->children_num; i++) {
+    if (strstr(ast->children[i]->tag, "almaformula") != NULL) {
+      alma_tree_init(*alma_trees + index, ast->children[i]->children[0]);
       index++;
     }
   }
@@ -310,7 +318,7 @@ void copy_alma_tree(alma_node *original, alma_node *copy) {
   }
 }
 
-
+// Recursively replaces all occurrences of IF(A,B) in node to OR(NOT(A),B)
 void eliminate_conditionals(alma_node *node) {
   if (node != NULL && node->type == FOL) {
     if (node->fol->op == IF) {
@@ -328,6 +336,7 @@ void eliminate_conditionals(alma_node *node) {
   }
 }
 
+// Recursively moves FOL negation inward by applying De Morgan's rules
 // Doesn't handle IF case; must call after eliminate_conditionals
 // If a FOL operator of IF is encountered, returns immediately
 void negation_inwards(alma_node *node) {
@@ -396,8 +405,9 @@ void negation_inwards(alma_node *node) {
   }
 }
 
+// Recursively does distribution of OR over AND so that node becomes conjunction of disjuncts
 // If argument is in negation normal form, converts to CNF from there
-// Does not modify anything contained inside of a NOT fol node
+// Does not modify anything contained inside of a NOT FOL node
 void dist_or_over_and(alma_node *node) {
   if (node != NULL && node->type == FOL) {
     dist_or_over_and(node->fol->arg1);
@@ -456,11 +466,13 @@ void dist_or_over_and(alma_node *node) {
   }
 }
 
+// Converts node from general FOL into CNF
 void make_cnf(alma_node *node) {
   eliminate_conditionals(node);
   negation_inwards(node);
   dist_or_over_and(node);
 }
+
 
 static void alma_function_print(alma_function *func);
 
@@ -575,6 +587,7 @@ static void make_clause(alma_node *node, clause *c) {
 }
 
 // Flattens a single alma node and adds its contents to collection
+// Recursively called by flatten function per node
 static void flatten_node(alma_node *node, kb *collection) {
   if (node->type == FOL && node->fol->op == AND) {
     flatten_node(node->fol->arg1, collection);
@@ -599,7 +612,7 @@ static void flatten_node(alma_node *node, kb *collection) {
 }
 
 // Caller will need to free collection
-// trees also is not freed at the end of this call
+// trees also must be freed by the caller after this call, as it is not deallocated here
 void flatten(alma_node *trees, int num_trees, kb **collection) {
   *collection = malloc(sizeof(kb));
   (*collection)->reserved = 8;
