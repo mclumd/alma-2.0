@@ -2,6 +2,7 @@
 #include "mpc/mpc.h"
 #include "alma_parser.h"
 #include "alma_formula.h"
+#include "alma_kb.h"
 #include "alma_unify.h"
 
 // ALMA currently:
@@ -24,39 +25,39 @@ int main(int argc, char **argv) {
     int formula_count;
     generate_alma_trees(alma_ast, &formulas, &formula_count);
     mpc_ast_delete(alma_ast);
-    for (int i = 0; i < formula_count; i++) {
-      alma_print(formulas+i);
-    }
-    printf("\n");
+    // for (int i = 0; i < formula_count; i++) {
+    //   alma_print(formulas+i);
+    // }
+    // printf("\n");
 
     // Convert general FOL formulas to CNF
     for (int i = 0; i < formula_count; i++) {
       make_cnf(formulas+i);
     }
 
-    printf("CNF equivalents:\n");
-    for (int i = 0; i < formula_count; i++) {
-      alma_print(formulas+i);
-    }
-    printf("\n");
+    // printf("CNF equivalents:\n");
+    // for (int i = 0; i < formula_count; i++) {
+    //   alma_print(formulas+i);
+    // }
+    // printf("\n");
 
     // Flatten CNF list into KB of clauses
     kb *alma_kb;
-    flatten(formulas, formula_count, &alma_kb);
+    kb_init(formulas, formula_count, &alma_kb);
     for (int i = 0; i < formula_count; i++)
       free_alma_tree(formulas+i);
     free(formulas);
-    kb_print(alma_kb);
+    //kb_print(alma_kb);
 
     // Unify test for pair from KB; currently harcoded indices for pair from formulae.pl
-    binding_list *theta;
-    theta = malloc(sizeof(binding_list));
-    if(pred_unify(alma_kb->clauses[12]->pos_lits[0], alma_kb->clauses[13]->pos_lits[0], theta))
-      print_bindings(theta);
-    else
-      printf("Unification failed :(\n");
-    cleanup_bindings(theta);
-    free(theta);
+    // binding_list *theta;
+    // theta = malloc(sizeof(binding_list));
+    // if(pred_unify(alma_kb->clauses[12]->pos_lits[0], alma_kb->clauses[13]->pos_lits[0], theta))
+    //   print_bindings(theta);
+    // else
+    //   printf("Unification failed :(\n");
+    // cleanup_bindings(theta);
+    // free(theta);
 
     free_kb(alma_kb);
   }

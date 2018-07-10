@@ -173,7 +173,7 @@ void generate_alma_trees(mpc_ast_t *ast, alma_node **alma_trees, int *size) {
   }
 }
 
-static void free_function(alma_function *func) {
+void free_function(alma_function *func) {
   if (func == NULL)
     return;
 
@@ -474,8 +474,6 @@ void make_cnf(alma_node *node) {
 }
 
 
-static void alma_function_print(alma_function *func);
-
 void alma_term_print(alma_term *term) {
   switch (term->type) {
     case VARIABLE:
@@ -490,7 +488,7 @@ void alma_term_print(alma_term *term) {
   }
 }
 
-static void alma_function_print(alma_function *func) {
+void alma_function_print(alma_function *func) {
   printf("%s", func->name);
   if (func->term_count > 0) {
     printf("(");
@@ -553,106 +551,4 @@ static void alma_print_rec(alma_node *node, int indent) {
 
 void alma_print(alma_node *node) {
   alma_print_rec(node, 0);
-}
-
-
-// Assumes c is allocated by caller
-// TODO: Case for something other than OR/NOT/pred appearing?
-static void make_clause(alma_node *node, clause *c) {
-  if (node != NULL) {
-    if (node->type == FOL) {
-      // Neg lit case for NOT
-      if (node->fol->op == NOT) {
-        c->neg_count++;
-        c->neg_lits = realloc(c->neg_lits, c->neg_count*sizeof(alma_function*));
-        c->neg_lits[c->neg_count-1] = node->fol->arg1->predicate;
-        node->fol->arg1->predicate = NULL;
-      }
-      // Case of node is OR
-      else {
-        make_clause(node->fol->arg1, c);
-        make_clause(node->fol->arg2, c);
-      }
-      if (c->tag == NONE)
-        c->tag = node->fol->tag;
-    }
-    // Otherwise, only pos lit left
-    else {
-      c->pos_count++;
-      c->pos_lits = realloc(c->pos_lits, c->pos_count*sizeof(alma_function*));
-      c->pos_lits[c->pos_count-1] = node->predicate;
-      node->predicate = NULL;
-    }
-  }
-}
-
-// Flattens a single alma node and adds its contents to collection
-// Recursively called by flatten function per node
-static void flatten_node(alma_node *node, kb *collection) {
-  if (node->type == FOL && node->fol->op == AND) {
-    flatten_node(node->fol->arg1, collection);
-    flatten_node(node->fol->arg2, collection);
-  }
-  else {
-    clause *c = malloc(sizeof(clause));
-    c->pos_count = c->neg_count = 0;
-    c->pos_lits = NULL;
-    c->neg_lits = NULL;
-    c->tag = NONE;
-    make_clause(node, c);
-
-    // Place in collection
-    if (collection->num_clauses == collection->reserved) {
-      collection->reserved *= 2;
-      collection->clauses = realloc(collection->clauses, sizeof(clause*) * collection->reserved);
-    }
-    collection->clauses[collection->num_clauses] = c;
-    collection->num_clauses++;
-  }
-}
-
-// Caller will need to free collection
-// trees also must be freed by the caller after this call, as it is not deallocated here
-void flatten(alma_node *trees, int num_trees, kb **collection) {
-  *collection = malloc(sizeof(kb));
-  (*collection)->reserved = 8;
-  (*collection)->clauses = malloc(sizeof(clause*) * (*collection)->reserved);
-  (*collection)->num_clauses = 0;
-  for (int i = 0; i < num_trees; i++) {
-    flatten_node(trees+i, *collection);
-  }
-}
-
-void free_kb(kb *collection) {
-  for (int i = 0; i < collection->num_clauses; i++) {
-    for (int j = 0; j < collection->clauses[i]->pos_count; j++) {
-      free_function(collection->clauses[i]->pos_lits[j]);
-    }
-    for (int j = 0; j < collection->clauses[i]->neg_count; j++) {
-      free_function(collection->clauses[i]->neg_lits[j]);
-    }
-    free(collection->clauses[i]->pos_lits);
-    free(collection->clauses[i]->neg_lits);
-    free(collection->clauses[i]);
-  }
-  free(collection->clauses);
-  free(collection);
-}
-
-
-void kb_print(kb *collection) {
-  for (int i = 0; i < collection->num_clauses; i++) {
-    printf("Clause %d\n", i);
-    for (int j = 0; j < collection->clauses[i]->pos_count; j++) {
-      printf("+");
-      alma_function_print(collection->clauses[i]->pos_lits[j]);
-      printf("\n");
-    }
-    for (int j = 0; j < collection->clauses[i]->neg_count; j++) {
-      printf("-");
-      alma_function_print(collection->clauses[i]->neg_lits[j]);
-      printf("\n");
-    }
-    printf("\n");
-  }
 }

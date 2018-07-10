@@ -65,6 +65,8 @@ void alma_predicate_init(alma_node *node, mpc_ast_t *ast);
 // TODO: Manage pointers better to get away from double pointer usage?
 // Or is it stylistically better to keep them?
 void generate_alma_trees(mpc_ast_t *ast, alma_node **alma_trees, int *size);
+void free_function(alma_function *func);
+void free_term(alma_term *term);
 void free_alma_tree(alma_node *node);
 
 void copy_alma_var(alma_variable *original, alma_variable *copy);
@@ -78,27 +80,7 @@ void dist_or_over_and(alma_node *node);
 void make_cnf(alma_node *node);
 
 void alma_term_print(alma_term *term);
+void alma_function_print(alma_function *func);
 void alma_print(alma_node *node);
-
-typedef struct clause {
-  int pos_count;
-  int neg_count;
-  alma_function **pos_lits;
-  alma_function **neg_lits;
-  if_tag tag;
-} clause;
-
-// Simple definition for now, likely to expand significantly in future
-typedef struct kb {
-  int reserved; // Dynamic length array
-  int num_clauses;
-  clause **clauses;
-} kb;
-
-void flatten(alma_node *trees, int num_trees, kb **collection);
-void free_term(alma_term *term);
-void free_kb(kb *collection);
-
-void kb_print(kb *collection);
 
 #endif
