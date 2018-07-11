@@ -24,13 +24,13 @@ void alma_term_init(alma_term *term, mpc_ast_t *ast) {
   if (strstr(ast->tag, "variable") != NULL) {
     term->type = VARIABLE;
     term->variable = malloc(sizeof(alma_variable));
-    term->variable->name = malloc(sizeof(char) * (strlen(ast->contents)+1));
+    term->variable->name = malloc(strlen(ast->contents)+1);
     strcpy(term->variable->name, ast->contents);
   }
   else if (strstr(ast->tag, "constant") != NULL) {
     term->type = CONSTANT;
     term->constant = malloc(sizeof(alma_constant));
-    term->constant->name = malloc(sizeof(char) * (strlen(ast->contents)+1));
+    term->constant->name = malloc(strlen(ast->contents)+1);
     strcpy(term->constant->name, ast->contents);
   }
   else {
@@ -45,14 +45,14 @@ void alma_term_init(alma_term *term, mpc_ast_t *ast) {
 void alma_function_init(alma_function *func, mpc_ast_t *ast) {
   // Case for function containing no terms
   if (ast->children_num == 0) {
-    func->name = malloc(sizeof(char) * (strlen(ast->contents)+1));
+    func->name = malloc(strlen(ast->contents)+1);
     strcpy(func->name, ast->contents);
     func->term_count = 0;
     func->terms = NULL;
   }
   // Otherwise, terms exist and should be populated in ALMA instance
   else {
-    func->name = malloc(sizeof(char) * (strlen(ast->children[0]->contents)+1));
+    func->name = malloc(strlen(ast->children[0]->contents)+1);
     strcpy(func->name, ast->children[0]->contents);
     func->term_count = 0;
     func->terms = NULL; // Needed for realloc behavior
@@ -229,7 +229,7 @@ void free_alma_tree(alma_node *node) {
 
 // Space for copy must be allocated before call
 void copy_alma_var(alma_variable *original, alma_variable *copy) {
-  copy->name = malloc(sizeof(char) * (strlen(original->name)+1));
+  copy->name = malloc(strlen(original->name)+1);
   strcpy(copy->name, original->name);
 }
 
@@ -244,7 +244,7 @@ void copy_alma_term(alma_term *original, alma_term *copy) {
     }
     case CONSTANT: {
       copy->constant = malloc(sizeof(alma_constant));
-      copy->constant->name = malloc(sizeof(char) * (strlen(original->constant->name)+1));
+      copy->constant->name = malloc(strlen(original->constant->name)+1);
       strcpy(copy->variable->name, original->constant->name);
       break;
     }
@@ -258,7 +258,7 @@ void copy_alma_term(alma_term *original, alma_term *copy) {
 
 // Space for copy must be allocated before call
 void copy_alma_function(alma_function *original, alma_function *copy) {
-  copy->name = malloc(sizeof(char) * (strlen(original->name)+1));
+  copy->name = malloc(strlen(original->name)+1);
   strcpy(copy->name, original->name);
   copy->term_count = original->term_count;
   if (original->terms == NULL) {
@@ -502,7 +502,7 @@ void alma_function_print(alma_function *func) {
 }
 
 static void alma_print_rec(alma_node *node, int indent) {
-  char *spacing = malloc(sizeof(char) * indent*2 + 1);
+  char *spacing = malloc(indent*2 + 1);
   if (indent > 0)
     memset(spacing, ' ', indent*2);
   spacing[indent*2] = '\0';

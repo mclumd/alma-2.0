@@ -33,7 +33,7 @@ static int occurs_check(binding_list *theta, alma_variable *var, alma_term *x) {
 }
 
 // For a given term, replace variables in the binding list, replace with what they're bound to
-static void subst(binding_list *theta, alma_term *term) {
+void subst(binding_list *theta, alma_term *term) {
   switch (term->type) {
     case VARIABLE: {
       alma_term *contained = bindings_contain(theta, term->variable);

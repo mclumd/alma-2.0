@@ -7,6 +7,8 @@
 #include "alma_formula.h"
 #include "alma_unify.h"
 
+// TODO: Further consider style of using **, esp. for pos_lits/neg_lits in clause
+
 typedef struct clause {
   int pos_count;
   int neg_count;
@@ -14,18 +16,6 @@ typedef struct clause {
   alma_function **neg_lits;
   if_tag tag;
 } clause;
-
-typedef struct task {
-  clause *x;
-  clause *y;
-  alma_function *pos; // Positive literal from x
-  alma_function *neg; // Negative literal from y
-} task;
-
-typedef struct task_list {
-  int count;
-  task **list;
-} task_list;
 
 // Simple definition for now, likely to expand significantly in future
 typedef struct kb {
@@ -39,13 +29,12 @@ typedef struct kb {
   tommy_hashlin neg_map; // Maps each predicate name to the set of clauses where it appears as negative literal
   tommy_list neg_list; // Linked list for iterating neg_map
 
-  struct task_list tasks; // Stores tasks to attempt resolution on next step
+  tommy_list task_list; // Stores tasks to attempt resolution on next step
 } kb;
 
 // Struct to be held in the tommy_hashlin hash tables of a KB
 // Will be hashed only based on the predname string, hance making a map of strings to array of clause pointers
 typedef struct map_entry {
-  // TODO: Also needs to address arity eventually
   char *predname; // Key, used as argument for tommy_inthash_u32 hashing function
   int num_clauses;
   clause **clauses; // Value
@@ -53,16 +42,21 @@ typedef struct map_entry {
   tommy_node list_node; // Node used for storage in tommy_list
 } map_entry;
 
+typedef struct task {
+  clause *x;
+  clause *y;
+  alma_function *pos; // Positive literal from x
+  alma_function *neg; // Negative literal from y
+  tommy_node node; // For storage in tommy_list
+} task;
+
 void kb_init(alma_node *trees, int num_trees, kb **collection);
 void free_kb(kb *collection);
 void kb_print(kb *collection);
 
-void populate_maps(kb *collection);
 void maps_add(kb *collection, clause **clauses, int num_clauses);
-void get_tasks(kb *collection, clause **new_clauses, int num_clauses);
-
+void get_tasks(kb *collection, clause **new_clauses, int num_clauses, int process_negs);
 void resolve(task *t, binding_list *mgu, clause *result);
-
 void forward_chain(kb *collection);
 
 #endif
