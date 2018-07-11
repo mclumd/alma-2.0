@@ -19,7 +19,7 @@ immediateposlit.
 
 if(not(a), b).
 
-q(Z,Z).
+not(q(Z,Z)).
 q(p(X, Y, a), p(Y, X, X)).
 
 q(p(X,Y),p(Y,X)).

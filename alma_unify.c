@@ -158,5 +158,5 @@ void cleanup_bindings(binding_list *theta) {
     free(theta->list[i].term);
   }
   free(theta->list);
-  // Free theta itself too?
+  free(theta);
 }

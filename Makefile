@@ -39,4 +39,4 @@ clean:
 	rm -f *.x *.o
 
 run:
-	./alma.x formulae.pl
+	./alma.x demo/fc-test.pl

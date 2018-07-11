@@ -340,50 +340,62 @@ void get_tasks(kb *collection, clause **new_clauses, int num_clauses, int proces
 // Given an MGU, substitute on literals other than pair unified and make a single resulting clause
 // Last argument must be allocated by caller
 void resolve(task *t, binding_list *mgu, clause *result) {
-  result->pos_lits = malloc(sizeof(alma_function*) * (t->x->pos_count + t->y->pos_count - 1));
-  result->neg_lits = malloc(sizeof(alma_function*) * (t->x->neg_count + t->y->neg_count - 1));
   result->pos_count = 0;
-  result->neg_count = 0;
+  if (t->x->pos_count + t->y->pos_count - 1 > 0) {
+    result->pos_lits = malloc(sizeof(alma_function*) * (t->x->pos_count + t->y->pos_count - 1));
 
-  // Copy positive literal from t->x and t->y
-  for (int i = 0; i < t->x->pos_count; i++) {
-    if (t->x->pos_lits[i] != t->pos) {
+    // Copy positive literal from t->x and t->y
+    for (int i = 0; i < t->x->pos_count; i++) {
+      if (t->x->pos_lits[i] != t->pos) {
+        alma_function *litcopy = malloc(sizeof(alma_function));
+        copy_alma_function(t->x->pos_lits[i], litcopy);
+        for (int j = 0; j < litcopy->term_count; j++)
+          subst(mgu, litcopy->terms+j);
+        result->pos_lits[result->pos_count] = litcopy;
+        result->pos_count++;
+      }
+    }
+    for (int i = 0; i < t->y->pos_count; i++) {
       alma_function *litcopy = malloc(sizeof(alma_function));
-      copy_alma_function(t->x->pos_lits[i], litcopy);
+      copy_alma_function(t->y->pos_lits[i], litcopy);
       for (int j = 0; j < litcopy->term_count; j++)
         subst(mgu, litcopy->terms+j);
       result->pos_lits[result->pos_count] = litcopy;
       result->pos_count++;
     }
   }
-  for (int i = 0; i < t->y->pos_count; i++) {
-    alma_function *litcopy = malloc(sizeof(alma_function));
-    copy_alma_function(t->y->pos_lits[i], litcopy);
-    for (int j = 0; j < litcopy->term_count; j++)
-      subst(mgu, litcopy->terms+j);
-    result->pos_lits[result->pos_count] = litcopy;
-    result->pos_count++;
+  else {
+    result->pos_lits = NULL;
   }
 
-  // Copy negative literal from t->x and t->y
-  for (int i = 0; i < t->y->neg_count; i++) {
-    if (t->y->neg_lits[i] != t->neg) {
+  result->neg_count = 0;
+  if (t->x->neg_count + t->y->neg_count - 1 > 0) {
+    result->neg_lits = malloc(sizeof(alma_function*) * (t->x->neg_count + t->y->neg_count - 1));
+
+    // Copy negative literal from t->x and t->y
+    for (int i = 0; i < t->y->neg_count; i++) {
+      if (t->y->neg_lits[i] != t->neg) {
+        alma_function *litcopy = malloc(sizeof(alma_function));
+        copy_alma_function(t->y->neg_lits[i], litcopy);
+        for (int j = 0; j < litcopy->term_count; j++)
+          subst(mgu, litcopy->terms+j);
+        result->neg_lits[result->neg_count] = litcopy;
+        result->neg_count++;
+      }
+    }
+    for (int i = 0; i < t->x->neg_count; i++) {
       alma_function *litcopy = malloc(sizeof(alma_function));
-      copy_alma_function(t->y->neg_lits[i], litcopy);
+      copy_alma_function(t->x->neg_lits[i], litcopy);
       for (int j = 0; j < litcopy->term_count; j++)
         subst(mgu, litcopy->terms+j);
       result->neg_lits[result->neg_count] = litcopy;
       result->neg_count++;
     }
   }
-  for (int i = 0; i < t->x->neg_count; i++) {
-    alma_function *litcopy = malloc(sizeof(alma_function));
-    copy_alma_function(t->x->neg_lits[i], litcopy);
-    for (int j = 0; j < litcopy->term_count; j++)
-      subst(mgu, litcopy->terms+j);
-    result->neg_lits[result->neg_count] = litcopy;
-    result->neg_count++;
+  else {
+    result->neg_lits = NULL;
   }
+  result->tag = NONE; // TODO: Deal with tags properly for fif/bif cases
 }
 
 // TODO: Incorporate print statments for demo as well
@@ -406,17 +418,24 @@ void forward_chain(kb *collection) {
             clause *res_result = malloc(sizeof(clause));
             resolve(current_task, theta, res_result);
 
-            num_new++;
-            // Reallocing the entire thing is based on the assumption of (fairly) few new clauses per step
-            // Should this assumption significantly change, this must be altered
-            new_clauses = realloc(new_clauses, sizeof(clause)*num_new);
-            new_clauses[num_new-1] = res_result;
+            // An empty resolution result is not a valid clause to add to KB
+            if (res_result->pos_count > 0 || res_result->neg_count > 0) {
+              num_new++;
+              // Reallocing the entire thing is based on the assumption of (fairly) few new clauses per step
+              // Should this assumption significantly change, this must be altered
+              new_clauses = realloc(new_clauses, sizeof(clause)*num_new);
+              new_clauses[num_new-1] = res_result;
+            }
+            else {
+              free(res_result);
+            }
           }
-          free(theta);
+          cleanup_bindings(theta);
 
           tommy_node *next = iter->next;
           tommy_list_remove_existing(&collection->task_list, iter);
           iter = next;
+          free(current_task);
       }
     }
 
