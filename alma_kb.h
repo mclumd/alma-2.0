@@ -30,6 +30,7 @@ typedef struct kb {
   tommy_list neg_list; // Linked list for iterating neg_map
 
   tommy_list task_list; // Stores tasks to attempt resolution on next step
+  long long task_count;
 } kb;
 
 // Struct to be held in the tommy_hashlin hash tables of a KB

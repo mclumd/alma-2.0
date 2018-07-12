@@ -131,7 +131,6 @@ int pred_unify(alma_function *x, alma_function *y, binding_list *theta) {
   for (int i = 0; i < x->term_count; i++) {
     // Bindings build up over repeated calls
     if (!unify(x->terms+i, y->terms+i, theta)) {
-      cleanup_bindings(theta);
       return 0;
     }
   }

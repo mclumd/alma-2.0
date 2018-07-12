@@ -88,6 +88,7 @@ void kb_init(alma_node *trees, int num_trees, kb **collection) {
   maps_add(collec, collec->clauses, collec->num_clauses);
 
   tommy_list_init(&collec->task_list);
+  collec->task_count = 0;
   get_tasks(collec, collec->clauses, collec->num_clauses, 0);
 }
 
@@ -127,18 +128,6 @@ void free_kb(kb *collection) {
 
 
 static void clause_print(clause *c) {
-  /*
-  for (int i = 0; i < c->pos_count; i++) {
-    printf("+");
-    alma_function_print(c->pos_lits[i]);
-    printf("\n");
-  }
-  for (int i = 0; i < c->neg_count; i++) {
-    printf("-");
-    alma_function_print(c->neg_lits[i]);
-    printf("\n");
-  }*/
-
   if (c->pos_count == 0) {
     for (int i = 0; i < c->neg_count; i++) {
       printf("not(");
@@ -301,10 +290,11 @@ void get_tasks(kb *collection, clause **new_clauses, int num_clauses, int proces
           if (lit != NULL) {
             task *t = malloc(sizeof(task));
             t->x = new_clauses[i];
-            t->y = result->clauses[k];
             t->pos = new_clauses[i]->pos_lits[j];
+            t->y = result->clauses[k];
             t->neg = lit;
             tommy_list_insert_tail(&collection->task_list, &t->node, t);
+            collection->task_count++;
           }
         }
       }
@@ -320,14 +310,15 @@ void get_tasks(kb *collection, clause **new_clauses, int num_clauses, int proces
         // New tasks are from Cartesian product of result's clauses with new_clauses[i]
         if (result != NULL) {
           for (int k = 0; k < result->num_clauses; k++) {
-            alma_function *lit = literal_by_name(result->clauses[k], new_clauses[i]->pos_lits[j]->name, 0);
+            alma_function *lit = literal_by_name(result->clauses[k], new_clauses[i]->neg_lits[j]->name, 1);
             if (lit != NULL) {
               task *t = malloc(sizeof(task));
               t->x = result->clauses[k];
-              t->y = new_clauses[i];
               t->pos = lit;
+              t->y = new_clauses[i];
               t->neg = new_clauses[i]->neg_lits[j];
               tommy_list_insert_tail(&collection->task_list, &t->node, t);
+              collection->task_count++;
             }
           }
         }
@@ -340,6 +331,8 @@ void get_tasks(kb *collection, clause **new_clauses, int num_clauses, int proces
 // Given an MGU, substitute on literals other than pair unified and make a single resulting clause
 // Last argument must be allocated by caller
 void resolve(task *t, binding_list *mgu, clause *result) {
+  //int max_pos = t->x->pos_count + t->y->pos_count - 1;
+  //int max_neg = t->x->neg_count + t->y->neg_count - 1;
   result->pos_count = 0;
   if (t->x->pos_count + t->y->pos_count - 1 > 0) {
     result->pos_lits = malloc(sizeof(alma_function*) * (t->x->pos_count + t->y->pos_count - 1));
@@ -353,6 +346,8 @@ void resolve(task *t, binding_list *mgu, clause *result) {
           subst(mgu, litcopy->terms+j);
         result->pos_lits[result->pos_count] = litcopy;
         result->pos_count++;
+        // if (result->pos_count > max_pos)
+        //   abort();
       }
     }
     for (int i = 0; i < t->y->pos_count; i++) {
@@ -362,6 +357,8 @@ void resolve(task *t, binding_list *mgu, clause *result) {
         subst(mgu, litcopy->terms+j);
       result->pos_lits[result->pos_count] = litcopy;
       result->pos_count++;
+      // if (result->pos_count > max_pos)
+      //   abort();
     }
   }
   else {
@@ -381,6 +378,8 @@ void resolve(task *t, binding_list *mgu, clause *result) {
           subst(mgu, litcopy->terms+j);
         result->neg_lits[result->neg_count] = litcopy;
         result->neg_count++;
+        // if (result->neg_count > max_neg)
+        //   abort();
       }
     }
     for (int i = 0; i < t->x->neg_count; i++) {
@@ -390,6 +389,8 @@ void resolve(task *t, binding_list *mgu, clause *result) {
         subst(mgu, litcopy->terms+j);
       result->neg_lits[result->neg_count] = litcopy;
       result->neg_count++;
+      // if (result->neg_count > max_neg)
+      //   abort();
     }
   }
   else {
@@ -398,7 +399,6 @@ void resolve(task *t, binding_list *mgu, clause *result) {
   result->tag = NONE; // TODO: Deal with tags properly for fif/bif cases
 }
 
-// TODO: Incorporate print statments for demo as well
 void forward_chain(kb *collection) {
   int num_new = 0;
   clause **new_clauses = NULL;
@@ -434,24 +434,28 @@ void forward_chain(kb *collection) {
 
           tommy_node *next = iter->next;
           tommy_list_remove_existing(&collection->task_list, iter);
+          collection->task_count--;
           iter = next;
           free(current_task);
       }
     }
 
     if (num_new > 0) {
+      printf("Step %d, %d task(s); KB:\n", step, num_new);
+      step++;
+
+      // Get new tasks before adding new clauses into collection
+      get_tasks(collection, new_clauses, num_new, 1);
+      // Insert new clauses derived
       maps_add(collection, new_clauses, num_new);
       for (int i = 0; i < num_new; i++) {
         add_clause(new_clauses[i], collection);
       }
-      get_tasks(collection, new_clauses, num_new, 1);
       free(new_clauses);
       num_new = 0;
       new_clauses = NULL;
 
-      printf("Step %d KB:\n", step);
-      step++;
-      kb_print(collection);
+      //kb_print(collection);
     }
     else {
       chain = 0;
