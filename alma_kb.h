@@ -2,6 +2,7 @@
 #define alma_kb_h
 
 #include "tommyds/tommyds/tommytypes.h"
+#include "tommyds/tommyds/tommyarray.h"
 #include "tommyds/tommyds/tommyhashlin.h"
 #include "tommyds/tommyds/tommylist.h"
 #include "alma_formula.h"
@@ -19,9 +20,7 @@ typedef struct clause {
 
 // Simple definition for now, likely to expand significantly in future
 typedef struct kb {
-  int reserved;
-  int num_clauses;
-  clause **clauses; // Dynamic length array, may have extra space reserved beyond size
+  tommy_array clauses; // Array storing pointers to clauses
 
   // Hashset and list used together for multi-indexing http://www.tommyds.it/doc/multiindex.html
   tommy_hashlin pos_map; // Maps each predicate name to the set of clauses where it appears as positive literal
@@ -29,7 +28,7 @@ typedef struct kb {
   tommy_hashlin neg_map; // Maps each predicate name to the set of clauses where it appears as negative literal
   tommy_list neg_list; // Linked list for iterating neg_map
 
-  tommy_list task_list; // Stores tasks to attempt resolution on next step
+  tommy_array task_list; // Stores tasks to attempt resolution on next step
   long long task_count;
 } kb;
 
@@ -48,15 +47,14 @@ typedef struct task {
   clause *y;
   alma_function *pos; // Positive literal from x
   alma_function *neg; // Negative literal from y
-  tommy_node node; // For storage in tommy_list
 } task;
 
 void kb_init(alma_node *trees, int num_trees, kb **collection);
 void free_kb(kb *collection);
 void kb_print(kb *collection);
 
-void maps_add(kb *collection, clause **clauses, int num_clauses);
-void get_tasks(kb *collection, clause **new_clauses, int num_clauses, int process_negs);
+void maps_add(kb *collection, tommy_array *clauses);
+void get_tasks(kb *collection, tommy_array *new_clauses, int process_negs);
 void resolve(task *t, binding_list *mgu, clause *result);
 void forward_chain(kb *collection);
 
