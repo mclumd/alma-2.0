@@ -1,6 +1,5 @@
 #include <string.h>
 #include "alma_unify.h"
-#include "alma_formula.h"
 
 // Returns term variable is bound to if it's in the bindings, null otherwise
 static alma_term* bindings_contain(binding_list *theta, alma_variable *var) {

@@ -3,6 +3,8 @@
 
 #include "mpc/mpc.h"
 
+extern long long variable_id_count;
+
 typedef enum node_type {FOL, PREDICATE} node_type;
 
 struct alma_fol;
@@ -49,6 +51,7 @@ typedef struct alma_term {
 
 typedef struct alma_variable {
   char *name;
+  long long id; // Not initialized until the variable in which it appears is converted into a clause
 } alma_variable;
 
 typedef struct alma_constant {

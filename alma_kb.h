@@ -54,7 +54,7 @@ void free_kb(kb *collection);
 void kb_print(kb *collection);
 
 void maps_add(kb *collection, tommy_array *clauses);
-void get_tasks(kb *collection, tommy_array *new_clauses, int process_negs);
+void get_tasks(kb *collection, tommy_array *new_clauses);
 void resolve(task *t, binding_list *mgu, clause *result);
 void forward_chain(kb *collection);
 

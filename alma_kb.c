@@ -1,12 +1,6 @@
 #include <stdio.h>
 #include <string.h>
-#include "tommyds/tommyds/tommytypes.h"
-#include "tommyds/tommyds/tommyarray.h"
-#include "tommyds/tommyds/tommyhashlin.h"
-#include "tommyds/tommyds/tommyhash.h"
 #include "alma_kb.h"
-#include "alma_formula.h"
-#include "alma_unify.h"
 
 // Assumes c is allocated by caller
 // TODO: Case for something other than OR/NOT/pred appearing?
@@ -38,6 +32,78 @@ static void make_clause(alma_node *node, clause *c) {
   }
 }
 
+static void find_variable_names(tommy_array *list, alma_term *term) {
+  switch (term->type) {
+    case VARIABLE: {
+      char *varname = term->variable->name;
+      for (tommy_size_t i = 0; i < tommy_array_size(list); i++) {
+        if(strcmp(varname, tommy_array_get(list, i)) == 0)
+          return;
+      }
+      tommy_array_insert(list, varname);
+      break;
+    }
+    case CONSTANT: {
+      return;
+    }
+    case FUNCTION: {
+      for (int i = 0; i < term->function->term_count; i++) {
+        find_variable_names(list, term->function->terms+i);
+      }
+    }
+  }
+}
+
+static void set_variable_names(tommy_array *list, alma_term *term) {
+  switch (term->type) {
+    case VARIABLE: {
+      char *varname = term->variable->name;
+      for (tommy_size_t i = 0; i < tommy_array_size(list); i++) {
+        if(strcmp(varname, tommy_array_get(list, i)) == 0)
+          term->variable->id = variable_id_count + i;
+      }
+      break;
+    }
+    case CONSTANT: {
+      return;
+    }
+    case FUNCTION: {
+      for (int i = 0; i < term->function->term_count; i++) {
+        set_variable_names(list, term->function->terms+i);
+      }
+    }
+  }
+}
+
+// Given a clause, assign the ID fields of each variable, giving those with the same name matching IDs
+// Fresh ID values drawn from variable_id_count global variable
+static void set_variable_ids(clause *c) {
+  tommy_array var_names;
+  tommy_array_init(&var_names);
+  for (int i = 0; i < c->pos_count; i++) {
+    for (int j = 0; j < c->pos_lits[i]->term_count; j++) {
+      find_variable_names(&var_names, c->pos_lits[i]->terms+j);
+    }
+  }
+  for (int i = 0; i < c->neg_count; i++) {
+    for (int j = 0; j < c->neg_lits[i]->term_count; j++) {
+      find_variable_names(&var_names, c->neg_lits[i]->terms+j);
+    }
+  }
+  for (int i = 0; i < c->pos_count; i++) {
+    for (int j = 0; j < c->pos_lits[i]->term_count; j++) {
+      set_variable_names(&var_names, c->pos_lits[i]->terms+j);
+    }
+  }
+  for (int i = 0; i < c->neg_count; i++) {
+    for (int j = 0; j < c->neg_lits[i]->term_count; j++) {
+      set_variable_names(&var_names, c->neg_lits[i]->terms+j);
+    }
+  }
+  variable_id_count += tommy_array_size(&var_names);
+  tommy_array_done(&var_names);
+}
+
 // Flattens a single alma node and adds its contents to collection
 // Recursively calls when an AND is found to separate conjunctions
 static void flatten_node(alma_node *node, kb *collection) {
@@ -52,10 +118,17 @@ static void flatten_node(alma_node *node, kb *collection) {
     c->neg_lits = NULL;
     c->tag = NONE;
     make_clause(node, c);
+    set_variable_ids(c);
 
     tommy_array_insert(&collection->clauses, c);
   }
 }
+
+// Returns 0 if c is found to be a duplicate of a clause existing in collection; 1 otherwise
+/*static int duplicate_check(kb *collection, clause *c) {
+  // TODO
+  return 1;
+}*/
 
 // Caller will need to free collection
 // trees also must be freed by the caller after this call, as it is not deallocated here
@@ -63,7 +136,7 @@ void kb_init(alma_node *trees, int num_trees, kb **collection) {
   // Flatten trees into clause list
   *collection = malloc(sizeof(kb));
   kb *collec = *collection;
-  tommy_array_init(&collec->clauses);
+  tommy_array_init(&collec->clauses); // TODO: Place in tommy_array to use (new) function for adding from
   for (int i = 0; i < num_trees; i++) {
     flatten_node(trees+i, collec);
   }
@@ -77,7 +150,7 @@ void kb_init(alma_node *trees, int num_trees, kb **collection) {
 
   tommy_array_init(&collec->task_list);
   collec->task_count = 0;
-  get_tasks(collec, &collec->clauses, 0);
+  get_tasks(collec, &collec->clauses);
 }
 
 static void free_map_entry(void *arg) {
@@ -269,7 +342,7 @@ static alma_function* literal_by_name(clause *c, char *name, int pos) {
 // Tasks are added into the task_list of collection
 // TODO: Rewrite to avoid duplicates in task list (currently ignored for convenience)
 // TODO: Refactor to remove code duplication
-void get_tasks(kb *collection, tommy_array *new_clauses, int process_negs) {
+void get_tasks(kb *collection, tommy_array *new_clauses) {
   for (tommy_size_t i = 0; i < tommy_array_size(new_clauses); i++) {
     clause *curr = tommy_array_get(new_clauses, i);
     // Iterate positive literals of new_clauses and match against negative literals of collection
@@ -295,8 +368,8 @@ void get_tasks(kb *collection, tommy_array *new_clauses, int process_negs) {
       free(name);
     }
     // Iterate negative literals of new_clauses and match against positive literals of collection
-    // Only if process_negs flag; set to false in the case of new_clauses being same as KB's clauses (i.e. first task generation)
-    if (process_negs) {
+    // Only done if new_clauses differ from KB's clauses (i.e. after first task generation)
+    if (new_clauses != &collection->clauses) {
       for (int j = 0; j < curr->neg_count; j++) {
         char *name = name_with_arity(curr->neg_lits[j]->name, curr->neg_lits[j]->term_count);
         map_entry *result = tommy_hashlin_search(&collection->pos_map, compare, name, tommy_hash_u64(0, name, strlen(name)));
@@ -415,6 +488,7 @@ void forward_chain(kb *collection) {
           tommy_array_insert(&new_clauses, res_result);
         }
         else {
+          // TODO: Contradiction detection when you have empty resolution result!
           free(res_result);
         }
       }
@@ -427,11 +501,11 @@ void forward_chain(kb *collection) {
     tommy_array_init(&collection->task_list);
 
     if (tommy_array_size(&new_clauses) > 0) {
-      printf("Step %d, %lu task(s); KB:\n", step, tommy_array_size(&new_clauses));
+      printf("Step %d:\n", step);
       step++;
 
       // Get new tasks before adding new clauses into collection
-      get_tasks(collection, &new_clauses, 1);
+      get_tasks(collection, &new_clauses);
       // Insert new clauses derived
       maps_add(collection, &new_clauses);
       for (tommy_size_t i = 0; i < tommy_array_size(&new_clauses); i++) {

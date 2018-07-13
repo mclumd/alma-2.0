@@ -1,4 +1,4 @@
-#include "mpc/mpc.h"
+#include "alma_parser.h"
 
 // Attempts to open filename and parse contents according to ALMA language
 // Boolean return for success or failure of parse

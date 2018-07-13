@@ -1,6 +1,5 @@
 #include <string.h>
 #include <stdio.h>
-#include "mpc/mpc.h"
 #include "alma_formula.h"
 
 // TODO: Longer term, check for error codes of library functions used
@@ -25,6 +24,7 @@ void alma_term_init(alma_term *term, mpc_ast_t *ast) {
     term->type = VARIABLE;
     term->variable = malloc(sizeof(alma_variable));
     term->variable->name = malloc(strlen(ast->contents)+1);
+    term->variable->id = 0;
     strcpy(term->variable->name, ast->contents);
   }
   else if (strstr(ast->tag, "constant") != NULL) {
@@ -231,6 +231,7 @@ void free_alma_tree(alma_node *node) {
 void copy_alma_var(alma_variable *original, alma_variable *copy) {
   copy->name = malloc(strlen(original->name)+1);
   strcpy(copy->name, original->name);
+  copy->id = original->id;
 }
 
 // Space for copy must be allocated before call
@@ -477,7 +478,7 @@ void make_cnf(alma_node *node) {
 void alma_term_print(alma_term *term) {
   switch (term->type) {
     case VARIABLE:
-      printf("%s", term->variable->name);
+      printf("%s%lld", term->variable->name, term->variable->id);
       break;
     case CONSTANT:
       printf("%s", term->constant->name);

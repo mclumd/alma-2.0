@@ -5,6 +5,9 @@
 #include "alma_kb.h"
 #include "alma_unify.h"
 
+// Initialize global variable (declared in alma_formula header) to count up vairable IDs
+long long variable_id_count = 0;
+
 // ALMA currently:
 // 1. parses an input file into an mpc_ast_t
 // 2. obtains a FOL representation from the AST
