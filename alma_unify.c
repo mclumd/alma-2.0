@@ -5,7 +5,7 @@
 static alma_term* bindings_contain(binding_list *theta, alma_variable *var) {
   if (theta != NULL) {
     for (int i = 0; i < theta->num_bindings; i++) {
-      if (strcmp(theta->list[i].var->name, var->name) == 0)
+      if (theta->list[i].var->id == var->id)
         return theta->list[i].term;
     }
   }
@@ -15,7 +15,7 @@ static alma_term* bindings_contain(binding_list *theta, alma_variable *var) {
 static int occurs_check(binding_list *theta, alma_variable *var, alma_term *x) {
   // If x is a bound variable, occurs-check what it's bound to
   if (x->type == VARIABLE) {
-    if (strcmp(x->variable->name, var->name) == 0)
+    if (x->variable->id == var->id)
       return 1;
     alma_term *res;
     if ((res = bindings_contain(theta, x->variable)) != NULL)
@@ -93,7 +93,7 @@ static int unify_var(alma_term *varterm, alma_term *x, binding_list *theta) {
 int unify(alma_term *x, alma_term *y, binding_list *theta) {
   // Unification succeeds without changing theta if trying to unify variable with itself
   if (x->type == VARIABLE && y->type == VARIABLE
-      && strcmp(x->variable->name, y->variable->name) == 0) {
+      && x->variable->id == y->variable->id) {
     return 1;
   }
   else if (x->type == VARIABLE) {

@@ -53,8 +53,8 @@ void kb_init(alma_node *trees, int num_trees, kb **collection);
 void free_kb(kb *collection);
 void kb_print(kb *collection);
 
-void maps_add(kb *collection, tommy_array *clauses);
-void get_tasks(kb *collection, tommy_array *new_clauses);
+void add_new_clause(kb *collection, clause *curr);
+void tasks_from_clause(kb *collection, clause *c, int process_negatives);
 void resolve(task *t, binding_list *mgu, clause *result);
 void forward_chain(kb *collection);
 

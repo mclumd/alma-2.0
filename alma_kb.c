@@ -106,10 +106,10 @@ static void set_variable_ids(clause *c) {
 
 // Flattens a single alma node and adds its contents to collection
 // Recursively calls when an AND is found to separate conjunctions
-static void flatten_node(alma_node *node, kb *collection) {
+static void flatten_node(alma_node *node, tommy_array *clauses) {
   if (node->type == FOL && node->fol->op == AND) {
-    flatten_node(node->fol->arg1, collection);
-    flatten_node(node->fol->arg2, collection);
+    flatten_node(node->fol->arg1, clauses);
+    flatten_node(node->fol->arg2, clauses);
   }
   else {
     clause *c = malloc(sizeof(clause));
@@ -120,37 +120,36 @@ static void flatten_node(alma_node *node, kb *collection) {
     make_clause(node, c);
     set_variable_ids(c);
 
-    tommy_array_insert(&collection->clauses, c);
+    tommy_array_insert(clauses, c);
   }
 }
-
-// Returns 0 if c is found to be a duplicate of a clause existing in collection; 1 otherwise
-/*static int duplicate_check(kb *collection, clause *c) {
-  // TODO
-  return 1;
-}*/
 
 // Caller will need to free collection
 // trees also must be freed by the caller after this call, as it is not deallocated here
 void kb_init(alma_node *trees, int num_trees, kb **collection) {
-  // Flatten trees into clause list
+  // Allocate and initialize
   *collection = malloc(sizeof(kb));
   kb *collec = *collection;
-  tommy_array_init(&collec->clauses); // TODO: Place in tommy_array to use (new) function for adding from
-  for (int i = 0; i < num_trees; i++) {
-    flatten_node(trees+i, collec);
-  }
-
-  // Generate maps and starting tasks
+  tommy_array_init(&collec->clauses);
   tommy_hashlin_init(&collec->pos_map);
   tommy_list_init(&collec->pos_list);
   tommy_hashlin_init(&collec->neg_map);
   tommy_list_init(&collec->neg_list);
-  maps_add(collec, &collec->clauses);
-
   tommy_array_init(&collec->task_list);
   collec->task_count = 0;
-  get_tasks(collec, &collec->clauses);
+
+  // Flatten trees into clause list
+  tommy_array starting_clauses;
+  tommy_array_init(&starting_clauses);
+  for (int i = 0; i < num_trees; i++)
+    flatten_node(trees+i, &starting_clauses);
+  for (tommy_size_t i = 0; i < tommy_array_size(&starting_clauses); i++)
+    add_new_clause(collec, tommy_array_get(&starting_clauses, i));
+  tommy_array_done(&starting_clauses);
+
+  // Generate starting tasks
+  for (tommy_size_t i = 0; i < tommy_array_size(&collec->clauses); i++)
+    tasks_from_clause(collec, tommy_array_get(&collec->clauses, i), 0);
 }
 
 static void free_map_entry(void *arg) {
@@ -161,17 +160,19 @@ static void free_map_entry(void *arg) {
   free(entry);
 }
 
+static void free_clause(clause *c) {
+  for (int i = 0; i < c->pos_count; i++)
+    free_function(c->pos_lits[i]);
+  for (int i = 0; i < c->neg_count; i++)
+    free_function(c->neg_lits[i]);
+  free(c->pos_lits);
+  free(c->neg_lits);
+  free(c);
+}
+
 void free_kb(kb *collection) {
   for (tommy_size_t i = 0; i < tommy_array_size(&collection->clauses); i++) {
-    clause *curr = tommy_array_get(&collection->clauses, i);
-    for (int j = 0; j < curr->pos_count; j++)
-      free_function(curr->pos_lits[j]);
-    for (int j = 0; j < curr->neg_count; j++)
-      free_function(curr->neg_lits[j]);
-    free(curr->pos_lits);
-    free(curr->neg_lits);
-    free(curr);
-    // Remove from tommy_array?
+    free_clause(tommy_array_get(&collection->clauses, i));
   }
   tommy_array_done(&collection->clauses);
 
@@ -303,21 +304,6 @@ static char* name_with_arity(char *name, int arity) {
   return name_with_arity;
 }
 
-// Adds to hashaps of KB collection based on the tommy_array of clauses provided
-void maps_add(kb *collection, tommy_array *clauses) {
-  for (tommy_size_t i = 0; i < tommy_array_size(clauses); i++) {
-    clause *curr = tommy_array_get(clauses, i);
-    for (int j = 0; j < curr->pos_count; j++) {
-      char *name = name_with_arity(curr->pos_lits[j]->name, curr->pos_lits[j]->term_count);
-      map_add_clause(&collection->pos_map, &collection->pos_list, name, curr);
-    }
-    for (int j = 0; j < curr->neg_count; j++) {
-      char *name = name_with_arity(curr->neg_lits[j]->name, curr->neg_lits[j]->term_count);
-      map_add_clause(&collection->neg_map, &collection->neg_list, name, curr);
-    }
-  }
-}
-
 // Returns alma_function pointer for literal with given name in clause
 // Searching positive or negative literals is decided by pos boolean
 static alma_function* literal_by_name(clause *c, char *name, int pos) {
@@ -338,26 +324,161 @@ static alma_function* literal_by_name(clause *c, char *name, int pos) {
   return NULL;
 }
 
-// Finds new tasks based on matching pos/neg predicate pairs, where one is from the KB and the other from new_clauses
+
+typedef struct var_matching {
+  int count;
+  long long *x;
+  long long *y;
+} var_matching;
+
+// Returns 0 functions are equal while respecting x and y matchings based on matches arg; otherwise returns 1
+// (Further detail in clauses_differ)
+static int functions_differ(alma_function *x, alma_function *y, var_matching *matches) {
+  if (x->term_count == y->term_count && strcmp(x->name, y->name) == 0) {
+    for (int i = 0; i < x->term_count; i++) {
+      if (x->terms[i].type == y->terms[i].type) {
+          switch(x->terms[i].type) {
+            case VARIABLE: {
+              long long xval = x->terms[i].variable->id;
+              long long yval = y->terms[i].variable->id;
+              // Look for matching variable in var_matching's x and y
+              for (int j = 0; j < matches->count; j++) {
+                // If only one of xval and yval matches, return unequal
+                if ((xval == matches->x[j] && yval != matches->y[j]) || (yval == matches->y[j] && xval != matches->x[j]))
+                  return 1;
+              }
+              // No match was found, add a new one to the matching
+              matches->count++;
+              matches->x = realloc(matches->x, sizeof(long long) * matches->count);
+              matches->x[matches->count -1] = xval;
+              matches->y = realloc(matches->y, sizeof(long long) * matches->count);
+              matches->y[matches->count -1] = yval;
+              break;
+            }
+            case CONSTANT: {
+              if (strcmp(x->terms[i].constant->name, y->terms[i].constant->name) != 0)
+                return 1;
+              break;
+            }
+            case FUNCTION: {
+              if (functions_differ(x->terms[i].function, y->terms[i].function, matches))
+                return 1;
+            }
+          }
+      }
+      else
+        return 1;
+    }
+    // All arguments compared as equal; return 0
+    return 0;
+  }
+  return 1;
+}
+
+// Function to call when short-circuiting clauses_differ to properly free var_matching instance
+static int release_matches(var_matching *matches, int retval) {
+  if (matches->x != NULL)
+    free(matches->x);
+  if (matches->y != NULL)
+    free(matches->y);
+  return retval;
+}
+
+// Returns 0 if clauses have equal positive and negative literal sets; otherwise returns 1
+// Equality of variables is that there is a one-to-one correspondence in the sets of variables x and y use,
+// based on each location where a variable maps to another
+// Thus a(X, X) and a(X, Y) are here considered different
+// Naturally, literal ordering has no effect on clauses differing
+// Clause x must have no duplicate literals (ensured by earlier call to TODO on the clause)
+static int clauses_differ(clause *x, clause *y) {
+  if (x->pos_count == y->pos_count && x->neg_count == y->neg_count){
+    var_matching matches;
+    matches.count = 0;
+    matches.x = NULL;
+    matches.y = NULL;
+    for (int i = 0; i < x->pos_count; i++) {
+      alma_function* lit = literal_by_name(y, x->pos_lits[i]->name, 1);
+      if (lit == NULL || functions_differ(x->pos_lits[i], lit, &matches))
+        return release_matches(&matches, 1);
+    }
+    for (int i = 0; i < x->neg_count; i++) {
+      alma_function* lit = literal_by_name(y, x->neg_lits[i]->name, 0);
+      if (lit == NULL || functions_differ(x->neg_lits[i], lit, &matches))
+        return release_matches(&matches, 1);
+    }
+    // All literals compared as equal; return 0
+    return release_matches(&matches, 0);
+  }
+  return 1;
+}
+
+// Returns 0 if c is found to be a duplicate of a clause existing in collection; 1 otherwise
+// See commends preceding clauses_differ function for further detail
+static int duplicate_check(kb *collection, clause *c) {
+  if (c->pos_count > 0) {
+    // If clause has a positive literal, all duplicate candidates must have that same positive literal
+    char *name = name_with_arity(c->pos_lits[0]->name, c->pos_lits[0]->term_count);
+    map_entry *result = tommy_hashlin_search(&collection->pos_map, compare, name, tommy_hash_u64(0, name, strlen(name)));
+    free(name);
+    if (result != NULL) {
+      for (int i = 0; i < result->num_clauses; i++) {
+        if (!clauses_differ(c, result->clauses[i]))
+          return 0;
+      }
+    }
+  }
+  else if (c->neg_count > 0) {
+    // If clause has a negative literal, all duplicate candidates must have that same negative literal
+    char *name = name_with_arity(c->neg_lits[0]->name, c->neg_lits[0]->term_count);
+    map_entry *result = tommy_hashlin_search(&collection->neg_map, compare, name, tommy_hash_u64(0, name, strlen(name)));
+    free(name);
+    if (result != NULL) {
+      for (int i = 0; i < result->num_clauses; i++) {
+        if (!clauses_differ(c, result->clauses[i]))
+          return 0;
+      }
+    }
+  }
+  return 1;
+}
+
+// Given a new clause, if it is not a duplicate is added them to the KB and maps
+void add_new_clause(kb *collection, clause *c) {
+  // TODO: call to duplicate literal filtering (add function and such)
+
+  if (duplicate_check(collection, c)) {
+    // Indexes clause into hashaps of KB collection
+    for (int j = 0; j < c->pos_count; j++) {
+      char *name = name_with_arity(c->pos_lits[j]->name, c->pos_lits[j]->term_count);
+      map_add_clause(&collection->pos_map, &collection->pos_list, name, c);
+    }
+    for (int j = 0; j < c->neg_count; j++) {
+      char *name = name_with_arity(c->neg_lits[j]->name, c->neg_lits[j]->term_count);
+      map_add_clause(&collection->neg_map, &collection->neg_list, name, c);
+    }
+
+    tommy_array_insert(&collection->clauses, c);
+  }
+}
+
+// Finds new tasks based on matching pos/neg predicate pairs, where one is from the KB and the other from clauses
 // Tasks are added into the task_list of collection
-// TODO: Rewrite to avoid duplicates in task list (currently ignored for convenience)
 // TODO: Refactor to remove code duplication
-void get_tasks(kb *collection, tommy_array *new_clauses) {
-  for (tommy_size_t i = 0; i < tommy_array_size(new_clauses); i++) {
-    clause *curr = tommy_array_get(new_clauses, i);
-    // Iterate positive literals of new_clauses and match against negative literals of collection
-    for (int j = 0; j < curr->pos_count; j++) {
-      char *name = name_with_arity(curr->pos_lits[j]->name, curr->pos_lits[j]->term_count);
-      map_entry *result = tommy_hashlin_search(&collection->neg_map, compare, name, tommy_hash_u64(0, name, strlen(name)));
-      // If a negative literal is found to match a positive literal, add tasks
-      // New tasks are from Cartesian product of result's clauses with new_clauses' ith
-      if (result != NULL) {
-        for (int k = 0; k < result->num_clauses; k++) {
-          alma_function *lit = literal_by_name(result->clauses[k], curr->pos_lits[j]->name, 0);
+void tasks_from_clause(kb *collection, clause *c, int process_negatives) {
+  // Iterate positive literals of clauses and match against negative literals of collection
+  for (int j = 0; j < c->pos_count; j++) {
+    char *name = name_with_arity(c->pos_lits[j]->name, c->pos_lits[j]->term_count);
+    map_entry *result = tommy_hashlin_search(&collection->neg_map, compare, name, tommy_hash_u64(0, name, strlen(name)));
+    // If a negative literal is found to match a positive literal, add tasks
+    // New tasks are from Cartesian product of result's clauses with clauses' ith
+    if (result != NULL) {
+      for (int k = 0; k < result->num_clauses; k++) {
+        if (c != result->clauses[k]) {
+          alma_function *lit = literal_by_name(result->clauses[k], c->pos_lits[j]->name, 0);
           if (lit != NULL) {
             task *t = malloc(sizeof(task));
-            t->x = curr;
-            t->pos = curr->pos_lits[j];
+            t->x = c;
+            t->pos = c->pos_lits[j];
             t->y = result->clauses[k];
             t->neg = lit;
             tommy_array_insert(&collection->task_list, t);
@@ -365,32 +486,34 @@ void get_tasks(kb *collection, tommy_array *new_clauses) {
           }
         }
       }
-      free(name);
     }
-    // Iterate negative literals of new_clauses and match against positive literals of collection
-    // Only done if new_clauses differ from KB's clauses (i.e. after first task generation)
-    if (new_clauses != &collection->clauses) {
-      for (int j = 0; j < curr->neg_count; j++) {
-        char *name = name_with_arity(curr->neg_lits[j]->name, curr->neg_lits[j]->term_count);
-        map_entry *result = tommy_hashlin_search(&collection->pos_map, compare, name, tommy_hash_u64(0, name, strlen(name)));
-        // If a positive literal is found to match a negative literal, add tasks
-        // New tasks are from Cartesian product of result's clauses with new_clauses' ith
-        if (result != NULL) {
-          for (int k = 0; k < result->num_clauses; k++) {
-            alma_function *lit = literal_by_name(result->clauses[k], curr->neg_lits[j]->name, 1);
+    free(name);
+  }
+  // Iterate negative literals of clauses and match against positive literals of collection
+  // Only done if clauses differ from KB's clauses (i.e. after first task generation)
+  if (process_negatives) {
+    for (int j = 0; j < c->neg_count; j++) {
+      char *name = name_with_arity(c->neg_lits[j]->name, c->neg_lits[j]->term_count);
+      map_entry *result = tommy_hashlin_search(&collection->pos_map, compare, name, tommy_hash_u64(0, name, strlen(name)));
+      // If a positive literal is found to match a negative literal, add tasks
+      // New tasks are from Cartesian product of result's clauses with clauses' ith
+      if (result != NULL) {
+        for (int k = 0; k < result->num_clauses; k++) {
+          if (c != result->clauses[k]) {
+            alma_function *lit = literal_by_name(result->clauses[k], c->neg_lits[j]->name, 1);
             if (lit != NULL) {
               task *t = malloc(sizeof(task));
               t->x = result->clauses[k];
               t->pos = lit;
-              t->y = curr;
-              t->neg = curr->neg_lits[j];
+              t->y = c;
+              t->neg = c->neg_lits[j];
               tommy_array_insert(&collection->task_list, t);
               collection->task_count++;
             }
           }
         }
-        free(name);
       }
+      free(name);
     }
   }
 }
@@ -505,14 +628,19 @@ void forward_chain(kb *collection) {
       step++;
 
       // Get new tasks before adding new clauses into collection
-      get_tasks(collection, &new_clauses);
-      // Insert new clauses derived
-      maps_add(collection, &new_clauses);
+      // TODO Fix problems with redundant calls to
+      // TODO Fix issues with valgrind memory errors from
+      // TODO Fix issue with not freeing certain duplicates which should be
       for (tommy_size_t i = 0; i < tommy_array_size(&new_clauses); i++) {
-        tommy_array_insert(&collection->clauses, tommy_array_get(&new_clauses, i));
+        clause *c = tommy_array_get(&new_clauses, i);
+        if (duplicate_check(collection, c))
+          tasks_from_clause(collection, c, 1);
       }
+      // Insert new clauses derived
+      for (tommy_size_t i = 0; i < tommy_array_size(&new_clauses); i++)
+        add_new_clause(collection, tommy_array_get(&new_clauses, i));
 
-      kb_print(collection);
+      //kb_print(collection);
     }
     else {
       chain = 0;
