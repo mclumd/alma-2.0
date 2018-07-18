@@ -53,6 +53,7 @@ void kb_init(alma_node *trees, int num_trees, kb **collection);
 void free_kb(kb *collection);
 void kb_print(kb *collection);
 
+int duplicate_check(kb *collection, clause *c);
 void add_new_clause(kb *collection, clause *curr);
 void tasks_from_clause(kb *collection, clause *c, int process_negatives);
 void resolve(task *t, binding_list *mgu, clause *result);

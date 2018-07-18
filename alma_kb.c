@@ -124,6 +124,16 @@ static void flatten_node(alma_node *node, tommy_array *clauses) {
   }
 }
 
+static void free_clause(clause *c) {
+  for (int i = 0; i < c->pos_count; i++)
+    free_function(c->pos_lits[i]);
+  for (int i = 0; i < c->neg_count; i++)
+    free_function(c->neg_lits[i]);
+  free(c->pos_lits);
+  free(c->neg_lits);
+  free(c);
+}
+
 // Caller will need to free collection
 // trees also must be freed by the caller after this call, as it is not deallocated here
 void kb_init(alma_node *trees, int num_trees, kb **collection) {
@@ -143,10 +153,21 @@ void kb_init(alma_node *trees, int num_trees, kb **collection) {
   tommy_array_init(&starting_clauses);
   for (int i = 0; i < num_trees; i++)
     flatten_node(trees+i, &starting_clauses);
-  for (tommy_size_t i = 0; i < tommy_array_size(&starting_clauses); i++)
-    add_new_clause(collec, tommy_array_get(&starting_clauses, i));
+  // Insert into KB if not duplicate
+  tommy_array duplicates;
+  tommy_array_init(&duplicates);
+  for (tommy_size_t i = 0; i < tommy_array_size(&starting_clauses); i++) {
+    clause *c = tommy_array_get(&starting_clauses, i);
+    if (duplicate_check(collec, c))
+      add_new_clause(collec, c);
+    else
+      tommy_array_insert(&duplicates, c);
+  }
   tommy_array_done(&starting_clauses);
-
+  // Free unused duplicate clauses
+  for (tommy_size_t i = 0; i < tommy_array_size(&duplicates); i++)
+    free_clause(tommy_array_get(&duplicates, i));
+  tommy_array_done(&duplicates);
   // Generate starting tasks
   for (tommy_size_t i = 0; i < tommy_array_size(&collec->clauses); i++)
     tasks_from_clause(collec, tommy_array_get(&collec->clauses, i), 0);
@@ -158,16 +179,6 @@ static void free_map_entry(void *arg) {
   free(entry->clauses);
   // Note: clause entries ARE NOT FREED because they alias the clause objects freed in free_kb
   free(entry);
-}
-
-static void free_clause(clause *c) {
-  for (int i = 0; i < c->pos_count; i++)
-    free_function(c->pos_lits[i]);
-  for (int i = 0; i < c->neg_count; i++)
-    free_function(c->neg_lits[i]);
-  free(c->pos_lits);
-  free(c->neg_lits);
-  free(c);
 }
 
 void free_kb(kb *collection) {
@@ -414,7 +425,7 @@ static int clauses_differ(clause *x, clause *y) {
 
 // Returns 0 if c is found to be a duplicate of a clause existing in collection; 1 otherwise
 // See commends preceding clauses_differ function for further detail
-static int duplicate_check(kb *collection, clause *c) {
+int duplicate_check(kb *collection, clause *c) {
   if (c->pos_count > 0) {
     // If clause has a positive literal, all duplicate candidates must have that same positive literal
     char *name = name_with_arity(c->pos_lits[0]->name, c->pos_lits[0]->term_count);
@@ -442,23 +453,21 @@ static int duplicate_check(kb *collection, clause *c) {
   return 1;
 }
 
-// Given a new clause, if it is not a duplicate is added them to the KB and maps
+// Given a new clause, add to the KB and maps
 void add_new_clause(kb *collection, clause *c) {
   // TODO: call to duplicate literal filtering (add function and such)
 
-  if (duplicate_check(collection, c)) {
-    // Indexes clause into hashaps of KB collection
-    for (int j = 0; j < c->pos_count; j++) {
-      char *name = name_with_arity(c->pos_lits[j]->name, c->pos_lits[j]->term_count);
-      map_add_clause(&collection->pos_map, &collection->pos_list, name, c);
-    }
-    for (int j = 0; j < c->neg_count; j++) {
-      char *name = name_with_arity(c->neg_lits[j]->name, c->neg_lits[j]->term_count);
-      map_add_clause(&collection->neg_map, &collection->neg_list, name, c);
-    }
-
-    tommy_array_insert(&collection->clauses, c);
+  // Indexes clause into hashaps of KB collection
+  for (int j = 0; j < c->pos_count; j++) {
+    char *name = name_with_arity(c->pos_lits[j]->name, c->pos_lits[j]->term_count);
+    map_add_clause(&collection->pos_map, &collection->pos_list, name, c);
   }
+  for (int j = 0; j < c->neg_count; j++) {
+    char *name = name_with_arity(c->neg_lits[j]->name, c->neg_lits[j]->term_count);
+    map_add_clause(&collection->neg_map, &collection->neg_list, name, c);
+  }
+
+  tommy_array_insert(&collection->clauses, c);
 }
 
 // Finds new tasks based on matching pos/neg predicate pairs, where one is from the KB and the other from clauses
@@ -598,27 +607,28 @@ void forward_chain(kb *collection) {
 
     for (tommy_size_t i = 0; i < tommy_array_size(&collection->task_list); i++) {
       task *current_task = tommy_array_get(&collection->task_list, i);
+      if (current_task != NULL) {
+        // Given a task, attempt unification
+        binding_list *theta = malloc(sizeof(binding_list));
+        if (pred_unify(current_task->pos, current_task->neg, theta)) {
+          // If successful, create clause for result of resolution and add to new_clauses
+          clause *res_result = malloc(sizeof(clause));
+          resolve(current_task, theta, res_result);
 
-      // Given a task, attempt unification
-      binding_list *theta = malloc(sizeof(binding_list));
-      if (pred_unify(current_task->pos, current_task->neg, theta)) {
-        // If successful, create clause for result of resolution and add to new_clauses
-        clause *res_result = malloc(sizeof(clause));
-        resolve(current_task, theta, res_result);
+          // An empty resolution result is not a valid clause to add to KB
+          if (res_result->pos_count > 0 || res_result->neg_count > 0) {
+            tommy_array_insert(&new_clauses, res_result);
+          }
+          else {
+            // TODO: Contradiction detection when you have empty resolution result!
+            free(res_result);
+          }
+        }
+        cleanup_bindings(theta);
 
-        // An empty resolution result is not a valid clause to add to KB
-        if (res_result->pos_count > 0 || res_result->neg_count > 0) {
-          tommy_array_insert(&new_clauses, res_result);
-        }
-        else {
-          // TODO: Contradiction detection when you have empty resolution result!
-          free(res_result);
-        }
+        collection->task_count--;
+        free(current_task);
       }
-      cleanup_bindings(theta);
-
-      collection->task_count--;
-      free(current_task);
     }
     tommy_array_done(&collection->task_list);
     tommy_array_init(&collection->task_list);
@@ -628,17 +638,46 @@ void forward_chain(kb *collection) {
       step++;
 
       // Get new tasks before adding new clauses into collection
-      // TODO Fix problems with redundant calls to
-      // TODO Fix issues with valgrind memory errors from
-      // TODO Fix issue with not freeing certain duplicates which should be
       for (tommy_size_t i = 0; i < tommy_array_size(&new_clauses); i++) {
         clause *c = tommy_array_get(&new_clauses, i);
         if (duplicate_check(collection, c))
           tasks_from_clause(collection, c, 1);
       }
-      // Insert new clauses derived
-      for (tommy_size_t i = 0; i < tommy_array_size(&new_clauses); i++)
-        add_new_clause(collection, tommy_array_get(&new_clauses, i));
+
+      tommy_array duplicates;
+      tommy_array_init(&duplicates);
+      // Insert new clauses derived that are not duplicates
+      // TODO: Make more efficient, as currently checks for second time duplicate status of some known duplicates
+      for (tommy_size_t i = 0; i < tommy_array_size(&new_clauses); i++) {
+        clause *c = tommy_array_get(&new_clauses, i);
+        if (duplicate_check(collection, c)) {
+          add_new_clause(collection, c);
+        }
+        else {
+          tommy_array_insert(&duplicates, c);
+        }
+      }
+
+      // Replace duplicate entries in task list with null
+      for (tommy_size_t i = 0; i < tommy_array_size(&collection->task_list); i++) {
+        task *t = tommy_array_get(&collection->task_list, i);
+        // TODO: Switch to a more efficient lookup in duplicates
+        for (tommy_size_t j = 0; j < tommy_array_size(&duplicates); j++) {
+          if (tommy_array_get(&duplicates, j) == t->x || tommy_array_get(&duplicates, j) == t->y) {
+            free(t);
+            tommy_array_set(&collection->task_list, i, NULL);
+            break;
+          }
+        }
+      }
+
+      printf("New tasks (overestimate): %lu\n", tommy_array_size(&collection->task_list));
+
+      // Free duplicates
+      for (tommy_size_t i = 0; i < tommy_array_size(&duplicates); i++) {
+        free_clause(tommy_array_get(&duplicates, i));
+      }
+      tommy_array_done(&duplicates);
 
       //kb_print(collection);
     }
