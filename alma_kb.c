@@ -671,15 +671,13 @@ void forward_chain(kb *collection) {
         }
       }
 
-      printf("New tasks (overestimate): %lu\n", tommy_array_size(&collection->task_list));
-
       // Free duplicates
       for (tommy_size_t i = 0; i < tommy_array_size(&duplicates); i++) {
         free_clause(tommy_array_get(&duplicates, i));
       }
       tommy_array_done(&duplicates);
 
-      //kb_print(collection);
+      kb_print(collection);
     }
     else {
       chain = 0;
