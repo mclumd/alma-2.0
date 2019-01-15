@@ -78,7 +78,7 @@ static int unify_var(alma_term *varterm, alma_term *x, binding_list *theta) {
   else {
     // Append new binding of var/term
     theta->num_bindings++;
-    theta->list = realloc(theta->list, sizeof(binding) * theta->num_bindings);
+    theta->list = realloc(theta->list, sizeof(*theta->list) * theta->num_bindings);
     theta->list[theta->num_bindings-1].var = malloc(sizeof(alma_variable));
     copy_alma_var(var, theta->list[theta->num_bindings-1].var);
     theta->list[theta->num_bindings-1].term = malloc(sizeof(alma_term));

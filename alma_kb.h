@@ -10,13 +10,24 @@
 
 // TODO: Further consider style of using **, esp. for pos_lits/neg_lits in clause
 
+struct parent_pair;
+
 typedef struct clause {
   int pos_count;
   int neg_count;
   alma_function **pos_lits;
   alma_function **neg_lits;
+  int parent_pair_count;
+  int children_count;
+  struct parent_pair *parents; // Use more efficient structure for as needed
+  struct clause **children; // Use more efficient structure for as needed
   if_tag tag;
 } clause;
+
+typedef struct parent_pair {
+  clause *x;
+  clause *y;
+} parent_pair;
 
 // Simple definition for now, likely to expand significantly in future
 typedef struct kb {
@@ -53,7 +64,7 @@ void kb_init(alma_node *trees, int num_trees, kb **collection);
 void free_kb(kb *collection);
 void kb_print(kb *collection);
 
-int duplicate_check(kb *collection, clause *c);
+clause* duplicate_check(kb *collection, clause *c);
 void add_new_clause(kb *collection, clause *curr);
 void tasks_from_clause(kb *collection, clause *c, int process_negatives);
 void resolve(task *t, binding_list *mgu, clause *result);

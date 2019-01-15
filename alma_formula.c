@@ -10,7 +10,7 @@
 // Constructs ALMA FOL operator (i.e. AND/OR/NOT/IF) from arguments
 void alma_fol_init(alma_node *node, alma_operator op, alma_node *arg1, alma_node *arg2, if_tag tag) {
   node->type = FOL;
-  node->fol = malloc(sizeof(alma_fol));
+  node->fol = malloc(sizeof(*node->fol));
   node->fol->op = op;
   node->fol->arg1 = arg1;
   node->fol->arg2 = arg2;
@@ -22,20 +22,20 @@ void alma_fol_init(alma_node *node, alma_operator op, alma_node *arg1, alma_node
 void alma_term_init(alma_term *term, mpc_ast_t *ast) {
   if (strstr(ast->tag, "variable") != NULL) {
     term->type = VARIABLE;
-    term->variable = malloc(sizeof(alma_variable));
+    term->variable = malloc(sizeof(*term->variable));
     term->variable->name = malloc(strlen(ast->contents)+1);
     term->variable->id = 0;
     strcpy(term->variable->name, ast->contents);
   }
   else if (strstr(ast->tag, "constant") != NULL) {
     term->type = CONSTANT;
-    term->constant = malloc(sizeof(alma_constant));
+    term->constant = malloc(sizeof(*term->constant));
     term->constant->name = malloc(strlen(ast->contents)+1);
     strcpy(term->constant->name, ast->contents);
   }
   else {
     term->type = FUNCTION;
-    term->function = malloc(sizeof(alma_function));
+    term->function = malloc(sizeof(*term->function));
     alma_function_init(term->function, ast);
   }
 }
@@ -61,13 +61,13 @@ void alma_function_init(alma_function *func, mpc_ast_t *ast) {
     // Case for single term in listofterms
     if (termlist->children_num == 0 || strstr(termlist->tag, "|term") != NULL) {
       func->term_count = 1;
-      func->terms = malloc(sizeof(alma_term));
+      func->terms = malloc(sizeof(*func->terms));
       alma_term_init(func->terms, termlist);
     }
     // Case for listofterms with multiple terms
     else {
       func->term_count = (termlist->children_num+1)/2;
-      func->terms = malloc(sizeof(alma_term) * func->term_count);
+      func->terms = malloc(sizeof(*func->terms) * func->term_count);
       for (int i = 0; i < func->term_count; i++) {
         alma_term_init(func->terms+i, termlist->children[i*2]);
       }
@@ -80,7 +80,7 @@ void alma_function_init(alma_function *func, mpc_ast_t *ast) {
 // First argument must be allocated by caller
 void alma_predicate_init(alma_node *node, mpc_ast_t *ast) {
   node->type = PREDICATE;
-  node->predicate = malloc(sizeof(alma_function));
+  node->predicate = malloc(sizeof(*node->predicate));
   alma_function_init(node->predicate, ast);
 }
 
@@ -115,18 +115,18 @@ static void alma_tree_init(alma_node *alma_tree, mpc_ast_t *ast) {
     // Otherwise, formula derives to FOL contents
     else {
       alma_tree->type = FOL;
-      alma_tree->fol = malloc(sizeof(alma_fol));
+      alma_tree->fol = malloc(sizeof(*alma_tree->fol));
 
       alma_tree->fol->op = op_from_contents(ast->children[0]->contents);
       alma_tree->fol->tag = NONE;
 
       // Set arg1 based on children
-      alma_tree->fol->arg1 = malloc(sizeof(alma_node));
+      alma_tree->fol->arg1 = malloc(sizeof(*alma_tree->fol->arg1));
       alma_tree_init(alma_tree->fol->arg1, ast->children[1]);
 
       if (strstr(ast->tag, "fformula") != NULL) {
         // Set arg2 for fformula conclusion
-        alma_tree->fol->arg2 = malloc(sizeof(alma_node));
+        alma_tree->fol->arg2 = malloc(sizeof(*alma_tree->fol->arg2));
         alma_tree_init(alma_tree->fol->arg2, ast->children[4]);
         alma_tree->fol->tag = FIF;
       }
@@ -136,7 +136,7 @@ static void alma_tree_init(alma_node *alma_tree, mpc_ast_t *ast) {
           case OR:
           case AND:
           case IF:
-            alma_tree->fol->arg2 = malloc(sizeof(alma_node));
+            alma_tree->fol->arg2 = malloc(sizeof(*alma_tree->fol->arg2));
             alma_tree_init(alma_tree->fol->arg2, ast->children[3]);
             break;
           case NOT:
@@ -162,7 +162,7 @@ void generate_alma_trees(mpc_ast_t *ast, alma_node **alma_trees, int *size) {
     if (strstr(ast->children[i]->tag, "almaformula") != NULL)
       (*size)++;
   }
-  *alma_trees = malloc(sizeof(alma_node) * *size);
+  *alma_trees = malloc(sizeof(**alma_trees) * *size);
 
   int index = 0;
   for (int i = 0; i < ast->children_num; i++) {
@@ -239,18 +239,18 @@ void copy_alma_term(alma_term *original, alma_term *copy) {
   copy->type = original->type;
   switch (original->type) {
     case VARIABLE: {
-      copy->variable = malloc(sizeof(alma_variable));
+      copy->variable = malloc(sizeof(*copy->variable));
       copy_alma_var(original->variable, copy->variable);
       break;
     }
     case CONSTANT: {
-      copy->constant = malloc(sizeof(alma_constant));
+      copy->constant = malloc(sizeof(*copy->constant));
       copy->constant->name = malloc(strlen(original->constant->name)+1);
       strcpy(copy->variable->name, original->constant->name);
       break;
     }
     case FUNCTION: {
-      copy->function = malloc(sizeof(alma_function));
+      copy->function = malloc(sizeof(*copy->function));
       copy_alma_function(original->function, copy->function);
       break;
     }
@@ -266,7 +266,7 @@ void copy_alma_function(alma_function *original, alma_function *copy) {
     copy->terms = NULL;
   }
   else {
-    copy->terms = malloc(sizeof(alma_term) * copy->term_count);
+    copy->terms = malloc(sizeof(*copy->terms) * copy->term_count);
     for (int i = 0; i < copy->term_count; i++) {
       copy_alma_term(original->terms+i, copy->terms+i);
     }
@@ -285,11 +285,11 @@ void copy_alma_tree(alma_node *original, alma_node *copy) {
       copy->fol = NULL;
     }
     else {
-      copy->fol = malloc(sizeof(alma_fol));
+      copy->fol = malloc(sizeof(*copy->fol));
       copy->fol->op = original->fol->op;
 
       if (original->fol->arg1 != NULL) {
-        copy->fol->arg1 = malloc(sizeof(alma_node));
+        copy->fol->arg1 = malloc(sizeof(*copy->fol->arg1));
         copy_alma_tree(original->fol->arg1, copy->fol->arg1);
       }
       else {
@@ -297,7 +297,7 @@ void copy_alma_tree(alma_node *original, alma_node *copy) {
       }
 
       if (original->fol->arg2 != NULL) {
-        copy->fol->arg2 = malloc(sizeof(alma_node));
+        copy->fol->arg2 = malloc(sizeof(*copy->fol->arg2));
         copy_alma_tree(original->fol->arg2, copy->fol->arg2);
       }
       else {
@@ -313,7 +313,7 @@ void copy_alma_tree(alma_node *original, alma_node *copy) {
       copy->predicate = NULL;
     }
     else {
-      copy->predicate = malloc(sizeof(alma_function));
+      copy->predicate = malloc(sizeof(*copy->predicate));
       copy_alma_function(original->predicate, copy->predicate);
     }
   }
@@ -323,7 +323,7 @@ void copy_alma_tree(alma_node *original, alma_node *copy) {
 void eliminate_conditionals(alma_node *node) {
   if (node != NULL && node->type == FOL) {
     if (node->fol->op == IF) {
-      alma_node *new_negation = malloc(sizeof(alma_node));
+      alma_node *new_negation = malloc(sizeof(*new_negation));
       alma_fol_init(new_negation, NOT, node->fol->arg1, NULL, NONE);
 
       node->fol->op = OR;
@@ -349,9 +349,9 @@ void negation_inwards(alma_node *node) {
         switch (notarg->fol->op) {
           case AND: {
             // New nodes for result of De Morgan's
-            alma_node *negated_arg1 = malloc(sizeof(alma_node));
+            alma_node *negated_arg1 = malloc(sizeof(*negated_arg1));
             alma_fol_init(negated_arg1, NOT, notarg->fol->arg1, NULL, NONE);
-            alma_node *negated_arg2 = malloc(sizeof(alma_node));
+            alma_node *negated_arg2 = malloc(sizeof(*negated_arg2));
             alma_fol_init(negated_arg2, NOT, notarg->fol->arg2, NULL, NONE);
             // Free unused AND
             notarg->fol->arg1 = NULL;
@@ -365,9 +365,9 @@ void negation_inwards(alma_node *node) {
           }
           case OR: {
             // New nodes for result of De Morgan's
-            alma_node *negated_arg1 = malloc(sizeof(alma_node));
+            alma_node *negated_arg1 = malloc(sizeof(*negated_arg1));
             alma_fol_init(negated_arg1, NOT, notarg->fol->arg1, NULL, NONE);
-            alma_node *negated_arg2 = malloc(sizeof(alma_node));
+            alma_node *negated_arg2 = malloc(sizeof(*negated_arg2));
             alma_fol_init(negated_arg2, NOT, notarg->fol->arg2, NULL, NONE);
             // Free unused AND
             notarg->fol->arg1 = NULL;
@@ -418,13 +418,13 @@ void dist_or_over_and(alma_node *node) {
         // WLOG, (P /\ Q) \/ R
 
         // Create (P \/ R)
-        alma_node *arg1_or = malloc(sizeof(alma_node));
+        alma_node *arg1_or = malloc(sizeof(*arg1_or));
         alma_fol_init(arg1_or, OR, node->fol->arg1->fol->arg1, node->fol->arg2, NONE);
 
         // Create (Q \/ R)
-        alma_node *arg2_copy = malloc(sizeof(alma_node));
+        alma_node *arg2_copy = malloc(sizeof(*arg2_copy));
         copy_alma_tree(node->fol->arg2, arg2_copy);
-        alma_node *arg2_or = malloc(sizeof(alma_node));
+        alma_node *arg2_or = malloc(sizeof(*arg2_or));
         alma_fol_init(arg2_or, OR, node->fol->arg1->fol->arg2, arg2_copy, NONE);
 
         // Free old conjunction
@@ -444,13 +444,13 @@ void dist_or_over_and(alma_node *node) {
         // WLOG, P \/ (Q /\ R)
 
         // Create (P \/ Q)
-        alma_node *arg1_or = malloc(sizeof(alma_node));
+        alma_node *arg1_or = malloc(sizeof(*arg1_or));
         alma_fol_init(arg1_or, OR, node->fol->arg1, node->fol->arg2->fol->arg1, NONE);
 
         // Create (P \/ R)
-        alma_node *arg1_copy = malloc(sizeof(alma_node));
+        alma_node *arg1_copy = malloc(sizeof(*arg1_copy));
         copy_alma_tree(node->fol->arg1, arg1_copy);
-        alma_node *arg2_or = malloc(sizeof(alma_node));
+        alma_node *arg2_or = malloc(sizeof(*arg2_or));
         alma_fol_init(arg2_or, OR, arg1_copy, node->fol->arg2->fol->arg2, NONE);
 
         // Free old conjunction

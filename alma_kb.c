@@ -10,7 +10,7 @@ static void make_clause(alma_node *node, clause *c) {
       // Neg lit case for NOT
       if (node->fol->op == NOT) {
         c->neg_count++;
-        c->neg_lits = realloc(c->neg_lits, sizeof(alma_function*) * c->neg_count);
+        c->neg_lits = realloc(c->neg_lits, sizeof(*c->neg_lits) * c->neg_count);
         c->neg_lits[c->neg_count-1] = node->fol->arg1->predicate;
         node->fol->arg1->predicate = NULL;
       }
@@ -25,7 +25,7 @@ static void make_clause(alma_node *node, clause *c) {
     // Otherwise, only pos lit left
     else {
       c->pos_count++;
-      c->pos_lits = realloc(c->pos_lits, sizeof(alma_function*) * c->pos_count);
+      c->pos_lits = realloc(c->pos_lits, sizeof(*c->pos_lits) * c->pos_count);
       c->pos_lits[c->pos_count-1] = node->predicate;
       node->predicate = NULL;
     }
@@ -112,10 +112,12 @@ static void flatten_node(alma_node *node, tommy_array *clauses) {
     flatten_node(node->fol->arg2, clauses);
   }
   else {
-    clause *c = malloc(sizeof(clause));
+    clause *c = malloc(sizeof(*c));
     c->pos_count = c->neg_count = 0;
-    c->pos_lits = NULL;
-    c->neg_lits = NULL;
+    c->pos_lits = c->neg_lits = NULL;
+    c->parent_pair_count = c->children_count = 0;
+    c->parents = NULL;
+    c->children = NULL;
     c->tag = NONE;
     make_clause(node, c);
     set_variable_ids(c);
@@ -131,6 +133,8 @@ static void free_clause(clause *c) {
     free_function(c->neg_lits[i]);
   free(c->pos_lits);
   free(c->neg_lits);
+  free(c->parents);
+  free(c->children);
   free(c);
 }
 
@@ -138,7 +142,7 @@ static void free_clause(clause *c) {
 // trees also must be freed by the caller after this call, as it is not deallocated here
 void kb_init(alma_node *trees, int num_trees, kb **collection) {
   // Allocate and initialize
-  *collection = malloc(sizeof(kb));
+  *collection = malloc(sizeof(**collection));
   kb *collec = *collection;
   tommy_array_init(&collec->clauses);
   tommy_hashlin_init(&collec->pos_map);
@@ -158,7 +162,7 @@ void kb_init(alma_node *trees, int num_trees, kb **collection) {
   tommy_array_init(&duplicates);
   for (tommy_size_t i = 0; i < tommy_array_size(&starting_clauses); i++) {
     clause *c = tommy_array_get(&starting_clauses, i);
-    if (duplicate_check(collec, c))
+    if (duplicate_check(collec, c) == NULL)
       add_new_clause(collec, c);
     else
       tommy_array_insert(&duplicates, c);
@@ -286,15 +290,15 @@ static void map_add_clause(tommy_hashlin *map, tommy_list *list, char *name, cla
   map_entry *result = tommy_hashlin_search(map, compare, name, tommy_hash_u64(0, name, strlen(name)));
   if (result != NULL) {
     result->num_clauses++;
-    result->clauses = realloc(result->clauses, sizeof(clause*) * result->num_clauses);
+    result->clauses = realloc(result->clauses, sizeof(*result->clauses) * result->num_clauses);
     result->clauses[result->num_clauses-1] = c; // Aliases with pointer assignment
     free(name); // Name not added into hashmap must be freed (frees alloc in name_with_arity)
   }
   else {
-    map_entry *entry = malloc(sizeof(map_entry));
+    map_entry *entry = malloc(sizeof(*entry));
     entry->predname = name;
     entry->num_clauses = 1;
-    entry->clauses = malloc(sizeof(clause*));
+    entry->clauses = malloc(sizeof(*entry->clauses));
     entry->clauses[0] = c; // Aliases with pointer assignment
     tommy_hashlin_insert(map, &entry->hash_node, entry, tommy_hash_u64(0, entry->predname, strlen(entry->predname)));
     tommy_list_insert_tail(list, &entry->list_node, entry);
@@ -315,7 +319,7 @@ static char* name_with_arity(char *name, int arity) {
   return name_with_arity;
 }
 
-// Returns alma_function pointer for literal with given name in clause
+// Returns first alma_function pointer for literal with given name in clause
 // Searching positive or negative literals is decided by pos boolean
 static alma_function* literal_by_name(clause *c, char *name, int pos) {
   if (c != NULL) {
@@ -342,7 +346,7 @@ typedef struct var_matching {
   long long *y;
 } var_matching;
 
-// Returns 0 functions are equal while respecting x and y matchings based on matches arg; otherwise returns 1
+// Returns 0 if functions are equal while respecting x and y matchings based on matches arg; otherwise returns 1
 // (Further detail in clauses_differ)
 static int functions_differ(alma_function *x, alma_function *y, var_matching *matches) {
   if (x->term_count == y->term_count && strcmp(x->name, y->name) == 0) {
@@ -360,9 +364,9 @@ static int functions_differ(alma_function *x, alma_function *y, var_matching *ma
               }
               // No match was found, add a new one to the matching
               matches->count++;
-              matches->x = realloc(matches->x, sizeof(long long) * matches->count);
+              matches->x = realloc(matches->x, sizeof(*matches->x) * matches->count);
               matches->x[matches->count -1] = xval;
-              matches->y = realloc(matches->y, sizeof(long long) * matches->count);
+              matches->y = realloc(matches->y, sizeof(*matches->y) * matches->count);
               matches->y[matches->count -1] = yval;
               break;
             }
@@ -400,7 +404,7 @@ static int release_matches(var_matching *matches, int retval) {
 // based on each location where a variable maps to another
 // Thus a(X, X) and a(X, Y) are here considered different
 // Naturally, literal ordering has no effect on clauses differing
-// Clause x must have no duplicate literals (ensured by earlier call to TODO on the clause)
+// Clauses x and y must have no duplicate literals (ensured by earlier call to TODO on the clauses)
 static int clauses_differ(clause *x, clause *y) {
   if (x->pos_count == y->pos_count && x->neg_count == y->neg_count){
     var_matching matches;
@@ -408,11 +412,13 @@ static int clauses_differ(clause *x, clause *y) {
     matches.x = NULL;
     matches.y = NULL;
     for (int i = 0; i < x->pos_count; i++) {
+      // TODO: account for case in which may have several literals with name
       alma_function* lit = literal_by_name(y, x->pos_lits[i]->name, 1);
       if (lit == NULL || functions_differ(x->pos_lits[i], lit, &matches))
         return release_matches(&matches, 1);
     }
     for (int i = 0; i < x->neg_count; i++) {
+      // TODO: account for case in which may have several literals with name
       alma_function* lit = literal_by_name(y, x->neg_lits[i]->name, 0);
       if (lit == NULL || functions_differ(x->neg_lits[i], lit, &matches))
         return release_matches(&matches, 1);
@@ -423,34 +429,36 @@ static int clauses_differ(clause *x, clause *y) {
   return 1;
 }
 
-// Returns 0 if c is found to be a duplicate of a clause existing in collection; 1 otherwise
-// See commends preceding clauses_differ function for further detail
-int duplicate_check(kb *collection, clause *c) {
+// If c is found to be a clause duplicate, returns a pointer to that clause; null otherwise
+// See comments preceding clauses_differ function for further detail
+clause* duplicate_check(kb *collection, clause *c) {
   if (c->pos_count > 0) {
     // If clause has a positive literal, all duplicate candidates must have that same positive literal
+    // Arbitrarily pick first positive literal as one to use; may be able to do smarter literal choice later
     char *name = name_with_arity(c->pos_lits[0]->name, c->pos_lits[0]->term_count);
     map_entry *result = tommy_hashlin_search(&collection->pos_map, compare, name, tommy_hash_u64(0, name, strlen(name)));
     free(name);
     if (result != NULL) {
       for (int i = 0; i < result->num_clauses; i++) {
         if (!clauses_differ(c, result->clauses[i]))
-          return 0;
+          return result->clauses[i];
       }
     }
   }
   else if (c->neg_count > 0) {
     // If clause has a negative literal, all duplicate candidates must have that same negative literal
+    // Arbitrarily pick first negative literal as one to use; may be able to do smarter literal choice later
     char *name = name_with_arity(c->neg_lits[0]->name, c->neg_lits[0]->term_count);
     map_entry *result = tommy_hashlin_search(&collection->neg_map, compare, name, tommy_hash_u64(0, name, strlen(name)));
     free(name);
     if (result != NULL) {
       for (int i = 0; i < result->num_clauses; i++) {
         if (!clauses_differ(c, result->clauses[i]))
-          return 0;
+          return result->clauses[i];
       }
     }
   }
-  return 1;
+  return NULL;
 }
 
 // Given a new clause, add to the KB and maps
@@ -485,7 +493,7 @@ void tasks_from_clause(kb *collection, clause *c, int process_negatives) {
         if (c != result->clauses[k]) {
           alma_function *lit = literal_by_name(result->clauses[k], c->pos_lits[j]->name, 0);
           if (lit != NULL) {
-            task *t = malloc(sizeof(task));
+            task *t = malloc(sizeof(*t));
             t->x = c;
             t->pos = c->pos_lits[j];
             t->y = result->clauses[k];
@@ -511,7 +519,7 @@ void tasks_from_clause(kb *collection, clause *c, int process_negatives) {
           if (c != result->clauses[k]) {
             alma_function *lit = literal_by_name(result->clauses[k], c->neg_lits[j]->name, 1);
             if (lit != NULL) {
-              task *t = malloc(sizeof(task));
+              task *t = malloc(sizeof(*t));
               t->x = result->clauses[k];
               t->pos = lit;
               t->y = c;
@@ -534,12 +542,12 @@ void resolve(task *t, binding_list *mgu, clause *result) {
   //int max_neg = t->x->neg_count + t->y->neg_count - 1;
   result->pos_count = 0;
   if (t->x->pos_count + t->y->pos_count - 1 > 0) {
-    result->pos_lits = malloc(sizeof(alma_function*) * (t->x->pos_count + t->y->pos_count - 1));
+    result->pos_lits = malloc(sizeof(*result->pos_lits) * (t->x->pos_count + t->y->pos_count - 1));
 
     // Copy positive literal from t->x and t->y
     for (int i = 0; i < t->x->pos_count; i++) {
       if (t->x->pos_lits[i] != t->pos) {
-        alma_function *litcopy = malloc(sizeof(alma_function));
+        alma_function *litcopy = malloc(sizeof(*litcopy));
         copy_alma_function(t->x->pos_lits[i], litcopy);
         for (int j = 0; j < litcopy->term_count; j++)
           subst(mgu, litcopy->terms+j);
@@ -550,7 +558,7 @@ void resolve(task *t, binding_list *mgu, clause *result) {
       }
     }
     for (int i = 0; i < t->y->pos_count; i++) {
-      alma_function *litcopy = malloc(sizeof(alma_function));
+      alma_function *litcopy = malloc(sizeof(*litcopy));
       copy_alma_function(t->y->pos_lits[i], litcopy);
       for (int j = 0; j < litcopy->term_count; j++)
         subst(mgu, litcopy->terms+j);
@@ -566,12 +574,12 @@ void resolve(task *t, binding_list *mgu, clause *result) {
 
   result->neg_count = 0;
   if (t->x->neg_count + t->y->neg_count - 1 > 0) {
-    result->neg_lits = malloc(sizeof(alma_function*) * (t->x->neg_count + t->y->neg_count - 1));
+    result->neg_lits = malloc(sizeof(*result->neg_lits) * (t->x->neg_count + t->y->neg_count - 1));
 
     // Copy negative literal from t->x and t->y
     for (int i = 0; i < t->y->neg_count; i++) {
       if (t->y->neg_lits[i] != t->neg) {
-        alma_function *litcopy = malloc(sizeof(alma_function));
+        alma_function *litcopy = malloc(sizeof(*litcopy));
         copy_alma_function(t->y->neg_lits[i], litcopy);
         for (int j = 0; j < litcopy->term_count; j++)
           subst(mgu, litcopy->terms+j);
@@ -582,7 +590,7 @@ void resolve(task *t, binding_list *mgu, clause *result) {
       }
     }
     for (int i = 0; i < t->x->neg_count; i++) {
-      alma_function *litcopy = malloc(sizeof(alma_function));
+      alma_function *litcopy = malloc(sizeof(*litcopy));
       copy_alma_function(t->x->neg_lits[i], litcopy);
       for (int j = 0; j < litcopy->term_count; j++)
         subst(mgu, litcopy->terms+j);
@@ -609,14 +617,30 @@ void forward_chain(kb *collection) {
       task *current_task = tommy_array_get(&collection->task_list, i);
       if (current_task != NULL) {
         // Given a task, attempt unification
-        binding_list *theta = malloc(sizeof(binding_list));
+        binding_list *theta = malloc(sizeof(*theta));
         if (pred_unify(current_task->pos, current_task->neg, theta)) {
           // If successful, create clause for result of resolution and add to new_clauses
-          clause *res_result = malloc(sizeof(clause));
+          clause *res_result = malloc(sizeof(*res_result));
           resolve(current_task, theta, res_result);
 
           // An empty resolution result is not a valid clause to add to KB
           if (res_result->pos_count > 0 || res_result->neg_count > 0) {
+            // Initialize parents of result + update children of its parents
+            res_result->parent_pair_count = 1;
+            res_result->parents = malloc(sizeof(*res_result->parents));
+            res_result->parents->x = current_task->x;
+            res_result->parents->y = current_task->y;
+            res_result->children_count = 0;
+            res_result->children = NULL;
+            clause *parent1 = current_task->x;
+            parent1->children_count++;
+            parent1->children = realloc(parent1->children, sizeof(*parent1->children) * parent1->children_count);
+            parent1->children[parent1->children_count-1] = res_result;
+            clause *parent2 = current_task->y;
+            parent2->children_count++;
+            parent2->children = realloc(parent2->children, sizeof(*parent2->children) * parent2->children_count);
+            parent2->children[parent2->children_count-1] = res_result;
+
             tommy_array_insert(&new_clauses, res_result);
           }
           else {
@@ -640,7 +664,7 @@ void forward_chain(kb *collection) {
       // Get new tasks before adding new clauses into collection
       for (tommy_size_t i = 0; i < tommy_array_size(&new_clauses); i++) {
         clause *c = tommy_array_get(&new_clauses, i);
-        if (duplicate_check(collection, c))
+        if (duplicate_check(collection, c) == NULL)
           tasks_from_clause(collection, c, 1);
       }
 
@@ -650,11 +674,16 @@ void forward_chain(kb *collection) {
       // TODO: Make more efficient, as currently checks for second time duplicate status of some known duplicates
       for (tommy_size_t i = 0; i < tommy_array_size(&new_clauses); i++) {
         clause *c = tommy_array_get(&new_clauses, i);
-        if (duplicate_check(collection, c)) {
+        clause *dupe = duplicate_check(collection, c);
+        if (dupe == NULL) {
           add_new_clause(collection, c);
         }
         else {
           tommy_array_insert(&duplicates, c);
+          // Copy parents of c to dupe
+          dupe->parents = realloc(dupe->parents, sizeof(*dupe->parents) * (dupe->parent_pair_count + c->parent_pair_count));
+          memcpy(dupe->parents + dupe->parent_pair_count, c->parents, sizeof(*c->parents) * c->parent_pair_count);
+          dupe->parent_pair_count += c->parent_pair_count;
         }
       }
 
