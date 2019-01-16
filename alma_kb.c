@@ -207,7 +207,7 @@ void free_kb(kb *collection) {
 }
 
 
-static void clause_print(clause *c) {
+static void clause_print(clause *c, int print_relatives) {
   if (c->pos_count == 0) {
     for (int i = 0; i < c->neg_count; i++) {
       printf("not(");
@@ -238,7 +238,25 @@ static void clause_print(clause *c) {
         printf(" \\/ ");
     }
   }
-  printf("\n");
+  if (print_relatives) {
+    printf(" (parents: ");
+    for (int i = 0; i < c->parent_pair_count; i++) {
+      printf("[");
+      clause_print(c->parents[i].x, 0);
+      printf("; ");
+      clause_print(c->parents[i].y, 0);
+      printf("]");
+      if (i < c->parent_pair_count-1)
+        printf(", ");
+    }
+    printf(", children: ");
+    for (int i = 0; i < c->children_count; i++) {
+      clause_print(c->children[i], 0);
+      if (i < c->children_count-1)
+        printf(", ");
+    }
+    printf(")");
+  }
 }
 
 /*static void task_print(task *t) {
@@ -247,10 +265,10 @@ static void clause_print(clause *c) {
   printf("\nTask neg literal: ");
   alma_function_print(t->neg);
   printf("\nClause with pos literal:\n");
-  clause_print(t->x);
-  printf("Clause with neg literal:\n");
-  clause_print(t->y);
-  printf("\n");
+  clause_print(t->x, 0);
+  printf("\nClause with neg literal:\n");
+  clause_print(t->y, 0);
+  printf("\n\n");
 }*/
 
 /*static void print_map_entry(void *kind, void *arg) {
@@ -258,8 +276,8 @@ static void clause_print(clause *c) {
   map_entry *entry = arg;
   printf("Map entry%s: %s\n", str, entry->predname);
   for (int i = 0; i < entry->num_clauses; i++) {
-    clause_print(entry->clauses[i]);
-    printf("\n");
+    clause_print(entry->clauses[i], 0);
+    printf("\n\n");
   }
   printf("\n");
 }*/
@@ -267,7 +285,8 @@ static void clause_print(clause *c) {
 void kb_print(kb *collection) {
   for (tommy_size_t i = 0; i < tommy_array_size(&collection->clauses); i++) {
     //printf("Clause %d\n", i);
-    clause_print(tommy_array_get(&collection->clauses, i));
+    clause_print(tommy_array_get(&collection->clauses, i), 1);
+    printf("\n");
   }
   printf("\n");
 
@@ -625,21 +644,13 @@ void forward_chain(kb *collection) {
 
           // An empty resolution result is not a valid clause to add to KB
           if (res_result->pos_count > 0 || res_result->neg_count > 0) {
-            // Initialize parents of result + update children of its parents
+            // Initialize parents of result
             res_result->parent_pair_count = 1;
             res_result->parents = malloc(sizeof(*res_result->parents));
-            res_result->parents->x = current_task->x;
-            res_result->parents->y = current_task->y;
+            res_result->parents[0].x = current_task->x;
+            res_result->parents[0].y = current_task->y;
             res_result->children_count = 0;
             res_result->children = NULL;
-            clause *parent1 = current_task->x;
-            parent1->children_count++;
-            parent1->children = realloc(parent1->children, sizeof(*parent1->children) * parent1->children_count);
-            parent1->children[parent1->children_count-1] = res_result;
-            clause *parent2 = current_task->y;
-            parent2->children_count++;
-            parent2->children = realloc(parent2->children, sizeof(*parent2->children) * parent2->children_count);
-            parent2->children[parent2->children_count-1] = res_result;
 
             tommy_array_insert(&new_clauses, res_result);
           }
@@ -676,6 +687,16 @@ void forward_chain(kb *collection) {
         clause *c = tommy_array_get(&new_clauses, i);
         clause *dupe = duplicate_check(collection, c);
         if (dupe == NULL) {
+          // Update child info for parents of new clause
+          clause *parent1 = c->parents[0].x;
+          parent1->children_count++;
+          parent1->children = realloc(parent1->children, sizeof(*parent1->children) * parent1->children_count);
+          parent1->children[parent1->children_count-1] = c;
+          clause *parent2 = c->parents[0].y;
+          parent2->children_count++;
+          parent2->children = realloc(parent2->children, sizeof(*parent2->children) * parent2->children_count);
+          parent2->children[parent2->children_count-1] = c;
+
           add_new_clause(collection, c);
         }
         else {
