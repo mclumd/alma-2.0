@@ -22,6 +22,7 @@ typedef struct clause {
   struct parent_pair *parents; // Use more efficient structure for as needed
   struct clause **children; // Use more efficient structure for as needed
   if_tag tag;
+  tommy_node list_node; // Node used for storage in tommy_list
 } clause;
 
 typedef struct parent_pair {
@@ -31,7 +32,7 @@ typedef struct parent_pair {
 
 // Simple definition for now, likely to expand significantly in future
 typedef struct kb {
-  tommy_array clauses; // Array storing pointers to clauses
+  tommy_list clauses; // Linked list storing pointers to all KB clauses
 
   // Hashset and list used together for multi-indexing http://www.tommyds.it/doc/multiindex.html
   tommy_hashlin pos_map; // Maps each predicate name to the set of clauses where it appears as positive literal
@@ -65,7 +66,8 @@ void free_kb(kb *collection);
 void kb_print(kb *collection);
 
 clause* duplicate_check(kb *collection, clause *c);
-void add_new_clause(kb *collection, clause *curr);
+void add_clause(kb *collection, clause *curr);
+void remove_clause(kb *collection, clause *c);
 void tasks_from_clause(kb *collection, clause *c, int process_negatives);
 void resolve(task *t, binding_list *mgu, clause *result);
 void forward_chain(kb *collection);

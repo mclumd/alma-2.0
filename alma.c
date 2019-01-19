@@ -22,6 +22,7 @@ int main(int argc, char **argv) {
   }
 
   mpc_ast_t *alma_ast;
+  parse_init();
   if (alma_parse(argv[1], &alma_ast)) {
 
     // Obtain ALMA tree representations from MPC's AST
@@ -53,6 +54,7 @@ int main(int argc, char **argv) {
     forward_chain(alma_kb);
 
     free_kb(alma_kb);
+    parse_cleanup();
   }
 
   return 0;

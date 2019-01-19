@@ -144,7 +144,7 @@ void kb_init(alma_node *trees, int num_trees, kb **collection) {
   // Allocate and initialize
   *collection = malloc(sizeof(**collection));
   kb *collec = *collection;
-  tommy_array_init(&collec->clauses);
+  tommy_list_init(&collec->clauses);
   tommy_hashlin_init(&collec->pos_map);
   tommy_list_init(&collec->pos_list);
   tommy_hashlin_init(&collec->neg_map);
@@ -163,7 +163,7 @@ void kb_init(alma_node *trees, int num_trees, kb **collection) {
   for (tommy_size_t i = 0; i < tommy_array_size(&starting_clauses); i++) {
     clause *c = tommy_array_get(&starting_clauses, i);
     if (duplicate_check(collec, c) == NULL)
-      add_new_clause(collec, c);
+      add_clause(collec, c);
     else
       tommy_array_insert(&duplicates, c);
   }
@@ -173,8 +173,11 @@ void kb_init(alma_node *trees, int num_trees, kb **collection) {
     free_clause(tommy_array_get(&duplicates, i));
   tommy_array_done(&duplicates);
   // Generate starting tasks
-  for (tommy_size_t i = 0; i < tommy_array_size(&collec->clauses); i++)
-    tasks_from_clause(collec, tommy_array_get(&collec->clauses, i), 0);
+  tommy_node* i = tommy_list_head(&collec->clauses);
+  while (i) {
+    tasks_from_clause(collec, i->data, 0);
+    i = i->next;
+  }
 }
 
 static void free_map_entry(void *arg) {
@@ -186,10 +189,12 @@ static void free_map_entry(void *arg) {
 }
 
 void free_kb(kb *collection) {
-  for (tommy_size_t i = 0; i < tommy_array_size(&collection->clauses); i++) {
-    free_clause(tommy_array_get(&collection->clauses, i));
+  tommy_node* curr = tommy_list_head(&collection->clauses);
+  while (curr) {
+    clause *data = curr->data;
+    curr = curr->next;
+    free(data);
   }
-  tommy_array_done(&collection->clauses);
 
   tommy_list_foreach(&collection->pos_list, free_map_entry);
   tommy_hashlin_done(&collection->pos_map);
@@ -283,10 +288,11 @@ static void clause_print(clause *c, int print_relatives) {
 }*/
 
 void kb_print(kb *collection) {
-  for (tommy_size_t i = 0; i < tommy_array_size(&collection->clauses); i++) {
-    //printf("Clause %d\n", i);
-    clause_print(tommy_array_get(&collection->clauses, i), 1);
+  tommy_node* i = tommy_list_head(&collection->clauses);
+  while (i) {
+    clause_print(i->data, 1);
     printf("\n");
+    i = i->next;
   }
   printf("\n");
 
@@ -299,29 +305,9 @@ void kb_print(kb *collection) {
 }
 
 // Compare function to be used by tommy_hashlin_search
+// Compares string arg to predname of map entry obj
 static int compare(const void *arg, const void *obj) {
   return strcmp((const char*)arg, ((const map_entry*)obj)->predname);
-}
-
-// Inserts clause into the hashmap with key name
-// If the map entry already exists, append; otherwise create a new one
-static void map_add_clause(tommy_hashlin *map, tommy_list *list, char *name, clause *c) {
-  map_entry *result = tommy_hashlin_search(map, compare, name, tommy_hash_u64(0, name, strlen(name)));
-  if (result != NULL) {
-    result->num_clauses++;
-    result->clauses = realloc(result->clauses, sizeof(*result->clauses) * result->num_clauses);
-    result->clauses[result->num_clauses-1] = c; // Aliases with pointer assignment
-    free(name); // Name not added into hashmap must be freed (frees alloc in name_with_arity)
-  }
-  else {
-    map_entry *entry = malloc(sizeof(*entry));
-    entry->predname = name;
-    entry->num_clauses = 1;
-    entry->clauses = malloc(sizeof(*entry->clauses));
-    entry->clauses[0] = c; // Aliases with pointer assignment
-    tommy_hashlin_insert(map, &entry->hash_node, entry, tommy_hash_u64(0, entry->predname, strlen(entry->predname)));
-    tommy_list_insert_tail(list, &entry->list_node, entry);
-  }
 }
 
 // Given "name" and integer arity, returns "name/arity"
@@ -336,6 +322,62 @@ static char* name_with_arity(char *name, int arity) {
   strcpy(name_with_arity + strlen(name) + 1, arity_str);
   free(arity_str);
   return name_with_arity;
+}
+
+// Inserts clause into the hashmap (with key based on lit), as well as the linked list
+// If the map entry already exists, append; otherwise create a new one
+static void map_add_clause(tommy_hashlin *map, tommy_list *list, alma_function *lit, clause *c) {
+  char *name = name_with_arity(lit->name, lit->term_count);
+  map_entry *result = tommy_hashlin_search(map, compare, name, tommy_hash_u64(0, name, strlen(name)));
+  if (result != NULL) {
+    result->num_clauses++;
+    result->clauses = realloc(result->clauses, sizeof(*result->clauses) * result->num_clauses);
+    result->clauses[result->num_clauses-1] = c; // Aliases with pointer assignment
+    free(name); // Name not added into hashmap must be freed
+  }
+  else {
+    map_entry *entry = malloc(sizeof(*entry));
+    entry->predname = name;
+    entry->num_clauses = 1;
+    entry->clauses = malloc(sizeof(*entry->clauses));
+    entry->clauses[0] = c; // Aliases with pointer assignment
+    tommy_hashlin_insert(map, &entry->hash_node, entry, tommy_hash_u64(0, entry->predname, strlen(entry->predname)));
+    tommy_list_insert_tail(list, &entry->list_node, entry);
+  }
+}
+
+// Removes clause from hashmap and list if it exists
+static void map_remove_clause(tommy_hashlin *map, tommy_list *list, alma_function *lit, clause *c) {
+  char *name = name_with_arity(lit->name, lit->term_count);
+  map_entry *result = tommy_hashlin_search(map, compare, name, tommy_hash_u64(0, name, strlen(name)));
+  if (result != NULL) {
+    for (int i = 0; i < result->num_clauses; i++) {
+      if (result->clauses[i] == c) {
+        // Swap to end before shrinking
+        if (i < result->num_clauses-1) {
+          clause *tmp = result->clauses[result->num_clauses-1];
+          result->clauses[result->num_clauses-1] = result->clauses[i];
+          result->clauses[i] = tmp;
+        }
+
+        result->num_clauses--;
+
+        // Shrink size of clause list of result
+        if (result->num_clauses > 0) {
+          result->clauses = realloc(result->clauses, sizeof(*result->clauses) * result->num_clauses);
+        }
+        // Remove map_entry from hashmap and linked list
+        else {
+          tommy_hashlin_remove_existing(map, &result->hash_node);
+          tommy_list_remove_existing(list, &result->list_node);
+          free_map_entry(result);
+          free(name);
+          return;
+        }
+      }
+    }
+  }
+  free(name);
 }
 
 // Returns first alma_function pointer for literal with given name in clause
@@ -481,20 +523,26 @@ clause* duplicate_check(kb *collection, clause *c) {
 }
 
 // Given a new clause, add to the KB and maps
-void add_new_clause(kb *collection, clause *c) {
+void add_clause(kb *collection, clause *c) {
   // TODO: call to duplicate literal filtering (add function and such)
 
   // Indexes clause into hashaps of KB collection
-  for (int j = 0; j < c->pos_count; j++) {
-    char *name = name_with_arity(c->pos_lits[j]->name, c->pos_lits[j]->term_count);
-    map_add_clause(&collection->pos_map, &collection->pos_list, name, c);
-  }
-  for (int j = 0; j < c->neg_count; j++) {
-    char *name = name_with_arity(c->neg_lits[j]->name, c->neg_lits[j]->term_count);
-    map_add_clause(&collection->neg_map, &collection->neg_list, name, c);
-  }
+  for (int j = 0; j < c->pos_count; j++)
+    map_add_clause(&collection->pos_map, &collection->pos_list, c->pos_lits[j], c);
+  for (int j = 0; j < c->neg_count; j++)
+    map_add_clause(&collection->neg_map, &collection->neg_list, c->neg_lits[j], c);
 
-  tommy_array_insert(&collection->clauses, c);
+  tommy_list_insert_tail(&collection->clauses, &c->list_node, c);
+}
+
+// Given a clause already existing in KB, remove from data structures
+void remove_clause(kb *collection, clause *c) {
+  for (int j = 0; j < c->pos_count; j++)
+    map_remove_clause(&collection->pos_map, &collection->pos_list, c->pos_lits[j], c);
+  for (int j = 0; j < c->neg_count; j++)
+    map_remove_clause(&collection->neg_map, &collection->neg_list, c->neg_lits[j], c);
+  tommy_list_remove_existing(&collection->clauses, &c->list_node);
+  free_clause(c);
 }
 
 // Finds new tasks based on matching pos/neg predicate pairs, where one is from the KB and the other from clauses
@@ -697,7 +745,7 @@ void forward_chain(kb *collection) {
           parent2->children = realloc(parent2->children, sizeof(*parent2->children) * parent2->children_count);
           parent2->children[parent2->children_count-1] = c;
 
-          add_new_clause(collection, c);
+          add_clause(collection, c);
         }
         else {
           tommy_array_insert(&duplicates, c);
