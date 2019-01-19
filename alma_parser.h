@@ -4,7 +4,8 @@
 #include "mpc/mpc.h"
 
 void parse_init(void);
-int alma_parse(char *filename, mpc_ast_t **ast);
+int parse_file(char *filename, mpc_ast_t **ast);
+int parse_string(char *string, mpc_ast_t **ast);
 void parse_cleanup(void);
 
 #endif

@@ -173,6 +173,30 @@ void generate_alma_trees(mpc_ast_t *ast, alma_node **alma_trees, int *size) {
   }
 }
 
+// Boolean return based on success of parsing
+int formulas_from_source(char *source, int file_src, int *formula_count, alma_node **formulas) {
+  mpc_ast_t *ast;
+  if (file_src ? parse_file(source, &ast) : parse_string(source, &ast)) {
+    // Obtain ALMA tree representations from MPC's AST
+    generate_alma_trees(ast, formulas, formula_count);
+    mpc_ast_delete(ast);
+    // for (int i = 0; i < formula_count; i++)
+    //   alma_print(formulas+i);
+    // printf("\n");
+
+    // Flatten CNF list into KB of clauses
+    for (int i = 0; i < *formula_count; i++)
+      make_cnf(*formulas+i);
+    // printf("CNF equivalents:\n");
+    // for (int i = 0; i < formula_count; i++)
+    //   alma_print(formulas+i);
+    // printf("\n");
+
+    return 1;
+  }
+  return 0;
+}
+
 void free_function(alma_function *func) {
   if (func == NULL)
     return;

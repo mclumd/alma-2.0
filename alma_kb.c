@@ -602,6 +602,18 @@ void tasks_from_clause(kb *collection, clause *c, int process_negatives) {
   }
 }
 
+// Returns boolean based on success of string parse
+int assert_formula(char *string) {
+  alma_node *formulas;
+  int formula_count;
+  if (formulas_from_source(string, 0, &formula_count, &formulas)) {
+    // TODO
+
+    return 1;
+  }
+  return 0;
+}
+
 // Given an MGU, substitute on literals other than pair unified and make a single resulting clause
 // Last argument must be allocated by caller
 void resolve(task *t, binding_list *mgu, clause *result) {

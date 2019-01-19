@@ -2,6 +2,7 @@
 #define alma_formula_h
 
 #include "mpc/mpc.h"
+#include "alma_parser.h"
 
 extern long long variable_id_count;
 
@@ -65,6 +66,7 @@ void alma_term_init(alma_term *term, mpc_ast_t *ast);
 void alma_function_init(alma_function *func, mpc_ast_t *ast);
 void alma_predicate_init(alma_node *node, mpc_ast_t *ast);
 
+int formulas_from_source(char *source, int file_src, int *formula_count, alma_node **formulas);
 void generate_alma_trees(mpc_ast_t *ast, alma_node **alma_trees, int *size);
 void free_function(alma_function *func);
 void free_term(alma_term *term);

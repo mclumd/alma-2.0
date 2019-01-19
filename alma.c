@@ -1,5 +1,4 @@
 #include <stdio.h>
-#include "mpc/mpc.h"
 #include "alma_parser.h"
 #include "alma_formula.h"
 #include "alma_kb.h"
@@ -9,7 +8,7 @@
 long long variable_id_count = 0;
 
 // ALMA currently:
-// 1. parses an input file into an mpc_ast_t
+// 1. parses an input file into an MPC AST
 // 2. obtains a FOL representation from the AST
 // 3. converts this general FOL into CNF
 // 4. converts CNF into a collection of clauses for the KB
@@ -21,29 +20,12 @@ int main(int argc, char **argv) {
     return 0;
   }
 
-  mpc_ast_t *alma_ast;
   parse_init();
-  if (alma_parse(argv[1], &alma_ast)) {
 
-    // Obtain ALMA tree representations from MPC's AST
-    alma_node *formulas;
-    int formula_count;
-    generate_alma_trees(alma_ast, &formulas, &formula_count);
-    mpc_ast_delete(alma_ast);
-    // for (int i = 0; i < formula_count; i++)
-    //   alma_print(formulas+i);
-    // printf("\n");
+  alma_node *formulas;
+  int formula_count;
+  if (formulas_from_source(argv[1], 1, &formula_count, &formulas)) {
 
-    // Convert general FOL formulas to CNF
-    for (int i = 0; i < formula_count; i++)
-      make_cnf(formulas+i);
-
-    // printf("CNF equivalents:\n");
-    // for (int i = 0; i < formula_count; i++)
-    //   alma_print(formulas+i);
-    // printf("\n");
-
-    // Flatten CNF list into KB of clauses
     kb *alma_kb;
     kb_init(formulas, formula_count, &alma_kb);
     for (int i = 0; i < formula_count; i++)
@@ -54,6 +36,8 @@ int main(int argc, char **argv) {
     forward_chain(alma_kb);
 
     free_kb(alma_kb);
+
+    //parse_string("or(now(1),someatom).", &alma_ast);
     parse_cleanup();
   }
 
