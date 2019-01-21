@@ -138,8 +138,36 @@ static void free_clause(clause *c) {
   free(c);
 }
 
+// Flattens trees, adds to collec, generates tasks
+// trees argument freed here
+static void nodes_to_collection(alma_node *trees, int num_trees, kb *collec) {
+  // Flatten trees into clause list
+  tommy_array clauses;
+  tommy_array_init(&clauses);
+  for (int i = 0; i < num_trees; i++) {
+    flatten_node(trees+i, &clauses);
+    free_alma_tree(trees+i);
+  }
+  free(trees);
+
+  // Insert into KB if not duplicate
+  tommy_array duplicates;
+  tommy_array_init(&duplicates);
+  for (tommy_size_t i = 0; i < tommy_array_size(&clauses); i++) {
+    clause *c = tommy_array_get(&clauses, i);
+    if (duplicate_check(collec, c) == NULL)
+      add_clause(collec, c);
+    else
+      tommy_array_insert(&duplicates, c);
+  }
+  tommy_array_done(&clauses);
+  // Free unused duplicate clauses
+  for (tommy_size_t i = 0; i < tommy_array_size(&duplicates); i++)
+    free_clause(tommy_array_get(&duplicates, i));
+  tommy_array_done(&duplicates);
+}
+
 // Caller will need to free collection
-// trees also must be freed by the caller after this call, as it is not deallocated here
 void kb_init(alma_node *trees, int num_trees, kb **collection) {
   // Allocate and initialize
   *collection = malloc(sizeof(**collection));
@@ -152,26 +180,8 @@ void kb_init(alma_node *trees, int num_trees, kb **collection) {
   tommy_array_init(&collec->task_list);
   collec->task_count = 0;
 
-  // Flatten trees into clause list
-  tommy_array starting_clauses;
-  tommy_array_init(&starting_clauses);
-  for (int i = 0; i < num_trees; i++)
-    flatten_node(trees+i, &starting_clauses);
-  // Insert into KB if not duplicate
-  tommy_array duplicates;
-  tommy_array_init(&duplicates);
-  for (tommy_size_t i = 0; i < tommy_array_size(&starting_clauses); i++) {
-    clause *c = tommy_array_get(&starting_clauses, i);
-    if (duplicate_check(collec, c) == NULL)
-      add_clause(collec, c);
-    else
-      tommy_array_insert(&duplicates, c);
-  }
-  tommy_array_done(&starting_clauses);
-  // Free unused duplicate clauses
-  for (tommy_size_t i = 0; i < tommy_array_size(&duplicates); i++)
-    free_clause(tommy_array_get(&duplicates, i));
-  tommy_array_done(&duplicates);
+  nodes_to_collection(trees, num_trees, collec);
+
   // Generate starting tasks
   tommy_node* i = tommy_list_head(&collec->clauses);
   while (i) {
@@ -193,7 +203,7 @@ void free_kb(kb *collection) {
   while (curr) {
     clause *data = curr->data;
     curr = curr->next;
-    free(data);
+    free_clause(data);
   }
 
   tommy_list_foreach(&collection->pos_list, free_map_entry);
@@ -603,15 +613,24 @@ void tasks_from_clause(kb *collection, clause *c, int process_negatives) {
 }
 
 // Returns boolean based on success of string parse
-int assert_formula(char *string) {
+int assert_formula(kb *collection, char *string) {
   alma_node *formulas;
   int formula_count;
   if (formulas_from_source(string, 0, &formula_count, &formulas)) {
-    // TODO
-
+    nodes_to_collection(formulas, formula_count, collection);
+    // TODO: Generate tasks for
     return 1;
   }
   return 0;
+}
+
+static char* now(int step) {
+  int step_len = snprintf(NULL, 0, "%d", step);
+  char *str = malloc(4 + step_len+1 + 2);
+  strcpy(str, "now(");
+  snprintf(str+4, step_len+1, "%d", step);
+  strcpy(str+4+step_len, ").");
+  return str;
 }
 
 // Given an MGU, substitute on literals other than pair unified and make a single resulting clause
@@ -687,10 +706,14 @@ void resolve(task *t, binding_list *mgu, clause *result) {
 
 void forward_chain(kb *collection) {
   int chain = 1;
-  int step = 0;
+  int step = 2;
   while(chain) {
     tommy_array new_clauses;
     tommy_array_init(&new_clauses);
+
+    char *now_str = now(step);
+    assert_formula(collection, now_str);
+    free(now_str);
 
     for (tommy_size_t i = 0; i < tommy_array_size(&collection->task_list); i++) {
       task *current_task = tommy_array_get(&collection->task_list, i);
@@ -747,6 +770,8 @@ void forward_chain(kb *collection) {
         clause *c = tommy_array_get(&new_clauses, i);
         clause *dupe = duplicate_check(collection, c);
         if (dupe == NULL) {
+          // TODO: Check if parents are duplicate
+
           // Update child info for parents of new clause
           clause *parent1 = c->parents[0].x;
           parent1->children_count++;

@@ -28,16 +28,13 @@ int main(int argc, char **argv) {
 
     kb *alma_kb;
     kb_init(formulas, formula_count, &alma_kb);
-    for (int i = 0; i < formula_count; i++)
-      free_alma_tree(formulas+i);
-    free(formulas);
+    assert_formula(alma_kb, "now(1).");
     kb_print(alma_kb);
 
     forward_chain(alma_kb);
 
     free_kb(alma_kb);
 
-    //parse_string("or(now(1),someatom).", &alma_ast);
     parse_cleanup();
   }
 

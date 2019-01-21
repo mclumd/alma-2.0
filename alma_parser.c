@@ -90,7 +90,6 @@ int parse_string(char *string, mpc_ast_t **ast) {
 
   if (result) {
     *ast = r.output;
-    mpc_ast_print(r.output);
     return 1;
   }
   else {
