@@ -1,0 +1,10 @@
+or(z,
+or(y,
+or(stuff(a),
+or(not(zyzyx),
+or(time(previous),
+or(not(asdf),
+or(fridge(X),
+or(bird,
+or(not(last),
+asdf(X,Y)))))))))).

@@ -104,6 +104,17 @@ static void set_variable_ids(clause *c) {
   tommy_array_done(&var_names);
 }
 
+// Comparison used by qsort of clauses -- orders by increasing function name and increasing arity
+int function_compare (const void *p1, const void *p2) {
+  alma_function **f1 = (alma_function **)p1;
+  alma_function **f2 = (alma_function **)p2;
+  int compare = strcmp((*f1)->name, (*f2)->name);
+  if (compare == 0)
+    return (*f1)->term_count - (*f2)->term_count;
+  else
+    return compare;
+}
+
 // Flattens a single alma node and adds its contents to collection
 // Recursively calls when an AND is found to separate conjunctions
 static void flatten_node(alma_node *node, tommy_array *clauses) {
@@ -121,6 +132,8 @@ static void flatten_node(alma_node *node, tommy_array *clauses) {
     c->tag = NONE;
     make_clause(node, c);
     set_variable_ids(c);
+    qsort(c->pos_lits, c->pos_count, sizeof(*c->pos_lits), function_compare);
+    qsort(c->neg_lits, c->neg_count, sizeof(*c->neg_lits), function_compare);
 
     tommy_array_insert(clauses, c);
   }
@@ -484,14 +497,14 @@ static int clauses_differ(clause *x, clause *y) {
     matches.y = NULL;
     for (int i = 0; i < x->pos_count; i++) {
       // TODO: account for case in which may have several literals with name
-      alma_function* lit = literal_by_name(y, x->pos_lits[i]->name, 1);
-      if (lit == NULL || functions_differ(x->pos_lits[i], lit, &matches))
+      // Ignoring duplicate literal case, sorted literal lists allows comparing ith literals of each clause
+      if (function_compare(x->pos_lits+i, y->pos_lits+i) || functions_differ(x->pos_lits[i], y->pos_lits[i], &matches))
         return release_matches(&matches, 1);
     }
     for (int i = 0; i < x->neg_count; i++) {
       // TODO: account for case in which may have several literals with name
-      alma_function* lit = literal_by_name(y, x->neg_lits[i]->name, 0);
-      if (lit == NULL || functions_differ(x->neg_lits[i], lit, &matches))
+      // Ignoring duplicate literal case, sorted literal lists allows comparing ith literals of each clause
+      if (function_compare(x->neg_lits+i, y->neg_lits+i) || functions_differ(x->neg_lits[i], y->neg_lits[i], &matches))
         return release_matches(&matches, 1);
     }
     // All literals compared as equal; return 0
@@ -552,6 +565,17 @@ void remove_clause(kb *collection, clause *c) {
   for (int j = 0; j < c->neg_count; j++)
     map_remove_clause(&collection->neg_map, &collection->neg_list, c->neg_lits[j], c);
   tommy_list_remove_existing(&collection->clauses, &c->list_node);
+
+  // Remove tasks using clause
+  // TODO May be inefficient -- check for deleted x and y when dealing with tasks? Or assume deletion is rare
+  for (tommy_size_t i = 0; i < tommy_array_size(&collection->task_list); i++) {
+    task *current_task = tommy_array_get(&collection->task_list, i);
+    if (current_task->x == c || current_task->y == c) {
+      tommy_array_set(&collection->task_list, i, NULL);
+      free(current_task);
+    }
+  }
+
   free_clause(c);
 }
 
@@ -619,6 +643,33 @@ int assert_formula(kb *collection, char *string) {
   if (formulas_from_source(string, 0, &formula_count, &formulas)) {
     nodes_to_collection(formulas, formula_count, collection);
     // TODO: Generate tasks for
+    return 1;
+  }
+  return 0;
+}
+
+int delete_formula(kb *collection, char *string) {
+  alma_node *formulas;
+  int formula_count;
+  if (formulas_from_source(string, 0, &formula_count, &formulas)) {
+    // Convert formulas to clause array
+    tommy_array clauses;
+    tommy_array_init(&clauses);
+    for (int i = 0; i < formula_count; i++) {
+      flatten_node(formulas+i, &clauses);
+      free_alma_tree(formulas+i);
+    }
+    free(formulas);
+
+    // Process and remove each clause
+    for (tommy_size_t i = 0; i < tommy_array_size(&clauses); i++) {
+      clause *c = duplicate_check(collection, tommy_array_get(&clauses, i));
+      if (c != NULL) {
+        remove_clause(collection, c);
+      }
+    }
+    tommy_array_done(&clauses);
+
     return 1;
   }
   return 0;
@@ -707,13 +758,21 @@ void resolve(task *t, binding_list *mgu, clause *result) {
 void forward_chain(kb *collection) {
   int chain = 1;
   int step = 2;
+  char *prev_str = NULL;
+  char *now_str = NULL;
   while(chain) {
     tommy_array new_clauses;
     tommy_array_init(&new_clauses);
 
-    char *now_str = now(step);
+    now_str = now(step);
     assert_formula(collection, now_str);
-    free(now_str);
+    if (prev_str != NULL) {
+      delete_formula(collection, prev_str);
+      free(prev_str);
+    }
+    else
+      delete_formula(collection, "now(1).");
+    prev_str = now_str;
 
     for (tommy_size_t i = 0; i < tommy_array_size(&collection->task_list); i++) {
       task *current_task = tommy_array_get(&collection->task_list, i);
@@ -816,6 +875,7 @@ void forward_chain(kb *collection) {
     }
     else {
       chain = 0;
+      free(now_str);
       printf("Idling...\n");
     }
     tommy_array_done(&new_clauses);
