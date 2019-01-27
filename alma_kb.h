@@ -22,7 +22,7 @@ typedef struct clause {
   struct parent_pair *parents; // Use more efficient structure for as needed
   struct clause **children; // Use more efficient structure for as needed
   if_tag tag;
-  tommy_node list_node; // Node used for storage in tommy_list
+  long index; // Index of clause, used as key in index_map of KB
 } clause;
 
 typedef struct parent_pair {
@@ -31,12 +31,14 @@ typedef struct parent_pair {
 } parent_pair;
 
 // Simple definition for now, likely to expand significantly in future
+// Hashsets and lists used together for multi-indexing http://www.tommyds.it/doc/multiindex.html
 typedef struct kb {
-  tommy_list clauses; // Linked list storing pointers to all KB clauses
+  tommy_list clauses; // Linked list storing index_mappings, keeps track of all clauses
+  tommy_hashlin index_map; // Maps index value to a clause
 
-  // Hashset and list used together for multi-indexing http://www.tommyds.it/doc/multiindex.html
   tommy_hashlin pos_map; // Maps each predicate name to the set of clauses where it appears as positive literal
   tommy_list pos_list; // Linked list for iterating pos_map
+
   tommy_hashlin neg_map; // Maps each predicate name to the set of clauses where it appears as negative literal
   tommy_list neg_list; // Linked list for iterating neg_map
 
@@ -44,15 +46,22 @@ typedef struct kb {
   long long task_count;
 } kb;
 
-// Struct to be held in the tommy_hashlin hash tables of a KB
+typedef struct index_mapping {
+  long key;
+  clause *value;
+  tommy_node hash_node; // Used for storage in tommy_hashlin
+  tommy_node list_node; // Used for storage in tommy_list
+} index_mapping;
+
+// Struct to be held in the positive/negative tommy_hashlin hash tables
 // Will be hashed only based on the predname string, hance making a map of strings to array of clause pointers
-typedef struct map_entry {
+typedef struct predname_mapping {
   char *predname; // Key, used as argument for tommy_inthash_u32 hashing function
   int num_clauses;
   clause **clauses; // Value
   tommy_node hash_node; // Node used for storage in tommy_hashlin
   tommy_node list_node; // Node used for storage in tommy_list
-} map_entry;
+} predname_mapping;
 
 typedef struct task {
   clause *x;

@@ -2,6 +2,8 @@
 #include <string.h>
 #include "alma_kb.h"
 
+static long next_index;
+
 // Assumes c is allocated by caller
 // TODO: Case for something other than OR/NOT/pred appearing?
 static void make_clause(alma_node *node, clause *c) {
@@ -186,6 +188,7 @@ void kb_init(alma_node *trees, int num_trees, kb **collection) {
   *collection = malloc(sizeof(**collection));
   kb *collec = *collection;
   tommy_list_init(&collec->clauses);
+  tommy_hashlin_init(&collec->index_map);
   tommy_hashlin_init(&collec->pos_map);
   tommy_list_init(&collec->pos_list);
   tommy_hashlin_init(&collec->neg_map);
@@ -198,13 +201,13 @@ void kb_init(alma_node *trees, int num_trees, kb **collection) {
   // Generate starting tasks
   tommy_node* i = tommy_list_head(&collec->clauses);
   while (i) {
-    tasks_from_clause(collec, i->data, 0);
+    tasks_from_clause(collec, ((index_mapping *)i->data)->value, 0);
     i = i->next;
   }
 }
 
-static void free_map_entry(void *arg) {
-  map_entry *entry = arg;
+static void free_predname_mapping(void *arg) {
+  predname_mapping *entry = arg;
   free(entry->predname);
   free(entry->clauses);
   // Note: clause entries ARE NOT FREED because they alias the clause objects freed in free_kb
@@ -214,15 +217,17 @@ static void free_map_entry(void *arg) {
 void free_kb(kb *collection) {
   tommy_node* curr = tommy_list_head(&collection->clauses);
   while (curr) {
-    clause *data = curr->data;
+    index_mapping *data = curr->data;
     curr = curr->next;
-    free_clause(data);
+    free_clause(data->value);
+    free(data);
   }
+  tommy_hashlin_done(&collection->index_map);
 
-  tommy_list_foreach(&collection->pos_list, free_map_entry);
+  tommy_list_foreach(&collection->pos_list, free_predname_mapping);
   tommy_hashlin_done(&collection->pos_map);
 
-  tommy_list_foreach(&collection->neg_list, free_map_entry);
+  tommy_list_foreach(&collection->neg_list, free_predname_mapping);
   tommy_hashlin_done(&collection->neg_map);
 
   // Task pointers are aliases to those freed from collection->clauses, so only free overall task here
@@ -299,9 +304,9 @@ static void clause_print(clause *c, int print_relatives) {
   printf("\n\n");
 }*/
 
-/*static void print_map_entry(void *kind, void *arg) {
+/*static void print_predname_mapping(void *kind, void *arg) {
   char *str = kind;
-  map_entry *entry = arg;
+  predname_mapping *entry = arg;
   printf("Map entry%s: %s\n", str, entry->predname);
   for (int i = 0; i < entry->num_clauses; i++) {
     clause_print(entry->clauses[i], 0);
@@ -313,28 +318,36 @@ static void clause_print(clause *c, int print_relatives) {
 void kb_print(kb *collection) {
   tommy_node* i = tommy_list_head(&collection->clauses);
   while (i) {
-    clause_print(i->data, 1);
+    index_mapping *data = i->data;
+    printf("%ld: ", data->key);
+    clause_print(data->value, 1);
     printf("\n");
     i = i->next;
   }
   printf("\n");
 
-  //tommy_list_foreach_arg(&collection->pos_list, print_map_entry, " pos");
-  //tommy_list_foreach_arg(&collection->neg_list, print_map_entry, " neg");
+  //tommy_list_foreach_arg(&collection->pos_list, print_predname_mapping, " pos");
+  //tommy_list_foreach_arg(&collection->neg_list, print_predname_mapping, " neg");
 
   /*for (tommy_size_t i = 0; i < tommy_array_size(&collection->task_list); i++) {
     task_print(tommy_array_get(&collection->task_list, i));
   }*/
 }
 
-// Compare function to be used by tommy_hashlin_search
-// Compares string arg to predname of map entry obj
-static int compare(const void *arg, const void *obj) {
-  return strcmp((const char*)arg, ((const map_entry*)obj)->predname);
+// Compare function to be used by tommy_hashlin_search for index_mapping
+// Compares long arg to key of index_mapping
+static int im_compare(const void *arg, const void *obj) {
+  return *(const long*)arg - ((const index_mapping*)obj)->key;
+}
+
+// Compare function to be used by tommy_hashlin_search for predname_mapping
+// Compares string arg to predname of predname_mapping
+static int pm_compare(const void *arg, const void *obj) {
+  return strcmp((const char*)arg, ((const predname_mapping*)obj)->predname);
 }
 
 // Given "name" and integer arity, returns "name/arity"
-// Allocated cstring is later placed in map_entry, and eventually freed by free_kb
+// Allocated cstring is later placed in predname_mapping, and eventually freed by free_kb
 static char* name_with_arity(char *name, int arity) {
   int arity_len = snprintf(NULL, 0, "%d", arity);
   char *arity_str = malloc(arity_len+1);
@@ -351,7 +364,7 @@ static char* name_with_arity(char *name, int arity) {
 // If the map entry already exists, append; otherwise create a new one
 static void map_add_clause(tommy_hashlin *map, tommy_list *list, alma_function *lit, clause *c) {
   char *name = name_with_arity(lit->name, lit->term_count);
-  map_entry *result = tommy_hashlin_search(map, compare, name, tommy_hash_u64(0, name, strlen(name)));
+  predname_mapping *result = tommy_hashlin_search(map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
   if (result != NULL) {
     result->num_clauses++;
     result->clauses = realloc(result->clauses, sizeof(*result->clauses) * result->num_clauses);
@@ -359,7 +372,7 @@ static void map_add_clause(tommy_hashlin *map, tommy_list *list, alma_function *
     free(name); // Name not added into hashmap must be freed
   }
   else {
-    map_entry *entry = malloc(sizeof(*entry));
+    predname_mapping *entry = malloc(sizeof(*entry));
     entry->predname = name;
     entry->num_clauses = 1;
     entry->clauses = malloc(sizeof(*entry->clauses));
@@ -372,28 +385,23 @@ static void map_add_clause(tommy_hashlin *map, tommy_list *list, alma_function *
 // Removes clause from hashmap and list if it exists
 static void map_remove_clause(tommy_hashlin *map, tommy_list *list, alma_function *lit, clause *c) {
   char *name = name_with_arity(lit->name, lit->term_count);
-  map_entry *result = tommy_hashlin_search(map, compare, name, tommy_hash_u64(0, name, strlen(name)));
+  predname_mapping *result = tommy_hashlin_search(map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
   if (result != NULL) {
     for (int i = 0; i < result->num_clauses; i++) {
       if (result->clauses[i] == c) {
-        // Swap to end before shrinking
-        if (i < result->num_clauses-1) {
-          clause *tmp = result->clauses[result->num_clauses-1];
-          result->clauses[result->num_clauses-1] = result->clauses[i];
-          result->clauses[i] = tmp;
-        }
-
+        if (i < result->num_clauses-1)
+          result->clauses[i] = result->clauses[result->num_clauses-1];
         result->num_clauses--;
 
         // Shrink size of clause list of result
         if (result->num_clauses > 0) {
           result->clauses = realloc(result->clauses, sizeof(*result->clauses) * result->num_clauses);
         }
-        // Remove map_entry from hashmap and linked list
+        // Remove predname_mapping from hashmap and linked list
         else {
           tommy_hashlin_remove_existing(map, &result->hash_node);
           tommy_list_remove_existing(list, &result->list_node);
-          free_map_entry(result);
+          free_predname_mapping(result);
           free(name);
           return;
         }
@@ -520,7 +528,7 @@ clause* duplicate_check(kb *collection, clause *c) {
     // If clause has a positive literal, all duplicate candidates must have that same positive literal
     // Arbitrarily pick first positive literal as one to use; may be able to do smarter literal choice later
     char *name = name_with_arity(c->pos_lits[0]->name, c->pos_lits[0]->term_count);
-    map_entry *result = tommy_hashlin_search(&collection->pos_map, compare, name, tommy_hash_u64(0, name, strlen(name)));
+    predname_mapping *result = tommy_hashlin_search(&collection->pos_map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
     free(name);
     if (result != NULL) {
       for (int i = 0; i < result->num_clauses; i++) {
@@ -533,7 +541,7 @@ clause* duplicate_check(kb *collection, clause *c) {
     // If clause has a negative literal, all duplicate candidates must have that same negative literal
     // Arbitrarily pick first negative literal as one to use; may be able to do smarter literal choice later
     char *name = name_with_arity(c->neg_lits[0]->name, c->neg_lits[0]->term_count);
-    map_entry *result = tommy_hashlin_search(&collection->neg_map, compare, name, tommy_hash_u64(0, name, strlen(name)));
+    predname_mapping *result = tommy_hashlin_search(&collection->neg_map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
     free(name);
     if (result != NULL) {
       for (int i = 0; i < result->num_clauses; i++) {
@@ -555,16 +563,43 @@ void add_clause(kb *collection, clause *c) {
   for (int j = 0; j < c->neg_count; j++)
     map_add_clause(&collection->neg_map, &collection->neg_list, c->neg_lits[j], c);
 
-  tommy_list_insert_tail(&collection->clauses, &c->list_node, c);
+  index_mapping *entry = malloc(sizeof(*entry));
+  c->index = entry->key = next_index++;
+  entry->value = c;
+  tommy_list_insert_tail(&collection->clauses, &entry->list_node, entry);
+  tommy_hashlin_insert(&collection->index_map, &entry->hash_node, entry, tommy_hash_u64(0, &entry->key, sizeof(entry->key)));
+}
+
+// Removes c from children list of p
+static void remove_child(clause *p, clause *c) {
+  if (p != NULL) {
+    for (int j = 0; j < p->children_count; j++) {
+      if (p->children[j] == c) {
+        if (j < p->children_count-1)
+          p->children[j] = p->children[p->children_count-1];
+        p->children_count--;
+        if (p->children_count > 0) {
+          p->children = realloc(p->children, sizeof(*p->children) * p->children_count);
+        }
+        else {
+          free(p->children);
+          p->children = NULL;
+        }
+        break;
+      }
+    }
+  }
 }
 
 // Given a clause already existing in KB, remove from data structures
 void remove_clause(kb *collection, clause *c) {
-  for (int j = 0; j < c->pos_count; j++)
-    map_remove_clause(&collection->pos_map, &collection->pos_list, c->pos_lits[j], c);
-  for (int j = 0; j < c->neg_count; j++)
-    map_remove_clause(&collection->neg_map, &collection->neg_list, c->neg_lits[j], c);
-  tommy_list_remove_existing(&collection->clauses, &c->list_node);
+  for (int i = 0; i < c->pos_count; i++)
+    map_remove_clause(&collection->pos_map, &collection->pos_list, c->pos_lits[i], c);
+  for (int i = 0; i < c->neg_count; i++)
+    map_remove_clause(&collection->neg_map, &collection->neg_list, c->neg_lits[i], c);
+  index_mapping *result = tommy_hashlin_search(&collection->index_map, im_compare, &c->index, tommy_hash_u64(0, &c->index, sizeof(c->index)));
+  tommy_list_remove_existing(&collection->clauses, &result->list_node);
+  tommy_hashlin_remove_existing(&collection->index_map, &result->hash_node);
 
   // Remove tasks using clause
   // TODO May be inefficient -- check for deleted x and y when dealing with tasks? Or assume deletion is rare
@@ -574,6 +609,35 @@ void remove_clause(kb *collection, clause *c) {
       tommy_array_set(&collection->task_list, i, NULL);
       free(current_task);
     }
+  }
+
+  // Remove clause from the parents list of each of its children
+  for (int i = 0; i < c->children_count; i++) {
+    clause *child = c->children[i];
+    if (child != NULL) {
+      for (int j = 0; j < child->parent_pair_count; j++) {
+        // Parent pairs should be unique; uses this assumption
+        if (child->parents[j].x == c || child->parents[j].y == c) {
+          if (j < child->parent_pair_count-1)
+            child->parents[j] = child->parents[child->parent_pair_count-1];
+          child->parent_pair_count--;
+          if (child->parent_pair_count > 0) {
+            child->parents = realloc(child->parents, sizeof(*child->parents) * child->parent_pair_count);
+          }
+          else {
+            free(child->parents);
+            child->parents = NULL;
+          }
+          break;
+        }
+      }
+    }
+  }
+
+  // Remove clause from the children list of each of its parents
+  for (int i = 0; i < c->parent_pair_count; i++) {
+    remove_child(c->parents[i].x, c);
+    remove_child(c->parents[i].y, c);
   }
 
   free_clause(c);
@@ -586,7 +650,7 @@ void tasks_from_clause(kb *collection, clause *c, int process_negatives) {
   // Iterate positive literals of clauses and match against negative literals of collection
   for (int j = 0; j < c->pos_count; j++) {
     char *name = name_with_arity(c->pos_lits[j]->name, c->pos_lits[j]->term_count);
-    map_entry *result = tommy_hashlin_search(&collection->neg_map, compare, name, tommy_hash_u64(0, name, strlen(name)));
+    predname_mapping *result = tommy_hashlin_search(&collection->neg_map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
     // If a negative literal is found to match a positive literal, add tasks
     // New tasks are from Cartesian product of result's clauses with clauses' ith
     if (result != NULL) {
@@ -612,7 +676,7 @@ void tasks_from_clause(kb *collection, clause *c, int process_negatives) {
   if (process_negatives) {
     for (int j = 0; j < c->neg_count; j++) {
       char *name = name_with_arity(c->neg_lits[j]->name, c->neg_lits[j]->term_count);
-      map_entry *result = tommy_hashlin_search(&collection->pos_map, compare, name, tommy_hash_u64(0, name, strlen(name)));
+      predname_mapping *result = tommy_hashlin_search(&collection->pos_map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
       // If a positive literal is found to match a negative literal, add tasks
       // New tasks are from Cartesian product of result's clauses with clauses' ith
       if (result != NULL) {
@@ -663,10 +727,12 @@ int delete_formula(kb *collection, char *string) {
 
     // Process and remove each clause
     for (tommy_size_t i = 0; i < tommy_array_size(&clauses); i++) {
-      clause *c = duplicate_check(collection, tommy_array_get(&clauses, i));
+      clause *curr = tommy_array_get(&clauses, i);
+      clause *c = duplicate_check(collection, curr);
       if (c != NULL) {
         remove_clause(collection, c);
       }
+      free_clause(curr);
     }
     tommy_array_done(&clauses);
 
@@ -764,7 +830,7 @@ void forward_chain(kb *collection) {
     tommy_array new_clauses;
     tommy_array_init(&new_clauses);
 
-    now_str = now(step);
+    now_str = now(step++);
     assert_formula(collection, now_str);
     if (prev_str != NULL) {
       delete_formula(collection, prev_str);
@@ -811,9 +877,6 @@ void forward_chain(kb *collection) {
     tommy_array_init(&collection->task_list);
 
     if (tommy_array_size(&new_clauses) > 0) {
-      printf("Step %d:\n", step);
-      step++;
-
       // Get new tasks before adding new clauses into collection
       for (tommy_size_t i = 0; i < tommy_array_size(&new_clauses); i++) {
         clause *c = tommy_array_get(&new_clauses, i);
@@ -829,8 +892,6 @@ void forward_chain(kb *collection) {
         clause *c = tommy_array_get(&new_clauses, i);
         clause *dupe = duplicate_check(collection, c);
         if (dupe == NULL) {
-          // TODO: Check if parents are duplicate
-
           // Update child info for parents of new clause
           clause *parent1 = c->parents[0].x;
           parent1->children_count++;

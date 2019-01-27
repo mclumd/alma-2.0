@@ -542,6 +542,7 @@ static void alma_print_rec(alma_node *node, int indent) {
       case AND:
         op = "AND"; break;
       case IF:
+      default:
         op = "IF"; break;
     }
 
