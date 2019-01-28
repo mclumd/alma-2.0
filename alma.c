@@ -28,7 +28,11 @@ int main(int argc, char **argv) {
 
     kb *alma_kb;
     kb_init(formulas, formula_count, &alma_kb);
-    assert_formula(alma_kb, "now(1).");
+    tommy_array now1;
+    tommy_array_init(&now1);
+    assert_formula("now(1).", &now1);
+    add_clause(alma_kb, tommy_array_get(&now1, 0));
+    tommy_array_done(&now1);
     kb_print(alma_kb);
 
     forward_chain(alma_kb);

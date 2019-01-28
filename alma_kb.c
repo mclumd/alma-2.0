@@ -153,33 +153,14 @@ static void free_clause(clause *c) {
   free(c);
 }
 
-// Flattens trees, adds to collec, generates tasks
+// Flattens trees into set of clauses (tommy_array must be initialized prior)
 // trees argument freed here
-static void nodes_to_collection(alma_node *trees, int num_trees, kb *collec) {
-  // Flatten trees into clause list
-  tommy_array clauses;
-  tommy_array_init(&clauses);
+static void nodes_to_clauses(alma_node *trees, int num_trees, tommy_array *clauses) {
   for (int i = 0; i < num_trees; i++) {
-    flatten_node(trees+i, &clauses);
+    flatten_node(trees+i, clauses);
     free_alma_tree(trees+i);
   }
   free(trees);
-
-  // Insert into KB if not duplicate
-  tommy_array duplicates;
-  tommy_array_init(&duplicates);
-  for (tommy_size_t i = 0; i < tommy_array_size(&clauses); i++) {
-    clause *c = tommy_array_get(&clauses, i);
-    if (duplicate_check(collec, c) == NULL)
-      add_clause(collec, c);
-    else
-      tommy_array_insert(&duplicates, c);
-  }
-  tommy_array_done(&clauses);
-  // Free unused duplicate clauses
-  for (tommy_size_t i = 0; i < tommy_array_size(&duplicates); i++)
-    free_clause(tommy_array_get(&duplicates, i));
-  tommy_array_done(&duplicates);
 }
 
 // Caller will need to free collection
@@ -196,7 +177,25 @@ void kb_init(alma_node *trees, int num_trees, kb **collection) {
   tommy_array_init(&collec->task_list);
   collec->task_count = 0;
 
-  nodes_to_collection(trees, num_trees, collec);
+  tommy_array clauses;
+  tommy_array_init(&clauses);
+  nodes_to_clauses(trees, num_trees, &clauses);
+
+  // Insert into KB if not duplicate
+  tommy_array duplicates;
+  tommy_array_init(&duplicates);
+  for (tommy_size_t i = 0; i < tommy_array_size(&clauses); i++) {
+    clause *c = tommy_array_get(&clauses, i);
+    if (duplicate_check(collec, c) == NULL)
+      add_clause(collec, c);
+    else
+      tommy_array_insert(&duplicates, c);
+  }
+  tommy_array_done(&clauses);
+  // Free unused duplicate clauses
+  for (tommy_size_t i = 0; i < tommy_array_size(&duplicates); i++)
+    free_clause(tommy_array_get(&duplicates, i));
+  tommy_array_done(&duplicates);
 
   // Generate starting tasks
   tommy_node* i = tommy_list_head(&collec->clauses);
@@ -600,6 +599,7 @@ void remove_clause(kb *collection, clause *c) {
   index_mapping *result = tommy_hashlin_search(&collection->index_map, im_compare, &c->index, tommy_hash_u64(0, &c->index, sizeof(c->index)));
   tommy_list_remove_existing(&collection->clauses, &result->list_node);
   tommy_hashlin_remove_existing(&collection->index_map, &result->hash_node);
+  free(result);
 
   // Remove tasks using clause
   // TODO May be inefficient -- check for deleted x and y when dealing with tasks? Or assume deletion is rare
@@ -701,12 +701,12 @@ void tasks_from_clause(kb *collection, clause *c, int process_negatives) {
 }
 
 // Returns boolean based on success of string parse
-int assert_formula(kb *collection, char *string) {
+// If parses successfully, adds to tommy_array arg -- which caller must allocate/init
+int assert_formula(char *string, tommy_array *clauses) {
   alma_node *formulas;
   int formula_count;
   if (formulas_from_source(string, 0, &formula_count, &formulas)) {
-    nodes_to_collection(formulas, formula_count, collection);
-    // TODO: Generate tasks for
+    nodes_to_clauses(formulas, formula_count, clauses);
     return 1;
   }
   return 0;
@@ -739,15 +739,6 @@ int delete_formula(kb *collection, char *string) {
     return 1;
   }
   return 0;
-}
-
-static char* now(int step) {
-  int step_len = snprintf(NULL, 0, "%d", step);
-  char *str = malloc(4 + step_len+1 + 2);
-  strcpy(str, "now(");
-  snprintf(str+4, step_len+1, "%d", step);
-  strcpy(str+4+step_len, ").");
-  return str;
 }
 
 // Given an MGU, substitute on literals other than pair unified and make a single resulting clause
@@ -821,17 +812,40 @@ void resolve(task *t, binding_list *mgu, clause *result) {
   result->tag = NONE; // TODO: Deal with tags properly for fif/bif cases
 }
 
+static char* now(long t) {
+  int len = snprintf(NULL, 0, "%ld", t);
+  char *str = malloc(4 + len+1 + 2);
+  strcpy(str, "now(");
+  snprintf(str+4, len+1, "%ld", t);
+  strcpy(str+4+len, ").");
+  return str;
+}
+
+static char* long_to_str(long x) {
+  int length = snprintf(NULL, 0, "%ld", x);
+  char* str = malloc(length+1);
+  snprintf(str, length+1, "%ld", x);
+  return str;
+}
+
+static void add_child(clause *parent, clause *child) {
+  parent->children_count++;
+  parent->children = realloc(parent->children, sizeof(*parent->children) * parent->children_count);
+  parent->children[parent->children_count-1] = child;
+}
+
 void forward_chain(kb *collection) {
   int chain = 1;
-  int step = 2;
+  long time = 1;
   char *prev_str = NULL;
   char *now_str = NULL;
   while(chain) {
+    time++;
     tommy_array new_clauses;
     tommy_array_init(&new_clauses);
 
-    now_str = now(step++);
-    assert_formula(collection, now_str);
+    now_str = now(time);
+    assert_formula(now_str, &new_clauses);
     if (prev_str != NULL) {
       delete_formula(collection, prev_str);
       free(prev_str);
@@ -863,8 +877,30 @@ void forward_chain(kb *collection) {
             tommy_array_insert(&new_clauses, res_result);
           }
           else {
-            // TODO: Contradiction detection when you have empty resolution result!
             free(res_result);
+
+            // Empty resolution result indicates a contradiction between clauses
+            char *arg1 = long_to_str(current_task->x->index);
+            char *arg2 = long_to_str(current_task->y->index);
+            char *time_str = long_to_str(time);
+
+            char *contra_str = malloc(strlen(arg1) + strlen(arg2) + strlen(time_str) + 12);
+            strcpy(contra_str, "contra(");
+            int loc = 7;
+            strcpy(contra_str+loc, arg1);
+            loc += strlen(arg1);
+            free(arg1);
+            contra_str[loc++] = ',';
+            strcpy(contra_str+loc, arg2);
+            loc += strlen(arg2);
+            free(arg2);
+            contra_str[loc++] = ',';
+            strcpy(contra_str+loc, time_str);
+            loc += strlen(time_str);
+            strcpy(contra_str+loc, ").");
+
+            assert_formula(contra_str, &new_clauses);
+            // TODO, distrust recursively
           }
         }
         cleanup_bindings(theta);
@@ -876,7 +912,8 @@ void forward_chain(kb *collection) {
     tommy_array_done(&collection->task_list);
     tommy_array_init(&collection->task_list);
 
-    if (tommy_array_size(&new_clauses) > 0) {
+    // Time always advances; continues while other clauses are added
+    if (tommy_array_size(&new_clauses) > 1) {
       // Get new tasks before adding new clauses into collection
       for (tommy_size_t i = 0; i < tommy_array_size(&new_clauses); i++) {
         clause *c = tommy_array_get(&new_clauses, i);
@@ -893,14 +930,10 @@ void forward_chain(kb *collection) {
         clause *dupe = duplicate_check(collection, c);
         if (dupe == NULL) {
           // Update child info for parents of new clause
-          clause *parent1 = c->parents[0].x;
-          parent1->children_count++;
-          parent1->children = realloc(parent1->children, sizeof(*parent1->children) * parent1->children_count);
-          parent1->children[parent1->children_count-1] = c;
-          clause *parent2 = c->parents[0].y;
-          parent2->children_count++;
-          parent2->children = realloc(parent2->children, sizeof(*parent2->children) * parent2->children_count);
-          parent2->children[parent2->children_count-1] = c;
+          if (c->parents != NULL) {
+            add_child(c->parents[0].x, c);
+            add_child(c->parents[0].y, c);
+          }
 
           add_clause(collection, c);
         }
@@ -910,6 +943,28 @@ void forward_chain(kb *collection) {
           dupe->parents = realloc(dupe->parents, sizeof(*dupe->parents) * (dupe->parent_pair_count + c->parent_pair_count));
           memcpy(dupe->parents + dupe->parent_pair_count, c->parents, sizeof(*c->parents) * c->parent_pair_count);
           dupe->parent_pair_count += c->parent_pair_count;
+
+          // Parents of c gain new child in dupe
+          clause *parent1 = c->parents[0].x;
+          int insert = 1;
+          for (int j = 0; j < parent1->children_count; j++) {
+            if (parent1->children[j] == dupe) {
+              insert = 0;
+              break;
+            }
+          }
+          if (insert)
+            add_child(parent1, dupe);
+          clause *parent2 = c->parents[0].y;
+          insert = 1;
+          for (int j = 0; j < parent2->children_count; j++) {
+            if (parent2->children[j] == dupe) {
+              insert = 0;
+              break;
+            }
+          }
+          if (insert)
+            add_child(parent2, dupe);
         }
       }
 

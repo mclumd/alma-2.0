@@ -78,7 +78,8 @@ clause* duplicate_check(kb *collection, clause *c);
 void add_clause(kb *collection, clause *curr);
 void remove_clause(kb *collection, clause *c);
 void tasks_from_clause(kb *collection, clause *c, int process_negatives);
-int assert_formula(kb *collection, char *string);
+int assert_formula(char *string, tommy_array *clauses);
+int delete_formula(kb *collection, char *string);
 void resolve(task *t, binding_list *mgu, clause *result);
 void forward_chain(kb *collection);
 
