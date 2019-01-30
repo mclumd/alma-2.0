@@ -45,7 +45,7 @@ typedef struct kb {
   tommy_array task_list; // Stores tasks to attempt resolution on next step
   long long task_count;
 
-  tommy_hashlin distrusted;
+  tommy_hashlin distrusted; // Stores distrusted items by clause index
 } kb;
 
 typedef struct index_mapping {
