@@ -44,6 +44,8 @@ typedef struct kb {
 
   tommy_array task_list; // Stores tasks to attempt resolution on next step
   long long task_count;
+
+  tommy_hashlin distrusted;
 } kb;
 
 typedef struct index_mapping {
@@ -62,6 +64,13 @@ typedef struct predname_mapping {
   tommy_node hash_node; // Node used for storage in tommy_hashlin
   tommy_node list_node; // Node used for storage in tommy_list
 } predname_mapping;
+
+// Used to track entries in distrusted map
+typedef struct distrust_mapping {
+  long key;
+  clause *value;
+  tommy_node node;
+} distrust_mapping;
 
 typedef struct task {
   clause *x;

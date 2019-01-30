@@ -175,6 +175,7 @@ void kb_init(alma_node *trees, int num_trees, kb **collection) {
   tommy_hashlin_init(&collec->neg_map);
   tommy_list_init(&collec->neg_list);
   tommy_array_init(&collec->task_list);
+  tommy_hashlin_init(&collec->distrusted);
   collec->task_count = 0;
 
   tommy_array clauses;
@@ -234,6 +235,9 @@ void free_kb(kb *collection) {
     free(tommy_array_get(&collection->task_list, i));
   }
   tommy_array_done(&collection->task_list);
+
+  tommy_hashlin_foreach(&collection->distrusted, free);
+  tommy_hashlin_done(&collection->distrusted);
 
   free(collection);
 }
@@ -834,6 +838,43 @@ static void add_child(clause *parent, clause *child) {
   parent->children[parent->children_count-1] = child;
 }
 
+static void distrust_recursive(kb *collection, clause *c, long time, tommy_array *new_clauses) {
+  // Add C to distrusted set
+  distrust_mapping *d = malloc(sizeof(*d));
+  d->key = c->index;
+  d->value = c;
+  tommy_hashlin_insert(&collection->distrusted, &d->node, d, tommy_hash_u64(0, &d->key, sizeof(d->key)));
+
+  // Assert distrusted formula
+  char *index = long_to_str(c->index);
+  char *time_str = long_to_str(time);
+  char *distrust_str = malloc(strlen(index) + strlen(time_str) + 15);
+  strcpy(distrust_str, "distrusted(");
+  int loc = 11;
+  strcpy(distrust_str+loc, index);
+  loc += strlen(index);
+  free(index);
+  distrust_str[loc++] = ',';
+  strcpy(distrust_str+loc, time_str);
+  loc += strlen(time_str);
+  free(time_str);
+  strcpy(distrust_str, ").");
+  assert_formula(distrust_str, new_clauses);
+  free(distrust_str);
+
+  // Unindex c from pos_map/list, neg_map/list to prevent use in inference
+  // TODO
+
+  if (c->children != NULL) {
+    for (int i = 0; i < c->children_count; i++) {
+      clause *child = c->children[i];
+      if (tommy_hashlin_search(&collection->distrusted, /* TODO, compare func */, child->index, tommy_hash_u64(0, &child->index, sizeof(child->index))) {
+        distrust_recursive(collection, child, time, new_clauses);
+      }
+    }
+  }
+}
+
 void forward_chain(kb *collection) {
   int chain = 1;
   long time = 1;
@@ -897,10 +938,14 @@ void forward_chain(kb *collection) {
             contra_str[loc++] = ',';
             strcpy(contra_str+loc, time_str);
             loc += strlen(time_str);
+            free(time_str);
             strcpy(contra_str+loc, ").");
 
+            // Assert contra and distrusted
             assert_formula(contra_str, &new_clauses);
-            // TODO, distrust recursively
+            free(contra_str);
+            distrust_recursive(collection, current_task->x, time, &new_clauses);
+            distrust_recursive(collection, current_task->y, time, &new_clauses);
           }
         }
         cleanup_bindings(theta);
@@ -939,12 +984,14 @@ void forward_chain(kb *collection) {
         }
         else {
           tommy_array_insert(&duplicates, c);
+
+          // A duplicate clause derivation should be acknowledged by adding extra parents to the clause it duplicates
           // Copy parents of c to dupe
           dupe->parents = realloc(dupe->parents, sizeof(*dupe->parents) * (dupe->parent_pair_count + c->parent_pair_count));
           memcpy(dupe->parents + dupe->parent_pair_count, c->parents, sizeof(*c->parents) * c->parent_pair_count);
           dupe->parent_pair_count += c->parent_pair_count;
 
-          // Parents of c gain new child in dupe
+          // Parents of c also gain new child in dupe
           clause *parent1 = c->parents[0].x;
           int insert = 1;
           for (int j = 0; j < parent1->children_count; j++) {
@@ -992,6 +1039,7 @@ void forward_chain(kb *collection) {
     else {
       chain = 0;
       free(now_str);
+      free_clause(tommy_array_get(&new_clauses, 0));
       printf("Idling...\n");
     }
     tommy_array_done(&new_clauses);
