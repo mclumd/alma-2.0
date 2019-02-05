@@ -267,7 +267,10 @@ static void clause_print(clause *c, int print_relatives) {
         printf(" /\\");
       printf(" ");
     }
-    printf("---> ");
+    if (c->tag == FIF)
+      printf("-f-> ");
+    else
+      printf("---> ");
     for (int i = 0; i < c->pos_count; i++) {
       alma_function_print(c->pos_lits[i]);
       if (i < c->pos_count-1)
@@ -279,11 +282,7 @@ static void clause_print(clause *c, int print_relatives) {
     if (c->parents != NULL) {
         printf("parents: ");
       for (int i = 0; i < c->parent_pair_count; i++) {
-        printf("[");
-        clause_print(c->parents[i].x, 0);
-        printf("; ");
-        clause_print(c->parents[i].y, 0);
-        printf("]");
+        printf("[%ld, %ld]", c->parents[i].x->index, c->parents[i].y->index);
         if (i < c->parent_pair_count-1)
           printf(", ");
       }
@@ -293,7 +292,7 @@ static void clause_print(clause *c, int print_relatives) {
     if (c->children != NULL) {
       printf("children: ");
       for (int i = 0; i < c->children_count; i++) {
-        clause_print(c->children[i], 0);
+        printf("%ld",c->children[i]->index);
         if (i < c->children_count-1)
           printf(", ");
       }
@@ -851,7 +850,7 @@ static void add_child(clause *parent, clause *child) {
 
 
 // Compare function to be used by tommy_hashlin_search for distrust_mapping
-// Compares long arg to key of index_mapping
+// Compares long arg to key of distrust_mapping
 static int dm_compare(const void *arg, const void *obj) {
   return *(const long*)arg - ((const distrust_mapping*)obj)->key;
 }
