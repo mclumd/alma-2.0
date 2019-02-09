@@ -4,9 +4,8 @@
 
 static long next_index;
 
-// Assumes c is allocated by caller
-// TODO: Case for something other than OR/NOT/pred appearing?
 static void make_clause(alma_node *node, clause *c) {
+  // Note: predicate null assignment necessary for freeing of notes without losing predicates
   if (node != NULL) {
     if (node->type == FOL) {
       // Neg lit case for NOT
@@ -106,8 +105,35 @@ static void set_variable_ids(clause *c) {
   tommy_array_done(&var_names);
 }
 
+static void init_ordering_rec(fif_info *info, alma_node *node, int *next, int *pos, int *neg) {
+  if (node->type == FOL) {
+    // Neg lit case for NOT
+    if (node->fol->op == NOT) {
+      info->ordering[(*next)++] = (*neg)--;
+    }
+    // Case of node is OR
+    else {
+      init_ordering_rec(info, node->fol->arg1, next, pos, neg);
+      init_ordering_rec(info, node->fol->arg2, next, pos, neg);
+    }
+  }
+  // Otherwise, pos lit
+  else {
+    info->ordering[(*next)++] = (*pos)++;
+  }
+}
+
+// Given a node for a fif formula, record inorder traversal ofpositive and negative literals
+static void init_ordering(fif_info *info, alma_node *node) {
+  int next = 0;
+  int pos = 0;
+  int neg = -1;
+  // Fif node must necessarily at top level have an OR -- ignore second branch of with conclusion
+  init_ordering_rec(info, node->fol->arg1, &next, &pos, &neg);
+}
+
 // Comparison used by qsort of clauses -- orders by increasing function name and increasing arity
-int function_compare (const void *p1, const void *p2) {
+static int function_compare (const void *p1, const void *p2) {
   alma_function **f1 = (alma_function **)p1;
   alma_function **f2 = (alma_function **)p2;
   int compare = strcmp((*f1)->name, (*f2)->name);
@@ -132,10 +158,25 @@ static void flatten_node(alma_node *node, tommy_array *clauses) {
     c->parents = NULL;
     c->children = NULL;
     c->tag = NONE;
+    c->fif = NULL;
     make_clause(node, c);
     set_variable_ids(c);
-    qsort(c->pos_lits, c->pos_count, sizeof(*c->pos_lits), function_compare);
-    qsort(c->neg_lits, c->neg_count, sizeof(*c->neg_lits), function_compare);
+
+    // If clause is fif, initialize additional info
+    if (c->tag == FIF) {
+      c->fif = malloc(sizeof(*c->fif));
+      c->fif->premise_count = c->pos_count + c->neg_count - 1;
+      c->fif->ordering = malloc(sizeof(*c->fif->ordering) * c->fif->premise_count);
+      init_ordering(c->fif, node);
+      c->fif->conclusion = c->pos_lits[c->pos_count-1]; // Conclusion will always be last pos_lit
+    }
+
+    // Non-fif clauses can be sorted be literal for ease of resolution
+    // Fif clauses must retain original literal order to not affect their evaluation
+    if (c->tag != FIF) {
+      qsort(c->pos_lits, c->pos_count, sizeof(*c->pos_lits), function_compare);
+      qsort(c->neg_lits, c->neg_count, sizeof(*c->neg_lits), function_compare);
+    }
 
     tommy_array_insert(clauses, c);
   }
@@ -150,6 +191,12 @@ static void free_clause(clause *c) {
   free(c->neg_lits);
   free(c->parents);
   free(c->children);
+
+  if (c->tag == FIF) {
+    free(c->fif->ordering);
+    free(c->fif);
+  }
+
   free(c);
 }
 
@@ -174,9 +221,10 @@ void kb_init(alma_node *trees, int num_trees, kb **collection) {
   tommy_list_init(&collec->pos_list);
   tommy_hashlin_init(&collec->neg_map);
   tommy_list_init(&collec->neg_list);
-  tommy_array_init(&collec->task_list);
+  tommy_hashlin_init(&collec->fif_map);
+  tommy_array_init(&collec->res_task_list);
+  collec->res_task_count = 0;
   tommy_hashlin_init(&collec->distrusted);
-  collec->task_count = 0;
 
   tommy_array clauses;
   tommy_array_init(&clauses);
@@ -198,10 +246,10 @@ void kb_init(alma_node *trees, int num_trees, kb **collection) {
     free_clause(tommy_array_get(&duplicates, i));
   tommy_array_done(&duplicates);
 
-  // Generate starting tasks
+  // Generate starting resolution tasks
   tommy_node* i = tommy_list_head(&collec->clauses);
   while (i) {
-    tasks_from_clause(collec, ((index_mapping *)i->data)->value, 0);
+    res_tasks_from_clause(collec, ((index_mapping *)i->data)->value, 0);
     i = i->next;
   }
 }
@@ -209,6 +257,14 @@ void kb_init(alma_node *trees, int num_trees, kb **collection) {
 static void free_predname_mapping(void *arg) {
   predname_mapping *entry = arg;
   free(entry->predname);
+  free(entry->clauses);
+  // Note: clause entries ARE NOT FREED because they alias the clause objects freed in free_kb
+  free(entry);
+}
+
+static void free_fif_mapping(void *arg) {
+  fif_mapping *entry = arg;
+  free(entry->conclude_name);
   free(entry->clauses);
   // Note: clause entries ARE NOT FREED because they alias the clause objects freed in free_kb
   free(entry);
@@ -230,11 +286,14 @@ void free_kb(kb *collection) {
   tommy_list_foreach(&collection->neg_list, free_predname_mapping);
   tommy_hashlin_done(&collection->neg_map);
 
-  // Task pointers are aliases to those freed from collection->clauses, so only free overall task here
-  for (tommy_size_t i = 0; i < tommy_array_size(&collection->task_list); i++) {
-    free(tommy_array_get(&collection->task_list, i));
+  tommy_hashlin_foreach(&collection->fif_map, free_fif_mapping);
+  tommy_hashlin_done(&collection->fif_map);
+
+  // Res task pointers are aliases to those freed from collection->clauses, so only free overall task here
+  for (tommy_size_t i = 0; i < tommy_array_size(&collection->res_task_list); i++) {
+    free(tommy_array_get(&collection->res_task_list, i));
   }
-  tommy_array_done(&collection->task_list);
+  tommy_array_done(&collection->res_task_list);
 
   tommy_hashlin_foreach(&collection->distrusted, free);
   tommy_hashlin_done(&collection->distrusted);
@@ -243,73 +302,92 @@ void free_kb(kb *collection) {
 }
 
 
-static void clause_print(clause *c, int print_relatives) {
-  if (c->pos_count == 0) {
-    for (int i = 0; i < c->neg_count; i++) {
-      printf("not(");
-      alma_function_print(c->neg_lits[i]);
-      printf(")");
-      if (i < c->neg_count-1)
-        printf(" \\/ ");
-    }
-  }
-  else if (c->neg_count == 0) {
-    for (int i = 0; i < c->pos_count; i++) {
-      alma_function_print(c->pos_lits[i]);
-      if (i < c->pos_count-1)
-        printf(" \\/ ");
-    }
-  }
-  else {
-    for (int i = 0; i < c->neg_count; i++) {
-      alma_function_print(c->neg_lits[i]);
-      if (i < c->neg_count-1)
+static void clause_print(clause *c) {
+  // Print fif in original format
+  if (c->tag == FIF) {
+    for (int i = 0; i < c->fif->premise_count; i++) {
+      int next = c->fif->ordering[i];
+      if (next < 0) {
+        alma_function_print(c->neg_lits[-next - 1]);
+      }
+      else {
+        printf("not(");
+        alma_function_print(c->pos_lits[next]);
+        printf(")");
+      }
+      if (i < c->fif->premise_count-1)
         printf(" /\\");
       printf(" ");
     }
-    if (c->tag == FIF)
-      printf("-f-> ");
-    else
-      printf("---> ");
-    for (int i = 0; i < c->pos_count; i++) {
-      alma_function_print(c->pos_lits[i]);
-      if (i < c->pos_count-1)
-        printf(" \\/ ");
-    }
+    printf("-f-> ");
+    alma_function_print(c->fif->conclusion);
   }
-  if (print_relatives && (c->parents != NULL || c->children != NULL)) {
-    printf(" (");
-    if (c->parents != NULL) {
-        printf("parents: ");
-      for (int i = 0; i < c->parent_pair_count; i++) {
-        printf("[%ld, %ld]", c->parents[i].x->index, c->parents[i].y->index);
-        if (i < c->parent_pair_count-1)
-          printf(", ");
-      }
-      if (c->children != NULL)
-        printf(", ");
-    }
-    if (c->children != NULL) {
-      printf("children: ");
-      for (int i = 0; i < c->children_count; i++) {
-        printf("%ld",c->children[i]->index);
-        if (i < c->children_count-1)
-          printf(", ");
+  // Non-fif case
+  else {
+    if (c->pos_count == 0) {
+      for (int i = 0; i < c->neg_count; i++) {
+        printf("not(");
+        alma_function_print(c->neg_lits[i]);
+        printf(")");
+        if (i < c->neg_count-1)
+          printf(" \\/ ");
       }
     }
-    printf(")");
+    else if (c->neg_count == 0) {
+      for (int i = 0; i < c->pos_count; i++) {
+        alma_function_print(c->pos_lits[i]);
+        if (i < c->pos_count-1)
+          printf(" \\/ ");
+      }
+    }
+    else {
+      for (int i = 0; i < c->neg_count; i++) {
+        alma_function_print(c->neg_lits[i]);
+        if (i < c->neg_count-1)
+          printf(" /\\");
+        printf(" ");
+      }
+      printf("---> ");
+      for (int i = 0; i < c->pos_count; i++) {
+        alma_function_print(c->pos_lits[i]);
+        if (i < c->pos_count-1)
+          printf(" \\/ ");
+      }
+    }
+    if (c->parents != NULL || c->children != NULL) {
+      printf(" (");
+      if (c->parents != NULL) {
+          printf("parents: ");
+        for (int i = 0; i < c->parent_pair_count; i++) {
+          printf("[%ld, %ld]", c->parents[i].x->index, c->parents[i].y->index);
+          if (i < c->parent_pair_count-1)
+            printf(", ");
+        }
+        if (c->children != NULL)
+          printf(", ");
+      }
+      if (c->children != NULL) {
+        printf("children: ");
+        for (int i = 0; i < c->children_count; i++) {
+          printf("%ld",c->children[i]->index);
+          if (i < c->children_count-1)
+            printf(", ");
+        }
+      }
+      printf(")");
+    }
   }
 }
 
-/*static void task_print(task *t) {
+/*static void res_task_print(res_task *t) {
   printf("Task pos literal: ");
   alma_function_print(t->pos);
   printf("\nTask neg literal: ");
   alma_function_print(t->neg);
   printf("\nClause with pos literal:\n");
-  clause_print(t->x, 0);
+  clause_print(t->x);
   printf("\nClause with neg literal:\n");
-  clause_print(t->y, 0);
+  clause_print(t->y);
   printf("\n\n");
 }*/
 
@@ -318,7 +396,7 @@ static void clause_print(clause *c, int print_relatives) {
   predname_mapping *entry = arg;
   printf("Map entry%s: %s\n", str, entry->predname);
   for (int i = 0; i < entry->num_clauses; i++) {
-    clause_print(entry->clauses[i], 0);
+    clause_print(entry->clauses[i]);
     printf("\n\n");
   }
   printf("\n");
@@ -329,7 +407,7 @@ void kb_print(kb *collection) {
   while (i) {
     index_mapping *data = i->data;
     printf("%ld: ", data->key);
-    clause_print(data->value, 1);
+    clause_print(data->value);
     printf("\n");
     i = i->next;
   }
@@ -338,8 +416,8 @@ void kb_print(kb *collection) {
   //tommy_list_foreach_arg(&collection->pos_list, print_predname_mapping, " pos");
   //tommy_list_foreach_arg(&collection->neg_list, print_predname_mapping, " neg");
 
-  /*for (tommy_size_t i = 0; i < tommy_array_size(&collection->task_list); i++) {
-    task_print(tommy_array_get(&collection->task_list, i));
+  /*for (tommy_size_t i = 0; i < tommy_array_size(&collection->res_task_list); i++) {
+    res_task_print(tommy_array_get(&collection->res_task_list, i));
   }*/
 }
 
@@ -353,6 +431,12 @@ static int im_compare(const void *arg, const void *obj) {
 // Compares string arg to predname of predname_mapping
 static int pm_compare(const void *arg, const void *obj) {
   return strcmp((const char*)arg, ((const predname_mapping*)obj)->predname);
+}
+
+// Compare function to be used by tommy_hashlin_search for fif_mapping
+// compares string arg to conclude_name of fif_mapping
+static int fifm_compare(const void *arg, const void*obj) {
+  return strcmp((const char*)arg, ((const fif_mapping*)obj)->conclude_name);
 }
 
 // Given "name" and integer arity, returns "name/arity"
@@ -566,26 +650,48 @@ clause* duplicate_check(kb *collection, clause *c) {
 void add_clause(kb *collection, clause *c) {
   // TODO: call to duplicate literal filtering (add function and such)
 
-  // Indexes clause into hashaps of KB collection
-  for (int j = 0; j < c->pos_count; j++)
-    map_add_clause(&collection->pos_map, &collection->pos_list, c->pos_lits[j], c);
-  for (int j = 0; j < c->neg_count; j++)
-    map_add_clause(&collection->neg_map, &collection->neg_list, c->neg_lits[j], c);
+  // Add clause to overall clause list and index map
+  index_mapping *ientry = malloc(sizeof(*ientry));
+  c->index = ientry->key = next_index++;
+  ientry->value = c;
+  tommy_list_insert_tail(&collection->clauses, &ientry->list_node, ientry);
+  tommy_hashlin_insert(&collection->index_map, &ientry->hash_node, ientry, tommy_hash_u64(0, &ientry->key, sizeof(ientry->key)));
 
-  index_mapping *entry = malloc(sizeof(*entry));
-  c->index = entry->key = next_index++;
-  entry->value = c;
-  tommy_list_insert_tail(&collection->clauses, &entry->list_node, entry);
-  tommy_hashlin_insert(&collection->index_map, &entry->hash_node, entry, tommy_hash_u64(0, &entry->key, sizeof(entry->key)));
+  if (c->tag == FIF) {
+    char *name = c->fif->conclusion->name;
+    // Index into fif hashmap
+    fif_mapping *result = tommy_hashlin_search(&collection->fif_map, fifm_compare, name, tommy_hash_u64(0, name, strlen(name)));
+    if (result != NULL) {
+      result->num_clauses++;
+      result->clauses = realloc(result->clauses, sizeof(*result->clauses)*result->num_clauses);
+      result->clauses[result->num_clauses-1] = c;
+    }
+    else {
+      fif_mapping *entry = malloc(sizeof(*entry));
+      entry->conclude_name = malloc(strlen(name)+1);
+      strcpy(entry->conclude_name, name);
+      entry->num_clauses = 1;
+      entry->clauses = malloc(sizeof(*entry->clauses));
+      entry->clauses[0] = c;
+      tommy_hashlin_insert(&collection->fif_map, &entry->node, entry, tommy_hash_u64(0, entry->conclude_name, strlen(entry->conclude_name)));
+    }
+  }
+  else {
+    // If non-fif, indexes clause into pos/neg hashmaps/lists
+    for (int j = 0; j < c->pos_count; j++)
+      map_add_clause(&collection->pos_map, &collection->pos_list, c->pos_lits[j], c);
+    for (int j = 0; j < c->neg_count; j++)
+      map_add_clause(&collection->neg_map, &collection->neg_list, c->neg_lits[j], c);
+  }
 }
 
-// Remove tasks using clause
+// Remove res tasks using clause
 // TODO May be inefficient -- check for deleted x and y when dealing with tasks? Or assume deletion is rare
-static void remove_tasks(kb *collection, clause *c) {
-  for (tommy_size_t i = 0; i < tommy_array_size(&collection->task_list); i++) {
-    task *current_task = tommy_array_get(&collection->task_list, i);
+static void remove_res_tasks(kb *collection, clause *c) {
+  for (tommy_size_t i = 0; i < tommy_array_size(&collection->res_task_list); i++) {
+    res_task *current_task = tommy_array_get(&collection->res_task_list, i);
     if (current_task != NULL && (current_task->x == c || current_task->y == c)) {
-      tommy_array_set(&collection->task_list, i, NULL);
+      tommy_array_set(&collection->res_task_list, i, NULL);
       free(current_task);
     }
   }
@@ -623,7 +729,7 @@ void remove_clause(kb *collection, clause *c) {
   tommy_hashlin_remove_existing(&collection->index_map, &result->hash_node);
   free(result);
 
-  remove_tasks(collection, c);
+  remove_res_tasks(collection, c);
 
   // Remove clause from the parents list of each of its children
   for (int i = 0; i < c->children_count; i++) {
@@ -657,10 +763,10 @@ void remove_clause(kb *collection, clause *c) {
   free_clause(c);
 }
 
-// Finds new tasks based on matching pos/neg predicate pairs, where one is from the KB and the other from clauses
-// Tasks are added into the task_list of collection
+// Finds new res tasks based on matching pos/neg predicate pairs, where one is from the KB and the other from clauses
+// Tasks are added into the res_task_list of collection
 // TODO: Refactor to remove code duplication
-void tasks_from_clause(kb *collection, clause *c, int process_negatives) {
+void res_tasks_from_clause(kb *collection, clause *c, int process_negatives) {
   // Iterate positive literals of clauses and match against negative literals of collection
   for (int j = 0; j < c->pos_count; j++) {
     char *name = name_with_arity(c->pos_lits[j]->name, c->pos_lits[j]->term_count);
@@ -672,13 +778,13 @@ void tasks_from_clause(kb *collection, clause *c, int process_negatives) {
         if (c != result->clauses[k]) {
           alma_function *lit = literal_by_name(result->clauses[k], c->pos_lits[j]->name, 0);
           if (lit != NULL) {
-            task *t = malloc(sizeof(*t));
+            res_task *t = malloc(sizeof(*t));
             t->x = c;
             t->pos = c->pos_lits[j];
             t->y = result->clauses[k];
             t->neg = lit;
-            tommy_array_insert(&collection->task_list, t);
-            collection->task_count++;
+            tommy_array_insert(&collection->res_task_list, t);
+            collection->res_task_count++;
           }
         }
       }
@@ -698,13 +804,13 @@ void tasks_from_clause(kb *collection, clause *c, int process_negatives) {
           if (c != result->clauses[k]) {
             alma_function *lit = literal_by_name(result->clauses[k], c->neg_lits[j]->name, 1);
             if (lit != NULL) {
-              task *t = malloc(sizeof(*t));
+              res_task *t = malloc(sizeof(*t));
               t->x = result->clauses[k];
               t->pos = lit;
               t->y = c;
               t->neg = c->neg_lits[j];
-              tommy_array_insert(&collection->task_list, t);
-              collection->task_count++;
+              tommy_array_insert(&collection->res_task_list, t);
+              collection->res_task_count++;
             }
           }
         }
@@ -756,8 +862,7 @@ int delete_formula(kb *collection, char *string) {
 }
 
 // Given an MGU, substitute on literals other than pair unified and make a single resulting clause
-// Last argument must be allocated by caller
-void resolve(task *t, binding_list *mgu, clause *result) {
+void resolve(res_task *t, binding_list *mgu, clause *result) {
   //int max_pos = t->x->pos_count + t->y->pos_count - 1;
   //int max_neg = t->x->neg_count + t->y->neg_count - 1;
   result->pos_count = 0;
@@ -823,7 +928,8 @@ void resolve(task *t, binding_list *mgu, clause *result) {
   else {
     result->neg_lits = NULL;
   }
-  result->tag = NONE; // TODO: Deal with tags properly for fif/bif cases
+  result->tag = NONE; // TODO: Deal with tags for bif case
+  result->fif = NULL;
 }
 
 static char* now(long t) {
@@ -919,12 +1025,12 @@ void forward_chain(kb *collection) {
       delete_formula(collection, "now(1).");
     prev_str = now_str;
 
-    for (tommy_size_t i = 0; i < tommy_array_size(&collection->task_list); i++) {
-      task *current_task = tommy_array_get(&collection->task_list, i);
+    for (tommy_size_t i = 0; i < tommy_array_size(&collection->res_task_list); i++) {
+      res_task *current_task = tommy_array_get(&collection->res_task_list, i);
       if (current_task != NULL) {
         // Does not do resolution with a distrusted clause
         if (!is_distrusted(collection, current_task->x->index) && !is_distrusted(collection,  current_task->y->index)) {
-          // Given a task, attempt unification
+          // Given a res_task, attempt unification
           binding_list *theta = malloc(sizeof(*theta));
           if (pred_unify(current_task->pos, current_task->neg, theta)) {
             // If successful, create clause for result of resolution and add to new_clauses
@@ -977,20 +1083,20 @@ void forward_chain(kb *collection) {
           cleanup_bindings(theta);
         }
 
-        collection->task_count--;
+        collection->res_task_count--;
         free(current_task);
       }
     }
-    tommy_array_done(&collection->task_list);
-    tommy_array_init(&collection->task_list);
+    tommy_array_done(&collection->res_task_list);
+    tommy_array_init(&collection->res_task_list);
 
     // Time always advances; continues while other clauses are added
     if (tommy_array_size(&new_clauses) > 1) {
-      // Get new tasks before adding new clauses into collection
+      // Get new res_tasks before adding new clauses into collection
       for (tommy_size_t i = 0; i < tommy_array_size(&new_clauses); i++) {
         clause *c = tommy_array_get(&new_clauses, i);
         if (duplicate_check(collection, c) == NULL)
-          tasks_from_clause(collection, c, 1);
+          res_tasks_from_clause(collection, c, 1);
       }
 
       tommy_array duplicates;
@@ -1052,13 +1158,13 @@ void forward_chain(kb *collection) {
       }
 
       // Replace duplicate entries in task list with null
-      for (tommy_size_t i = 0; i < tommy_array_size(&collection->task_list); i++) {
-        task *t = tommy_array_get(&collection->task_list, i);
+      for (tommy_size_t i = 0; i < tommy_array_size(&collection->res_task_list); i++) {
+        res_task *t = tommy_array_get(&collection->res_task_list, i);
         // TODO: Switch to a more efficient lookup in duplicates
         for (tommy_size_t j = 0; j < tommy_array_size(&duplicates); j++) {
           if (tommy_array_get(&duplicates, j) == t->x || tommy_array_get(&duplicates, j) == t->y) {
             free(t);
-            tommy_array_set(&collection->task_list, i, NULL);
+            tommy_array_set(&collection->res_task_list, i, NULL);
             break;
           }
         }

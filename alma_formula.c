@@ -18,7 +18,6 @@ void alma_fol_init(alma_node *node, alma_operator op, alma_node *arg1, alma_node
 }
 
 // Recursively constructs ALMA FOL term representation of AST argument into term pointer
-// First argument must be allocated by caller
 void alma_term_init(alma_term *term, mpc_ast_t *ast) {
   if (strstr(ast->tag, "variable") != NULL) {
     term->type = VARIABLE;
@@ -41,7 +40,6 @@ void alma_term_init(alma_term *term, mpc_ast_t *ast) {
 }
 
 // Recursively constructs ALMA FOL function representation of AST argument into ALMA function pointer
-// First argument must be allocated by caller
 void alma_function_init(alma_function *func, mpc_ast_t *ast) {
   // Case for function containing no terms
   if (ast->children_num == 0) {
@@ -77,7 +75,6 @@ void alma_function_init(alma_function *func, mpc_ast_t *ast) {
 
 // Constructs ALMA FOL representation of a predicate:
 // an ALMA node whose union is used to hold an ALMA function that describes the predicate
-// First argument must be allocated by caller
 void alma_predicate_init(alma_node *node, mpc_ast_t *ast) {
   node->type = PREDICATE;
   node->predicate = malloc(sizeof(*node->predicate));
@@ -99,7 +96,6 @@ static alma_operator op_from_contents(char *contents) {
 }
 
 // Given an MPC AST pointer, constructs an ALMA tree to a FOL representation of the AST
-// First argument must be allocated by caller
 static void alma_tree_init(alma_node *alma_tree, mpc_ast_t *ast) {
   // Match tag containing poslit as function
   if (strstr(ast->tag, "poslit") != NULL) {
