@@ -55,6 +55,7 @@ typedef struct kb {
   tommy_array res_task_list; // Stores tasks for resolution (non-tagged clauses) in next step
   long long res_task_count;
 
+  // TODO: If grow to have many fifs, having pos and neg versions may help
   tommy_hashlin fif_tasks; // Stores tasks for fif rules
 
   tommy_hashlin distrusted; // Stores distrusted items by clause index
@@ -94,17 +95,18 @@ typedef struct distrust_mapping {
 
 // Used to hold partial fif tasks in fif_tasks
 typedef struct fif_task_mapping {
-  char *predname; // Key for hashing -- name of
+  char *predname; // Key for hashing -- name/arity of next literal to unify
   tommy_list tasks; // List of specific tasks per predname
   tommy_node node;
 } fif_task_mapping;
 
 // Tasks contained in an fif_mapping's list
 typedef struct fif_task {
-  clause *c;
+  clause *fif;
   binding_list *bindings;
-  int *unified_clauses; // Indices of clauses task has unfied with
-  int next_lit;
+  int num_unified;
+  long *unified_clauses; // Indices of clauses task has unfied with
+  clause *to_unify;
   tommy_node node; // For storage in fif_mapping's list
 } fif_task;
 
@@ -122,6 +124,9 @@ void kb_print(kb *collection);
 clause* duplicate_check(kb *collection, clause *c);
 void add_clause(kb *collection, clause *curr);
 void remove_clause(kb *collection, clause *c);
+void fif_task_map_init(kb *collection, clause *c);
+void fif_tasks_from_clause(kb *collection, clause *c);
+void process_fif_tasks(kb *collection, tommy_array *new_clauses);
 void res_tasks_from_clause(kb *collection, clause *c, int process_negatives);
 int assert_formula(char *string, tommy_array *clauses);
 int delete_formula(kb *collection, char *string);

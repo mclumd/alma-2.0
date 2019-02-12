@@ -121,9 +121,6 @@ int unify(alma_term *x, alma_term *y, binding_list *theta) {
 
 // Bindings need to COPY variables/terms in formulas, not alias -- handle carefully
 int pred_unify(alma_function *x, alma_function *y, binding_list *theta) {
-  // May eventually move these initializations outside of function
-  theta->list = NULL;
-  theta->num_bindings = 0;
   if (x->term_count != y->term_count || strcmp(x->name, y->name) != 0)
     return 0;
 
