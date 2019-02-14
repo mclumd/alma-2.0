@@ -248,7 +248,7 @@ void kb_init(alma_node *trees, int num_trees, kb **collection) {
   tommy_array_done(&duplicates);
 
   // Generate starting resolution tasks
-  tommy_node* i = tommy_list_head(&collec->clauses);
+  tommy_node *i = tommy_list_head(&collec->clauses);
   while (i) {
     clause *c = ((index_mapping*)i->data)->value;
     if (c->tag == FIF)
@@ -280,7 +280,7 @@ static void free_fif_mapping(void *arg) {
 static void free_fif_task(void *arg) {
   fif_task_mapping *entry = arg;
   free(entry->predname);
-  tommy_node* curr = tommy_list_head(&entry->tasks);
+  tommy_node *curr = tommy_list_head(&entry->tasks);
   while (curr) {
     fif_task *data = curr->data;
     curr = curr->next;
@@ -292,7 +292,7 @@ static void free_fif_task(void *arg) {
 }
 
 void free_kb(kb *collection) {
-  tommy_node* curr = tommy_list_head(&collection->clauses);
+  tommy_node *curr = tommy_list_head(&collection->clauses);
   while (curr) {
     index_mapping *data = curr->data;
     curr = curr->next;
@@ -413,7 +413,7 @@ static void clause_print(clause *c) {
 }
 
 void kb_print(kb *collection) {
-  tommy_node* i = tommy_list_head(&collection->clauses);
+  tommy_node *i = tommy_list_head(&collection->clauses);
   while (i) {
     index_mapping *data = i->data;
     printf("%ld: ", data->key);
@@ -824,26 +824,31 @@ void fif_tasks_from_clause(kb *collection, clause *c) {
     fif_task_mapping *result = tommy_hashlin_search(&collection->fif_tasks, fif_taskm_compare, name, tommy_hash_u64(0, name, strlen(name)));
     if (result != NULL) {
       int len = tommy_list_count(&result->tasks);
-      int i = 0;
-      tommy_node* curr = tommy_list_head(&result->tasks);
+      tommy_node *curr = tommy_list_head(&result->tasks);
 
       // Process original list contents and deal with to_unify
-      while (curr && i < len) {
+      while (curr && len > 0) {
         fif_task *data = curr->data;
         int sign_match = (pos && data->fif->fif->ordering[data->num_unified] > 0) || (!pos && data->fif->fif->ordering[data->num_unified] < 0);
         if (sign_match) {
           if (data->to_unify != NULL)
             data->to_unify = c;
           else {
+            // If to_unify is already non-null, duplicate the task and assign to_unify of duplicate
             fif_task *copy = malloc(sizeof(*copy));
-            memcpy(copy, data, sizeof(*copy));
+            copy->fif = data->fif;
+            binding_list *b = malloc(sizeof(*b));
+            copy_bindings(b, data->bindings);
+            copy->num_unified = data->num_unified;
+            copy->unified_clauses = malloc(sizeof(*data->unified_clauses) * data->num_unified);
+            memcpy(copy->unified_clauses, data->unified_clauses, sizeof(*data->unified_clauses) * data->num_unified);
             copy->to_unify = c;
             tommy_list_insert_tail(&result->tasks, &copy->node, copy);
           }
         }
 
         curr = curr->next;
-        i++;
+        len--;
       }
     }
     else {
@@ -852,46 +857,108 @@ void fif_tasks_from_clause(kb *collection, clause *c) {
   }
 }
 
-// process_fif_tasks in forward chain loop
+// Continues attempting to unify from tasks set
+// Task instances for which cannot be further unified with current KB are added to stopped
+static void fif_task_unify_loop(kb *collection, tommy_list *tasks, tommy_list *stopped) {
+  tommy_node *curr = tommy_list_head(tasks);
+  int len = tommy_list_count(tasks);
+  // Process original list contents
+  while (curr && len > 0) {
+    fif_task *next_task = curr->data;
+    curr = curr->next;
+    len--;
+    // Withdraw current task from set
+    tommy_list_remove_existing(tasks, &next_task->node);
 
-// Process fif tasks -- attempt unification on to_unify
-// If unification succeeds, 1) searches for possible singleton matches against next literal, 2) attempts unification on these
+    alma_function *next_func = fif_access(next_task->fif, next_task->num_unified);
+    char *name = name_with_arity(next_func->name, next_func->term_count);
+
+    int pos = next_task->fif->fif->ordering[next_task->num_unified] > 0;
+    predname_mapping *m = tommy_hashlin_search(pos ? &collection->pos_map : &collection->neg_map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
+    for (int j = 0; j < m->num_clauses; j++) {
+      clause *jth = m->clauses[j];
+      if (jth->pos_count + jth->neg_count == 1) {
+        alma_function *to_unify = pos ? jth->pos_lits[0] : jth->neg_lits[0];
+
+        binding_list *copy = malloc(sizeof(*copy));
+        copy_bindings(copy, next_task->bindings);
+        if (pred_unify(next_func, to_unify, copy)) {
+          // If unification succeeds, create second task for results
+          fif_task *latest = malloc(sizeof(*latest));
+          latest->fif = next_task->fif;
+          latest->bindings = copy;
+          latest->num_unified = next_task->num_unified + 1;
+          latest->unified_clauses = malloc(sizeof(*latest->unified_clauses)*latest->num_unified);
+          memcpy(latest->unified_clauses, next_task->unified_clauses, sizeof(*next_task->unified_clauses) * next_task->num_unified);
+          latest->unified_clauses[latest->num_unified-1] = jth->index;
+          latest->to_unify = NULL;
+          // To continue processing, place back in tasks
+          tommy_list_insert_tail(tasks, &latest->node, latest);
+
+        }
+        else {
+          // Unfication failure
+          cleanup_bindings(copy);
+          free(copy);
+        }
+      }
+    }
+    tommy_list_insert_tail(stopped, &next_task->node, next_task);
+  }
+
+  // If tasks list is nonempty, have newly unified tasks to recurse on
+  if (tommy_list_head(tasks) != NULL)
+    fif_task_unify_loop(collection, tasks, stopped);
+}
+
+// Process fif tasks
+// For each task in fif_task_mapping:
+// - Attempt unification on to_unify
+// - If unification succeeds, 1) searches for possible singleton matches against next literal, 2) attempts unification on these
 // Above process repeats per task until unification fails or fif task is fully satisfied (and then asserts conclusion)
 static void process_fif_task_mapping(void *arg, void *data) {
   tommy_array *new_clauses = arg;
   fif_task_mapping *entry = data;
-  tommy_node* curr = tommy_list_head(&entry->tasks);
+  tommy_node *curr = tommy_list_head(&entry->tasks);
   while (curr) {
     fif_task *f = curr->data;
+    curr = curr->next;
 
     if (f->to_unify != NULL) {
       alma_function *fif_func = fif_access(f->fif, f->num_unified);
-      alma_function *to_unify_func;
-      if (f->to_unify->pos_count > 0)
-        to_unify_func = f->to_unify->pos_lits[0];
-      else
-        to_unify_func = f->to_unify->neg_lits[0];
+      alma_function *to_unify_func = (f->to_unify->pos_count > 0) ? f->to_unify->pos_lits[0] : f->to_unify->neg_lits[0];
 
+      binding_list *copy = malloc(sizeof(*copy));
+      copy_bindings(copy, f->bindings);
       if (pred_unify(fif_func, to_unify_func, f->bindings)) {
+        cleanup_bindings(copy);
         f->num_unified++;
         f->unified_clauses = realloc(f->unified_clauses, sizeof(*f->unified_clauses)*f->num_unified);
         f->unified_clauses[f->num_unified-1] = f->to_unify->index;
         f->to_unify = NULL;
 
+        tommy_list_remove_existing(&entry->tasks, &f->node);
         // TODO; expand and unify all others able
-
+        // fif_task_unify_loop_etc.....
+        // result is a set of tasks, incorporate into task mapping [after all calls of this func finish?]
       }
       else {
         f->to_unify = NULL;
+        // Reset from copy
+        cleanup_bindings(f->bindings);
+        f->bindings = malloc(sizeof(f->bindings));
+        copy_bindings(f->bindings, copy);
       }
+      free(copy);
     }
-
-    curr = curr->next;
   }
 }
 
+// TODO: process_fif_tasks in forward chain loop
+
 // See helper process_fif_task_mapping for comment
 void process_fif_tasks(kb *collection, tommy_array *new_clauses) {
+  // TODO: do manual thing so collection can pass in too
   tommy_hashlin_foreach_arg(&collection->fif_tasks, process_fif_task_mapping, new_clauses);
 }
 
@@ -1075,7 +1142,7 @@ static char* now(long t) {
 
 static char* long_to_str(long x) {
   int length = snprintf(NULL, 0, "%ld", x);
-  char* str = malloc(length+1);
+  char *str = malloc(length+1);
   snprintf(str, length+1, "%ld", x);
   return str;
 }

@@ -155,3 +155,17 @@ void cleanup_bindings(binding_list *theta) {
   free(theta->list);
   free(theta);
 }
+
+// Assumes dest allocated
+void copy_bindings(binding_list *dest, binding_list *src) {
+  dest->num_bindings = src->num_bindings;
+  if (dest->num_bindings > 0) {
+    dest->list = malloc(sizeof(*dest->list) * src->num_bindings);
+    for (int i = 0; i < src->num_bindings; i++) {
+      dest->list[i].var = malloc(sizeof(alma_variable));
+      copy_alma_var(src->list[i].var, dest->list[i].var);
+      dest->list[i].term = malloc(sizeof(alma_term));
+      copy_alma_term(src->list[i].term, dest->list[i].term);
+    }
+  }
+}
