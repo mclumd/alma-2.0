@@ -168,4 +168,6 @@ void copy_bindings(binding_list *dest, binding_list *src) {
       copy_alma_term(src->list[i].term, dest->list[i].term);
     }
   }
+  else
+    dest->list = NULL;
 }
