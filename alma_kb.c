@@ -829,28 +829,32 @@ void fif_tasks_from_clause(kb *collection, clause *c) {
       tommy_node *curr = tommy_list_head(&result->tasks);
 
       // Process original list contents and deal with to_unify
-      while (curr && len > 0) {
+      int set_first = 0;
+      int i = 0;
+      while (curr && i < len) {
         fif_task *data = curr->data;
         int sign_match = (pos && data->fif->fif->ordering[data->num_unified] < 0) || (!pos && data->fif->fif->ordering[data->num_unified] >= 0);
-        if (sign_match) {
+        if (sign_match && !(data->num_unified == 0 && set_first)) {
           if (data->to_unify == NULL)
             data->to_unify = c;
           else {
             // If to_unify is already non-null, duplicate the task and assign to_unify of duplicate
             fif_task *copy = malloc(sizeof(*copy));
             copy->fif = data->fif;
-            binding_list *b = malloc(sizeof(*b));
-            copy_bindings(b, data->bindings);
+            copy->bindings = malloc(sizeof(*copy->bindings));
+            copy_bindings(copy->bindings, data->bindings);
             copy->num_unified = data->num_unified;
             copy->unified_clauses = malloc(sizeof(*data->unified_clauses) * data->num_unified);
             memcpy(copy->unified_clauses, data->unified_clauses, sizeof(*data->unified_clauses) * data->num_unified);
             copy->to_unify = c;
             tommy_list_insert_tail(&result->tasks, &copy->node, copy);
           }
+          // Special case -- c should only -once- be put into to_unify of a task with none unified
+          set_first = 1;
         }
 
         curr = curr->next;
-        len--;
+        i++;
       }
     }
   }
@@ -1372,6 +1376,7 @@ void forward_chain(kb *collection) {
         if (duplicate_check(collection, c) == NULL) {
           res_tasks_from_clause(collection, c, 1);
           fif_tasks_from_clause(collection, c);
+          // Dupe fif tasks are then used after clause freed
         }
       }
 
