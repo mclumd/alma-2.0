@@ -133,7 +133,7 @@ static void init_ordering(fif_info *info, alma_node *node) {
 }
 
 // Comparison used by qsort of clauses -- orders by increasing function name and increasing arity
-static int function_compare (const void *p1, const void *p2) {
+static int function_compare(const void *p1, const void *p2) {
   alma_function **f1 = (alma_function **)p1;
   alma_function **f2 = (alma_function **)p2;
   int compare = strcmp((*f1)->name, (*f2)->name);
@@ -154,7 +154,7 @@ static void flatten_node(alma_node *node, tommy_array *clauses) {
     clause *c = malloc(sizeof(*c));
     c->pos_count = c->neg_count = 0;
     c->pos_lits = c->neg_lits = NULL;
-    c->parent_pair_count = c->children_count = 0;
+    c->parent_set_count = c->children_count = 0;
     c->parents = NULL;
     c->children = NULL;
     c->tag = NONE;
@@ -189,6 +189,8 @@ static void free_clause(clause *c) {
     free_function(c->neg_lits[i]);
   free(c->pos_lits);
   free(c->neg_lits);
+  for (int i = 0; i < c->parent_set_count; i++)
+    free(c->parents[i]->clauses);
   free(c->parents);
   free(c->children);
 
@@ -208,6 +210,20 @@ static void nodes_to_clauses(alma_node *trees, int num_trees, tommy_array *claus
     free_alma_tree(trees+i);
   }
   free(trees);
+}
+
+// Reorders clause array to begin with fifs; for correctness of task generation
+static void fif_to_front(tommy_array *clauses) {
+  tommy_size_t loc = 0;
+  for (tommy_size_t i = 1; i < tommy_array_size(clauses); i++) {
+    clause *c = tommy_array_get(clauses, i);
+    if (c->tag == FIF) {
+      clause *tmp = tommy_array_get(clauses, loc);
+      tommy_array_set(clauses, loc, c);
+      tommy_array_set(clauses, i, tmp);
+      loc++;
+    }
+  }
 }
 
 // Caller will need to free collection
@@ -230,22 +246,17 @@ void kb_init(alma_node *trees, int num_trees, kb **collection) {
   tommy_array clauses;
   tommy_array_init(&clauses);
   nodes_to_clauses(trees, num_trees, &clauses);
+  fif_to_front(&clauses);
 
   // Insert into KB if not duplicate
-  tommy_array duplicates;
-  tommy_array_init(&duplicates);
   for (tommy_size_t i = 0; i < tommy_array_size(&clauses); i++) {
     clause *c = tommy_array_get(&clauses, i);
     if (duplicate_check(collec, c) == NULL)
       add_clause(collec, c);
     else
-      tommy_array_insert(&duplicates, c);
+      free_clause(c);
   }
   tommy_array_done(&clauses);
-  // Free unused duplicate clauses
-  for (tommy_size_t i = 0; i < tommy_array_size(&duplicates); i++)
-    free_clause(tommy_array_get(&duplicates, i));
-  tommy_array_done(&duplicates);
 
   // Generate starting resolution tasks
   tommy_node *i = tommy_list_head(&collec->clauses);
@@ -392,9 +403,15 @@ static void clause_print(clause *c) {
       printf(" (");
       if (c->parents != NULL) {
           printf("parents: ");
-        for (int i = 0; i < c->parent_pair_count; i++) {
-          printf("[%ld, %ld]", c->parents[i].x->index, c->parents[i].y->index);
-          if (i < c->parent_pair_count-1)
+        for (int i = 0; i < c->parent_set_count; i++) {
+          printf("[");
+          for (int j = 0; j < c->parents[i]->count; j++) {
+            printf("ld", c->parents[i]->clauses[j]->index);
+            if (j < c->parents[i]->count-1)
+              printf(" ");
+          }
+          printf("]");
+          if (i < c->parent_set_count-1)
             printf(", ");
         }
         if (c->children != NULL)
@@ -606,17 +623,27 @@ static int clauses_differ(clause *x, clause *y) {
     matches.count = 0;
     matches.x = NULL;
     matches.y = NULL;
-    for (int i = 0; i < x->pos_count; i++) {
-      // TODO: account for case in which may have several literals with name
-      // Ignoring duplicate literal case, sorted literal lists allows comparing ith literals of each clause
-      if (function_compare(x->pos_lits+i, y->pos_lits+i) || functions_differ(x->pos_lits[i], y->pos_lits[i], &matches))
-        return release_matches(&matches, 1);
+    if (x->tag == FIF) {
+      for (int i = 0; i < x->fif->premise_count; i++) {
+        alma_function *xf = fif_access(x, i);
+        alma_function *yf = fif_access(y, i);
+        if (function_compare(&xf, &yf) || functions_differ(xf, yf, &matches))
+          return release_matches(&matches, 1);
+      }
     }
-    for (int i = 0; i < x->neg_count; i++) {
-      // TODO: account for case in which may have several literals with name
-      // Ignoring duplicate literal case, sorted literal lists allows comparing ith literals of each clause
-      if (function_compare(x->neg_lits+i, y->neg_lits+i) || functions_differ(x->neg_lits[i], y->neg_lits[i], &matches))
-        return release_matches(&matches, 1);
+    else {
+      for (int i = 0; i < x->pos_count; i++) {
+        // TODO: account for case in which may have several literals with name
+        // Ignoring duplicate literal case, sorted literal lists allows comparing ith literals of each clause
+        if (function_compare(x->pos_lits+i, y->pos_lits+i) || functions_differ(x->pos_lits[i], y->pos_lits[i], &matches))
+          return release_matches(&matches, 1);
+      }
+      for (int i = 0; i < x->neg_count; i++) {
+        // TODO: account for case in which may have several literals with name
+        // Ignoring duplicate literal case, sorted literal lists allows comparing ith literals of each clause
+        if (function_compare(x->neg_lits+i, y->neg_lits+i) || functions_differ(x->neg_lits[i], y->neg_lits[i], &matches))
+          return release_matches(&matches, 1);
+      }
     }
     // All literals compared as equal; return 0
     return release_matches(&matches, 0);
@@ -627,29 +654,41 @@ static int clauses_differ(clause *x, clause *y) {
 // If c is found to be a clause duplicate, returns a pointer to that clause; null otherwise
 // See comments preceding clauses_differ function for further detail
 clause* duplicate_check(kb *collection, clause *c) {
-  if (c->pos_count > 0) {
-    // If clause has a positive literal, all duplicate candidates must have that same positive literal
-    // Arbitrarily pick first positive literal as one to use; may be able to do smarter literal choice later
-    char *name = name_with_arity(c->pos_lits[0]->name, c->pos_lits[0]->term_count);
-    predname_mapping *result = tommy_hashlin_search(&collection->pos_map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
-    free(name);
+  if (c->tag == FIF) {
+    char *name = c->fif->conclusion->name;
+    fif_mapping *result = tommy_hashlin_search(&collection->fif_map, fifm_compare, name, tommy_hash_u64(0, name, strlen(name)));
     if (result != NULL) {
       for (int i = 0; i < result->num_clauses; i++) {
-        if (!clauses_differ(c, result->clauses[i]))
+        if (c->tag == result->clauses[i]->tag && !clauses_differ(c, result->clauses[i]))
           return result->clauses[i];
       }
     }
   }
-  else if (c->neg_count > 0) {
-    // If clause has a negative literal, all duplicate candidates must have that same negative literal
-    // Arbitrarily pick first negative literal as one to use; may be able to do smarter literal choice later
-    char *name = name_with_arity(c->neg_lits[0]->name, c->neg_lits[0]->term_count);
-    predname_mapping *result = tommy_hashlin_search(&collection->neg_map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
-    free(name);
-    if (result != NULL) {
-      for (int i = 0; i < result->num_clauses; i++) {
-        if (!clauses_differ(c, result->clauses[i]))
-          return result->clauses[i];
+  else {
+    if (c->pos_count > 0) {
+      // If clause has a positive literal, all duplicate candidates must have that same positive literal
+      // Arbitrarily pick first positive literal as one to use; may be able to do smarter literal choice later
+      char *name = name_with_arity(c->pos_lits[0]->name, c->pos_lits[0]->term_count);
+      predname_mapping *result = tommy_hashlin_search(&collection->pos_map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
+      free(name);
+      if (result != NULL) {
+        for (int i = 0; i < result->num_clauses; i++) {
+          if (c->tag == result->clauses[i]->tag && !clauses_differ(c, result->clauses[i]))
+            return result->clauses[i];
+        }
+      }
+    }
+    else if (c->neg_count > 0) {
+      // If clause has a negative literal, all duplicate candidates must have that same negative literal
+      // Arbitrarily pick first negative literal as one to use; may be able to do smarter literal choice later
+      char *name = name_with_arity(c->neg_lits[0]->name, c->neg_lits[0]->term_count);
+      predname_mapping *result = tommy_hashlin_search(&collection->neg_map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
+      free(name);
+      if (result != NULL) {
+        for (int i = 0; i < result->num_clauses; i++) {
+          if (c->tag == result->clauses[i]->tag && !clauses_differ(c, result->clauses[i]))
+            return result->clauses[i];
+        }
       }
     }
   }
@@ -742,30 +781,39 @@ void remove_clause(kb *collection, clause *c) {
   remove_res_tasks(collection, c);
 
   // Remove clause from the parents list of each of its children
-  for (int i = 0; i < c->children_count; i++) {
+  // TODO: resume revision
+  /*for (int i = 0; i < c->children_count; i++) {
     clause *child = c->children[i];
     if (child != NULL) {
-      for (int j = 0; j < child->parent_pair_count; j++) {
-        // Parent pairs should be unique; uses this assumption
-        if (child->parents[j].x == c || child->parents[j].y == c) {
-          if (j < child->parent_pair_count-1)
-            child->parents[j] = child->parents[child->parent_pair_count-1];
-          child->parent_pair_count--;
-          if (child->parent_pair_count > 0) {
-            child->parents = realloc(child->parents, sizeof(*child->parents) * child->parent_pair_count);
+      int new_count = child->parent_set_count;
+
+      // Free each parent set with a clause matching
+      for (int j = 0; j < child->parent_set_count; j++) {
+        for (int k = 0; k-> child->parents[j]->count; k++) {
+          if (child->parents[j]->clauses[k] == c) {
+            new_count--;
+            free(child->parents[j]->clauses);
+            break;
           }
-          else {
-            free(child->parents);
-            child->parents = NULL;
-          }
-          break;
+
         }
       }
+      for (int j = new_count; j < child->parent_set_count; j++) {
+
+        child->parents[j]
+      }
+      if (new_count > 0) {
+        child->parents = realloc(child->parents, sizeof()*());
+      }
+      else {
+        free(child->parents);
+        child->parents = NULL;
+      }
     }
-  }
+  }*/
 
   // Remove clause from the children list of each of its parents
-  for (int i = 0; i < c->parent_pair_count; i++) {
+  for (int i = 0; i < c->parent_set_count; i++) {
     remove_child(c->parents[i].x, c);
     remove_child(c->parents[i].y, c);
   }
@@ -907,37 +955,39 @@ static void fif_task_unify_loop(kb *collection, tommy_list *tasks, tommy_list *s
     int search_pos = next_task->fif->fif->ordering[next_task->num_unified] < 0;
     predname_mapping *m = tommy_hashlin_search(search_pos ? &collection->pos_map : &collection->neg_map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
     free(name);
-    for (int j = 0; j < m->num_clauses; j++) {
-      clause *jth = m->clauses[j];
-      if (jth->pos_count + jth->neg_count == 1) {
-        alma_function *to_unify = search_pos ? jth->pos_lits[0] : jth->neg_lits[0];
+    if (m != NULL) {
+      for (int j = 0; j < m->num_clauses; j++) {
+        clause *jth = m->clauses[j];
+        if (jth->pos_count + jth->neg_count == 1) {
+          alma_function *to_unify = search_pos ? jth->pos_lits[0] : jth->neg_lits[0];
 
-        binding_list *copy = malloc(sizeof(*copy));
-        copy_bindings(copy, next_task->bindings);
-        if (pred_unify(next_func, to_unify, copy)) {
-          // If task is now completed, obtain resulting clause and insert to new_clauses
-          if (next_task->num_unified + 1 == next_task->fif->fif->premise_count) {
-            clause *conclusion = fif_conclude(collection, next_task, copy, jth);
-            tommy_array_insert(new_clauses, conclusion);
+          binding_list *copy = malloc(sizeof(*copy));
+          copy_bindings(copy, next_task->bindings);
+          if (pred_unify(next_func, to_unify, copy)) {
+            // If task is now completed, obtain resulting clause and insert to new_clauses
+            if (next_task->num_unified + 1 == next_task->fif->fif->premise_count) {
+              clause *conclusion = fif_conclude(collection, next_task, copy, jth);
+              tommy_array_insert(new_clauses, conclusion);
+            }
+            // Otherwise, to continue processing, create second task for results and place in tasks
+            else {
+              fif_task *latest = malloc(sizeof(*latest));
+              latest->fif = next_task->fif;
+              latest->bindings = copy;
+              latest->num_unified = next_task->num_unified + 1;
+              latest->unified_clauses = malloc(sizeof(*latest->unified_clauses)*latest->num_unified);
+              memcpy(latest->unified_clauses, next_task->unified_clauses, sizeof(*next_task->unified_clauses) * next_task->num_unified);
+              latest->unified_clauses[latest->num_unified-1] = jth->index;
+              latest->to_unify = NULL;
+              tommy_list_insert_tail(tasks, &latest->node, latest);
+            }
+
           }
-          // Otherwise, to continue processing, create second task for results and place in tasks
           else {
-            fif_task *latest = malloc(sizeof(*latest));
-            latest->fif = next_task->fif;
-            latest->bindings = copy;
-            latest->num_unified = next_task->num_unified + 1;
-            latest->unified_clauses = malloc(sizeof(*latest->unified_clauses)*latest->num_unified);
-            memcpy(latest->unified_clauses, next_task->unified_clauses, sizeof(*next_task->unified_clauses) * next_task->num_unified);
-            latest->unified_clauses[latest->num_unified-1] = jth->index;
-            latest->to_unify = NULL;
-            tommy_list_insert_tail(tasks, &latest->node, latest);
+            // Unfication failure
+            cleanup_bindings(copy);
+            free(copy);
           }
-
-        }
-        else {
-          // Unfication failure
-          cleanup_bindings(copy);
-          free(copy);
         }
       }
     }
@@ -1315,7 +1365,7 @@ void forward_chain(kb *collection) {
             // An empty resolution result is not a valid clause to add to KB
             if (res_result->pos_count > 0 || res_result->neg_count > 0) {
               // Initialize parents of result
-              res_result->parent_pair_count = 1;
+              res_result->parent_set_count = 1;
               res_result->parents = malloc(sizeof(*res_result->parents));
               res_result->parents[0].x = current_task->x;
               res_result->parents[0].y = current_task->y;
@@ -1370,48 +1420,31 @@ void forward_chain(kb *collection) {
 
     // Time always advances; continues while other clauses are added
     if (tommy_array_size(&new_clauses) > 1) {
-      // Get new res_tasks before adding new clauses into collection
-      for (tommy_size_t i = 0; i < tommy_array_size(&new_clauses); i++) {
-        clause *c = tommy_array_get(&new_clauses, i);
-        if (duplicate_check(collection, c) == NULL) {
-          res_tasks_from_clause(collection, c, 1);
-          fif_tasks_from_clause(collection, c);
-          // Dupe fif tasks are then used after clause freed
-        }
-      }
+      fif_to_front(&new_clauses);
 
-      tommy_array duplicates;
-      tommy_array_init(&duplicates);
       // Insert new clauses derived that are not duplicates
-      // TODO: Make more efficient, as currently checks for second time duplicate status of some known duplicates
       for (tommy_size_t i = 0; i < tommy_array_size(&new_clauses); i++) {
         clause *c = tommy_array_get(&new_clauses, i);
         clause *dupe = duplicate_check(collection, c);
         if (dupe == NULL) {
-          if (c->parents != NULL) {
-            // Only add if parents aren't distrusted
-            if (!is_distrusted(collection, c->parents[0].x->index) && !is_distrusted(collection,  c->parents[0].y->index)) {
-              // Update child info for parents of new clause
-              add_child(c->parents[0].x, c);
-              add_child(c->parents[0].y, c);
+          res_tasks_from_clause(collection, c, 1);
+          fif_tasks_from_clause(collection, c);
+          // Dupe fif tasks are then used after clause freed
 
-              add_clause(collection, c);
-            }
-            else
-              free_clause(c);
+          if (c->parents != NULL) {
+            // Update child info for parents of new clause
+            add_child(c->parents[0].x, c);
+            add_child(c->parents[0].y, c);
           }
-          else
-            add_clause(collection, c);
+          add_clause(collection, c);
         }
         else {
-          tommy_array_insert(&duplicates, c);
-
           if (c->parents != NULL) {
             // A duplicate clause derivation should be acknowledged by adding extra parents to the clause it duplicates
             // Copy parents of c to dupe
-            dupe->parents = realloc(dupe->parents, sizeof(*dupe->parents) * (dupe->parent_pair_count + c->parent_pair_count));
-            memcpy(dupe->parents + dupe->parent_pair_count, c->parents, sizeof(*c->parents) * c->parent_pair_count);
-            dupe->parent_pair_count += c->parent_pair_count;
+            dupe->parents = realloc(dupe->parents, sizeof(*dupe->parents) * (dupe->parent_set_count + c->parent_set_count));
+            memcpy(dupe->parents + dupe->parent_set_count, c->parents, sizeof(*c->parents) * c->parent_set_count);
+            dupe->parent_set_count += c->parent_set_count;
 
             // Parents of c also gain new child in dupe
             clause *parent1 = c->parents[0].x;
@@ -1435,27 +1468,10 @@ void forward_chain(kb *collection) {
             if (insert)
               add_child(parent2, dupe);
           }
+
+          free_clause(c);
         }
       }
-
-      // Replace duplicate entries in task list with null
-      for (tommy_size_t i = 0; i < tommy_array_size(&collection->res_task_list); i++) {
-        res_task *t = tommy_array_get(&collection->res_task_list, i);
-        // TODO: Switch to a more efficient lookup in duplicates
-        for (tommy_size_t j = 0; j < tommy_array_size(&duplicates); j++) {
-          if (tommy_array_get(&duplicates, j) == t->x || tommy_array_get(&duplicates, j) == t->y) {
-            free(t);
-            tommy_array_set(&collection->res_task_list, i, NULL);
-            break;
-          }
-        }
-      }
-
-      // Free duplicates
-      for (tommy_size_t i = 0; i < tommy_array_size(&duplicates); i++) {
-        free_clause(tommy_array_get(&duplicates, i));
-      }
-      tommy_array_done(&duplicates);
 
       kb_print(collection);
     }

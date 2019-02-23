@@ -10,7 +10,7 @@
 
 // TODO: Further consider style of using **, esp. for pos_lits/neg_lits in clause
 
-struct parent_pair;
+struct parent_set;
 struct fif_info;
 
 typedef struct clause {
@@ -18,19 +18,19 @@ typedef struct clause {
   int neg_count;
   alma_function **pos_lits;
   alma_function **neg_lits;
-  int parent_pair_count;
+  int parent_set_count;
   int children_count;
-  struct parent_pair *parents; // Use more efficient structure for as needed
+  struct parent_set *parents; // Use more efficient structure for as needed
   struct clause **children; // Use more efficient structure for as needed
   if_tag tag;
   struct fif_info *fif; // Data used to store additional fif information; non-null only if FIF tagged
   long index; // Index of clause, used as key in index_map of KB
 } clause;
 
-typedef struct parent_pair {
-  clause *x;
-  clause *y;
-} parent_pair;
+typedef struct parent_set {
+  int count;
+  clause **clauses;
+} parent_set;
 
 typedef struct fif_info {
   int premise_count;

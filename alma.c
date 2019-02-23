@@ -38,9 +38,8 @@ int main(int argc, char **argv) {
     forward_chain(alma_kb);
 
     free_kb(alma_kb);
-
-    parse_cleanup();
   }
+  parse_cleanup();
 
   return 0;
 }
