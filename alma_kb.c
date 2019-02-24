@@ -937,6 +937,7 @@ clause* fif_conclude(kb *collection, fif_task *task, binding_list *bindings, cla
   cleanup_bindings(bindings);
   conclusion->pos_lits[0] = conc_func;
 
+  conclusion->parent_set_count = 1;
   conclusion->parents = malloc(sizeof(*conclusion->parents));
   conclusion->parents[0].count = task->num_unified + 1;
   conclusion->parents[0].clauses = malloc(sizeof(*conclusion->parents[0].clauses) * conclusion->parents[0].count);
@@ -987,8 +988,10 @@ static void fif_task_unify_loop(kb *collection, tommy_list *tasks, tommy_list *s
           if (pred_unify(next_func, to_unify, copy)) {
             // If task is now completed, obtain resulting clause and insert to new_clauses
             if (next_task->num_unified + 1 == next_task->fif->fif->premise_count) {
+              next_task->num_unified++;
               clause *conclusion = fif_conclude(collection, next_task, copy, jth);
               tommy_array_insert(new_clauses, conclusion);
+              next_task->num_unified--;
             }
             // Otherwise, to continue processing, create second task for results and place in tasks
             else {
@@ -1040,8 +1043,10 @@ static void process_fif_task_mapping(kb *collection, fif_task_mapping *entry, to
       if (pred_unify(fif_func, to_unify_func, f->bindings)) {
         // If task is now completed, obtain resulting clause and insert to new_clauses
         if (f->num_unified + 1 == f->fif->fif->premise_count) {
+          f->num_unified++;
           clause *conclusion = fif_conclude(collection, f, f->bindings, f->to_unify);
           tommy_array_insert(new_clauses, conclusion);
+          f->num_unified--;
 
           f->to_unify = NULL;
           // Reset from copy
