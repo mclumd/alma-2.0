@@ -190,7 +190,7 @@ static void free_clause(clause *c) {
   free(c->pos_lits);
   free(c->neg_lits);
   for (int i = 0; i < c->parent_set_count; i++)
-    free(c->parents[i]->clauses);
+    free(c->parents[i].clauses);
   free(c->parents);
   free(c->children);
 
@@ -402,13 +402,13 @@ static void clause_print(clause *c) {
     if (c->parents != NULL || c->children != NULL) {
       printf(" (");
       if (c->parents != NULL) {
-          printf("parents: ");
+        printf("parents: ");
         for (int i = 0; i < c->parent_set_count; i++) {
           printf("[");
-          for (int j = 0; j < c->parents[i]->count; j++) {
-            printf("ld", c->parents[i]->clauses[j]->index);
-            if (j < c->parents[i]->count-1)
-              printf(" ");
+          for (int j = 0; j < c->parents[i].count; j++) {
+            printf("%ld", c->parents[i].clauses[j]->index);
+            if (j < c->parents[i].count-1)
+              printf(", ");
           }
           printf("]");
           if (i < c->parent_set_count-1)
@@ -781,42 +781,55 @@ void remove_clause(kb *collection, clause *c) {
   remove_res_tasks(collection, c);
 
   // Remove clause from the parents list of each of its children
-  // TODO: resume revision
-  /*for (int i = 0; i < c->children_count; i++) {
+  for (int i = 0; i < c->children_count; i++) {
     clause *child = c->children[i];
     if (child != NULL) {
       int new_count = child->parent_set_count;
 
-      // Free each parent set with a clause matching
+      //  If a parent set has a clause matching, remove match
       for (int j = 0; j < child->parent_set_count; j++) {
-        for (int k = 0; k-> child->parents[j]->count; k++) {
-          if (child->parents[j]->clauses[k] == c) {
-            new_count--;
-            free(child->parents[j]->clauses);
+        for (int k = 0; k < child->parents[j].count; k++) {
+          if (child->parents[j].clauses[k] == c) {
+            // If last parent in set, deallocate
+            if (child->parents[j].count == 1) {
+              new_count--;
+              child->parents[j].count = 0;
+              free(child->parents[j].clauses);
+              child->parents[j].clauses = NULL;
+            }
+            // Otherwise, reallocate without parent
+            else {
+              child->parents[j].count--;
+              child->parents[j].clauses[k] = child->parents[j].clauses[child->parents[j].count];
+              child->parents[j].clauses = realloc(child->parents[j].clauses, sizeof(*child->parents[j].clauses)*child->parents[j].count);
+            }
             break;
           }
-
         }
       }
-      for (int j = new_count; j < child->parent_set_count; j++) {
 
-        child->parents[j]
-      }
       if (new_count > 0) {
-        child->parents = realloc(child->parents, sizeof()*());
+        int loc = child->parent_set_count-1;
+        // Replace empty parent sets with clauses from end of parents
+        for (int j = child->parent_set_count-2; j >= 0; j--) {
+          if (child->parents[j].clauses == NULL) {
+            child->parents[j] = child->parents[loc];
+            loc--;
+          }
+        }
+        child->parents = realloc(child->parents, sizeof(*child->parents)*new_count);
       }
       else {
         free(child->parents);
         child->parents = NULL;
       }
     }
-  }*/
+  }
 
   // Remove clause from the children list of each of its parents
-  for (int i = 0; i < c->parent_set_count; i++) {
-    remove_child(c->parents[i].x, c);
-    remove_child(c->parents[i].y, c);
-  }
+  for (int i = 0; i < c->parent_set_count; i++)
+    for (int j = 0; j < c->parents[i].count; j++)
+      remove_child(c->parents[i].clauses[j], c);
 
   free_clause(c);
 }
@@ -914,6 +927,7 @@ clause* fif_conclude(kb *collection, fif_task *task, binding_list *bindings, cla
   conclusion->pos_count = 1;
   conclusion->neg_count = 0;
   conclusion->pos_lits = malloc(sizeof(*conclusion->pos_lits));
+  conclusion->neg_lits = NULL;
 
   // Using task's overall bindings, obtain proper conclusion predicate
   alma_function *conc_func = malloc(sizeof(*conc_func));
@@ -923,9 +937,16 @@ clause* fif_conclude(kb *collection, fif_task *task, binding_list *bindings, cla
   cleanup_bindings(bindings);
   conclusion->pos_lits[0] = conc_func;
 
-  conclusion->neg_lits = NULL;
-  // deal with parents, task's unified + last, TODO
-  conclusion->parents = NULL;
+  conclusion->parents = malloc(sizeof(*conclusion->parents));
+  conclusion->parents[0].count = task->num_unified + 1;
+  conclusion->parents[0].clauses = malloc(sizeof(*conclusion->parents[0].clauses) * conclusion->parents[0].count);
+  for (int i = 0; i < conclusion->parents[0].count-2; i++) {
+    long index = task->unified_clauses[i];
+    index_mapping *result = tommy_hashlin_search(&collection->index_map, im_compare, &index, tommy_hash_u64(0, &index, sizeof(index)));
+    conclusion->parents[0].clauses[i] = result->value;
+  }
+  conclusion->parents[0].clauses[conclusion->parents[0].count-2] = last_unified;
+  conclusion->parents[0].clauses[conclusion->parents[0].count-1] = task->fif;
   conclusion->children_count = 0;
   conclusion->children = NULL;
   conclusion->tag = NONE;
@@ -1367,8 +1388,10 @@ void forward_chain(kb *collection) {
               // Initialize parents of result
               res_result->parent_set_count = 1;
               res_result->parents = malloc(sizeof(*res_result->parents));
-              res_result->parents[0].x = current_task->x;
-              res_result->parents[0].y = current_task->y;
+              res_result->parents[0].count = 2;
+              res_result->parents[0].clauses = malloc(sizeof(*res_result->parents[0].clauses) * 2);
+              res_result->parents[0].clauses[0] = current_task->x;
+              res_result->parents[0].clauses[1] = current_task->y;
               res_result->children_count = 0;
               res_result->children = NULL;
 
@@ -1433,8 +1456,8 @@ void forward_chain(kb *collection) {
 
           if (c->parents != NULL) {
             // Update child info for parents of new clause
-            add_child(c->parents[0].x, c);
-            add_child(c->parents[0].y, c);
+            for (int j = 0; j < c->parents[0].count; j++)
+              add_child(c->parents[0].clauses[j], c);
           }
           add_clause(collection, c);
         }
@@ -1443,30 +1466,26 @@ void forward_chain(kb *collection) {
             // A duplicate clause derivation should be acknowledged by adding extra parents to the clause it duplicates
             // Copy parents of c to dupe
             dupe->parents = realloc(dupe->parents, sizeof(*dupe->parents) * (dupe->parent_set_count + c->parent_set_count));
-            memcpy(dupe->parents + dupe->parent_set_count, c->parents, sizeof(*c->parents) * c->parent_set_count);
+            for (int j = dupe->parent_set_count, k = 0; j < dupe->parent_set_count + c->parent_set_count; j++, k++) {
+              dupe->parents[j].count = c->parents[k].count;
+              dupe->parents[j].clauses = malloc(sizeof(*dupe->parents[j].clauses) * dupe->parents[j].count);
+              memcpy(dupe->parents[j].clauses, c->parents[k].clauses, sizeof(*dupe->parents[j].clauses) * dupe->parents[j].count);
+            }
+            //memcpy(dupe->parents + dupe->parent_set_count, c->parents, sizeof(*c->parents) * c->parent_set_count);
             dupe->parent_set_count += c->parent_set_count;
 
             // Parents of c also gain new child in dupe
-            clause *parent1 = c->parents[0].x;
-            int insert = 1;
-            for (int j = 0; j < parent1->children_count; j++) {
-              if (parent1->children[j] == dupe) {
-                insert = 0;
-                break;
+            for (int j = 0; j < c->parents[0].count; j++) {
+              int insert = 1;
+              for (int k = 0; k < c->parents[0].clauses[j]->children_count; k++) {
+                if (c->parents[0].clauses[j]->children[k] == dupe) {
+                  insert = 0;
+                  break;
+                }
               }
+              if (insert)
+                add_child(c->parents[0].clauses[j], dupe);
             }
-            if (insert)
-              add_child(parent1, dupe);
-            clause *parent2 = c->parents[0].y;
-            insert = 1;
-            for (int j = 0; j < parent2->children_count; j++) {
-              if (parent2->children[j] == dupe) {
-                insert = 0;
-                break;
-              }
-            }
-            if (insert)
-              add_child(parent2, dupe);
           }
 
           free_clause(c);
