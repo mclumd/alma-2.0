@@ -1010,7 +1010,6 @@ static void fif_task_unify_loop(kb *collection, tommy_list *tasks, tommy_list *s
           else {
             // Unfication failure
             cleanup_bindings(copy);
-            free(copy);
           }
         }
       }
