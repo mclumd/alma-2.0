@@ -921,8 +921,27 @@ void fif_tasks_from_clause(kb *collection, clause *c) {
   }
 }
 
+// Compare function to be used by tommy_hashlin_search for distrust_mapping
+// Compares long arg to key of distrust_mapping
+static int dm_compare(const void *arg, const void *obj) {
+  return *(const long*)arg - ((const distrust_mapping*)obj)->key;
+}
+
+static int is_distrusted(kb *collection, long index) {
+  return tommy_hashlin_search(&collection->distrusted, dm_compare, &index, tommy_hash_u64(0, &index, sizeof(index))) != NULL;
+}
+
+// Checks if each of task's unified_clauses is distrusted
+// Returns 1 if any are
+static int fif_unified_distrusted(kb *collection, fif_task *task) {
+  for (int i = 0; i < task->num_unified; i++)
+    if (is_distrusted(collection, task->unified_clauses[i]))
+      return 1;
+  return 0;
+}
+
 // Called when each premise of a fif is satisfied
-clause* fif_conclude(kb *collection, fif_task *task, binding_list *bindings, clause *last_unified) {
+static clause* fif_conclude(kb *collection, fif_task *task, binding_list *bindings, clause *last_unified) {
   clause *conclusion = malloc(sizeof(*conclusion));
   conclusion->pos_count = 1;
   conclusion->neg_count = 0;
@@ -977,6 +996,8 @@ static void fif_task_unify_loop(kb *collection, tommy_list *tasks, tommy_list *s
     int search_pos = next_task->fif->fif->ordering[next_task->num_unified] < 0;
     predname_mapping *m = tommy_hashlin_search(search_pos ? &collection->pos_map : &collection->neg_map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
     free(name);
+
+    int task_erased = 0;
     if (m != NULL) {
       for (int j = 0; j < m->num_clauses; j++) {
         clause *jth = m->clauses[j];
@@ -988,10 +1009,18 @@ static void fif_task_unify_loop(kb *collection, tommy_list *tasks, tommy_list *s
           if (pred_unify(next_func, to_unify, copy)) {
             // If task is now completed, obtain resulting clause and insert to new_clauses
             if (next_task->num_unified + 1 == next_task->fif->fif->premise_count) {
-              next_task->num_unified++;
-              clause *conclusion = fif_conclude(collection, next_task, copy, jth);
-              tommy_array_insert(new_clauses, conclusion);
-              next_task->num_unified--;
+              if (fif_unified_distrusted(collection, next_task)) {
+                // If any unified clauses became distrusted, delete task
+                free_fif_task(next_task);
+                task_erased = 1;
+                break;
+              }
+              else {
+                next_task->num_unified++;
+                clause *conclusion = fif_conclude(collection, next_task, copy, jth);
+                tommy_array_insert(new_clauses, conclusion);
+                next_task->num_unified--;
+              }
             }
             // Otherwise, to continue processing, create second task for results and place in tasks
             else {
@@ -1014,7 +1043,8 @@ static void fif_task_unify_loop(kb *collection, tommy_list *tasks, tommy_list *s
         }
       }
     }
-    tommy_list_insert_tail(stopped, &next_task->node, next_task);
+    if (!task_erased)
+      tommy_list_insert_tail(stopped, &next_task->node, next_task);
   }
 
   // If tasks list is nonempty, have newly unified tasks to recurse on
@@ -1034,45 +1064,59 @@ static void process_fif_task_mapping(kb *collection, fif_task_mapping *entry, to
     curr = curr->next;
 
     if (f->to_unify != NULL) {
-      alma_function *fif_func = fif_access(f->fif, f->num_unified);
-      alma_function *to_unify_func = (f->to_unify->pos_count > 0) ? f->to_unify->pos_lits[0] : f->to_unify->neg_lits[0];
+      // Clause to_unify must not have become distrusted since it was connected to the fif task
+      if (!is_distrusted(collection, f->to_unify->index)) {
+        alma_function *fif_func = fif_access(f->fif, f->num_unified);
+        alma_function *to_unify_func = (f->to_unify->pos_count > 0) ? f->to_unify->pos_lits[0] : f->to_unify->neg_lits[0];
 
-      binding_list *copy = malloc(sizeof(*copy));
-      copy_bindings(copy, f->bindings);
-      if (pred_unify(fif_func, to_unify_func, f->bindings)) {
-        // If task is now completed, obtain resulting clause and insert to new_clauses
-        if (f->num_unified + 1 == f->fif->fif->premise_count) {
-          f->num_unified++;
-          clause *conclusion = fif_conclude(collection, f, f->bindings, f->to_unify);
-          tommy_array_insert(new_clauses, conclusion);
-          f->num_unified--;
+        binding_list *copy = malloc(sizeof(*copy));
+        copy_bindings(copy, f->bindings);
+        if (pred_unify(fif_func, to_unify_func, f->bindings)) {
+          // If task is now completed, obtain resulting clause and insert to new_clauses
+          if (f->num_unified + 1 == f->fif->fif->premise_count) {
+            if (fif_unified_distrusted(collection, f)) {
+              // If any unified clauses became distrusted, delete task
+              tommy_list_remove_existing(&entry->tasks, &f->node);
+              free_fif_task(f);
+            }
+            else {
+              f->num_unified++;
+              clause *conclusion = fif_conclude(collection, f, f->bindings, f->to_unify);
+              tommy_array_insert(new_clauses, conclusion);
+              f->num_unified--;
+            }
 
+            f->to_unify = NULL;
+            // Reset from copy
+            f->bindings = copy;
+          }
+          // Otherwise, adjust task and do unify loop call
+          else {
+            cleanup_bindings(copy);
+            f->num_unified++;
+            f->unified_clauses = realloc(f->unified_clauses, sizeof(*f->unified_clauses)*f->num_unified);
+            f->unified_clauses[f->num_unified-1] = f->to_unify->index;
+            f->to_unify = NULL;
+
+            tommy_list_remove_existing(&entry->tasks, &f->node);
+            tommy_list to_progress;
+            tommy_list_init(&to_progress);
+            tommy_list_insert_tail(&to_progress, &f->node, f);
+
+            // Unification succeeded; progress further on task as able in call
+            fif_task_unify_loop(collection, &to_progress, progressed, new_clauses);
+          }
+        }
+        else {
           f->to_unify = NULL;
           // Reset from copy
+          cleanup_bindings(f->bindings);
           f->bindings = copy;
         }
-        // Otherwise, adjust task and do unify loop call
-        else {
-          cleanup_bindings(copy);
-          f->num_unified++;
-          f->unified_clauses = realloc(f->unified_clauses, sizeof(*f->unified_clauses)*f->num_unified);
-          f->unified_clauses[f->num_unified-1] = f->to_unify->index;
-          f->to_unify = NULL;
-
-          tommy_list_remove_existing(&entry->tasks, &f->node);
-          tommy_list to_progress;
-          tommy_list_init(&to_progress);
-          tommy_list_insert_tail(&to_progress, &f->node, f);
-
-          // Unification succeeded; progress further on task as able in call
-          fif_task_unify_loop(collection, &to_progress, progressed, new_clauses);
-        }
       }
+
       else {
         f->to_unify = NULL;
-        // Reset from copy
-        cleanup_bindings(f->bindings);
-        f->bindings = copy;
       }
     }
   }
@@ -1301,16 +1345,6 @@ static void add_child(clause *parent, clause *child) {
   parent->children[parent->children_count-1] = child;
 }
 
-
-// Compare function to be used by tommy_hashlin_search for distrust_mapping
-// Compares long arg to key of distrust_mapping
-static int dm_compare(const void *arg, const void *obj) {
-  return *(const long*)arg - ((const distrust_mapping*)obj)->key;
-}
-
-static int is_distrusted(kb *collection, long index) {
-  return tommy_hashlin_search(&collection->distrusted, dm_compare, &index, tommy_hash_u64(0, &index, sizeof(index))) != NULL;
-}
 
 static void distrust_recursive(kb *collection, clause *c, long time, tommy_array *new_clauses) {
   // Add c to distrusted set
