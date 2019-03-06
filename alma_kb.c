@@ -288,17 +288,21 @@ static void free_fif_mapping(void *arg) {
   free(entry);
 }
 
-static void free_fif_task(void *arg) {
+static void free_fif_task(fif_task *task) {
+  // Note: clause entries ARE NOT FREED because they alias the clause objects freed in free_kb
+  cleanup_bindings(task->bindings);
+  free(task->unified_clauses);
+  free(task);
+}
+
+static void free_fif_task_mapping(void *arg) {
   fif_task_mapping *entry = arg;
   free(entry->predname);
   tommy_node *curr = tommy_list_head(&entry->tasks);
   while (curr) {
     fif_task *data = curr->data;
     curr = curr->next;
-    // Note: clause entries ARE NOT FREED because they alias the clause objects freed in free_kb
-    cleanup_bindings(data->bindings);
-    free(data->unified_clauses);
-    free(data);
+    free_fif_task(data);
   }
   free(entry);
 }
@@ -328,7 +332,7 @@ void free_kb(kb *collection) {
   }
   tommy_array_done(&collection->res_task_list);
 
-  tommy_hashlin_foreach(&collection->fif_tasks, free_fif_task);
+  tommy_hashlin_foreach(&collection->fif_tasks, free_fif_task_mapping);
   tommy_hashlin_done(&collection->fif_tasks);
 
   tommy_hashlin_foreach(&collection->distrusted, free);
@@ -735,11 +739,11 @@ void add_clause(kb *collection, clause *c) {
 }
 
 // Remove res tasks using clause
-// TODO May be inefficient -- check for deleted x and y when dealing with tasks? Or assume deletion is rare
 static void remove_res_tasks(kb *collection, clause *c) {
   for (tommy_size_t i = 0; i < tommy_array_size(&collection->res_task_list); i++) {
     res_task *current_task = tommy_array_get(&collection->res_task_list, i);
     if (current_task != NULL && (current_task->x == c || current_task->y == c)) {
+      // Removed task set to null; null checked for when processing later
       tommy_array_set(&collection->res_task_list, i, NULL);
       free(current_task);
     }
@@ -768,17 +772,108 @@ static void remove_child(clause *p, clause *c) {
 }
 
 // Given a clause already existing in KB, remove from data structures
+// Note that fif removal, or removal of a singleton clause used in a fif rule, may be very expensive
 void remove_clause(kb *collection, clause *c) {
-  for (int i = 0; i < c->pos_count; i++)
-    map_remove_clause(&collection->pos_map, &collection->pos_list, c->pos_lits[i], c);
-  for (int i = 0; i < c->neg_count; i++)
-    map_remove_clause(&collection->neg_map, &collection->neg_list, c->neg_lits[i], c);
+  if (c->tag == FIF) {
+    // fif must be removed from fif_map and all fif tasks using it deleted
+    char *name = c->fif->conclusion->name;
+    fif_mapping *fifm = tommy_hashlin_search(&collection->fif_map, fifm_compare, name, tommy_hash_u64(0, name, strlen(name)));
+    if (fifm != NULL)
+      free_fif_mapping(fifm);
+
+    for (int i = 0; i < c->fif->premise_count; i++) {
+      alma_function *f = fif_access(c, i);
+      name = name_with_arity(f->name, f->term_count);
+      fif_task_mapping *tm = tommy_hashlin_search(&collection->fif_tasks, fif_taskm_compare, name, tommy_hash_u64(0, name, strlen(name)));
+      if (tm != NULL) {
+        tommy_node *curr = tommy_list_head(&tm->tasks);
+        while (curr) {
+          fif_task *currdata = curr->data;
+          curr = curr->next;
+          if (currdata->fif == c) {
+            tommy_list_remove_existing(&tm->tasks, &currdata->node);
+            free_fif_task(currdata);
+          }
+        }
+      }
+      free(name);
+    }
+  }
+  else {
+    // non-fif must be unindexed from pos/neg maps, have resolution tasks and fif tasks (if in any) removed
+    for (int i = 0; i < c->pos_count; i++)
+      map_remove_clause(&collection->pos_map, &collection->pos_list, c->pos_lits[i], c);
+    for (int i = 0; i < c->neg_count; i++)
+      map_remove_clause(&collection->neg_map, &collection->neg_list, c->neg_lits[i], c);
+
+    remove_res_tasks(collection, c);
+
+    // May be used in fif tasks if it's a singleton clause
+    if (c->pos_count + c->neg_count == 1) {
+      int compare_pos = c->neg_count == 1;
+      char *cname = compare_pos ? c->neg_lits[0]->name : c->pos_lits[0]->name;
+      int cterms = compare_pos ? c->neg_lits[0]->term_count : c->pos_lits[0]->term_count;
+      int count = 1;
+      char **names = malloc(sizeof(*names));
+      // Always process mapping for singleton's clause
+      names[0] = compare_pos ? name_with_arity(c->neg_lits[0]->name, c->neg_lits[0]->term_count) : name_with_arity(c->pos_lits[0]->name, c->pos_lits[0]->term_count);
+
+      // Check all fif clauses for containing premise matching c
+      tommy_size_t bucket_max = collection->fif_map.low_max + collection->fif_map.split;
+      for (tommy_size_t pos = 0; pos < bucket_max; ++pos) {
+        tommy_hashlin_node *node = *tommy_hashlin_pos(&collection->fif_map, pos);
+
+        while (node) {
+          fif_mapping *data = node->data;
+          node = node->next;
+
+          for (int i = 0; i < data->num_clauses; i++) {
+            for (int j = 0; j < data->clauses[i]->fif->premise_count; j++) {
+              alma_function *premise = fif_access(data->clauses[i], j);
+
+              // For each match, collect premises after singleton's location
+              if (strcmp(premise->name, cname) == 0 && premise->term_count == cterms) {
+                names = realloc(names, sizeof(*names) * (count + data->clauses[i]->fif->premise_count - j- 1));
+                for (int k = j+1; k < data->clauses[i]->fif->premise_count; k++) {
+                  premise = fif_access(data->clauses[i], k);
+                  names[count] = name_with_arity(premise->name, premise->term_count);
+                  count++;
+                }
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      // fif_task_mappings have tasks deleted if they have unified with c
+      for (int i = 0; i < count; i++) {
+        fif_task_mapping *tm = tommy_hashlin_search(&collection->fif_tasks, fif_taskm_compare, names[i], tommy_hash_u64(0, names[i], strlen(names[i])));
+        if (tm != NULL) {
+          tommy_node *curr = tommy_list_head(&tm->tasks);
+          while (curr) {
+            fif_task *currdata = curr->data;
+            curr = curr->next;
+
+            for (int j = 0; j < currdata->num_unified; j++) {
+              if (currdata->unified_clauses[j] == c->index) {
+                tommy_list_remove_existing(&tm->tasks, &currdata->node);
+                free_fif_task(currdata);
+              }
+            }
+          }
+        }
+
+        free(names[i]);
+      }
+      free(names);
+    }
+  }
+
   index_mapping *result = tommy_hashlin_search(&collection->index_map, im_compare, &c->index, tommy_hash_u64(0, &c->index, sizeof(c->index)));
   tommy_list_remove_existing(&collection->clauses, &result->list_node);
   tommy_hashlin_remove_existing(&collection->index_map, &result->hash_node);
   free(result);
-
-  remove_res_tasks(collection, c);
 
   // Remove clause from the parents list of each of its children
   for (int i = 0; i < c->children_count; i++) {
@@ -1379,7 +1474,7 @@ static void distrust_recursive(kb *collection, clause *c, long time, tommy_array
   // Recursively distrust children that aren't distrusted already
   if (c->children != NULL) {
     for (int i = 0; i < c->children_count; i++) {
-      if (is_distrusted(collection, c->children[i]->index)) {
+      if (!is_distrusted(collection, c->children[i]->index)) {
         distrust_recursive(collection, c->children[i], time, new_clauses);
       }
     }
@@ -1405,6 +1500,8 @@ void forward_chain(kb *collection) {
     else
       delete_formula(collection, "now(1).");
     prev_str = now_str;
+
+    delete_formula(collection, "premise.");
 
     // Process resolution tasks and place results in new_clauses
     for (tommy_size_t i = 0; i < tommy_array_size(&collection->res_task_list); i++) {
@@ -1490,14 +1587,20 @@ void forward_chain(kb *collection) {
         if (dupe == NULL) {
           res_tasks_from_clause(collection, c, 1);
           fif_tasks_from_clause(collection, c);
-          // Dupe fif tasks are then used after clause freed
+
+          add_clause(collection, c);
 
           if (c->parents != NULL) {
-            // Update child info for parents of new clause
-            for (int j = 0; j < c->parents[0].count; j++)
+            int distrust = 0;
+            // Update child info for parents of new clause, check for distrusted parents
+            for (int j = 0; j < c->parents[0].count; j++) {
               add_child(c->parents[0].clauses[j], c);
+              if (is_distrusted(collection, c->parents[0].clauses[j]->index))
+                distrust = 1;
+            }
+            if (distrust)
+              distrust_recursive(collection, c, time, &new_clauses);
           }
-          add_clause(collection, c);
         }
         else {
           if (c->parents != NULL) {
@@ -1513,8 +1616,12 @@ void forward_chain(kb *collection) {
             dupe->parent_set_count += c->parent_set_count;
 
             // Parents of c also gain new child in dupe
+            // Also check if parents of c are distrusted
+            int distrust = 0;
             for (int j = 0; j < c->parents[0].count; j++) {
               int insert = 1;
+              if (is_distrusted(collection, c->parents[0].clauses[j]->index))
+                distrust = 1;
               for (int k = 0; k < c->parents[0].clauses[j]->children_count; k++) {
                 if (c->parents[0].clauses[j]->children[k] == dupe) {
                   insert = 0;
@@ -1524,6 +1631,9 @@ void forward_chain(kb *collection) {
               if (insert)
                 add_child(c->parents[0].clauses[j], dupe);
             }
+            if (distrust && !is_distrusted(collection, dupe->index))
+              distrust_recursive(collection, dupe, time, &new_clauses);
+
           }
 
           free_clause(c);
