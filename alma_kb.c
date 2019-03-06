@@ -539,18 +539,11 @@ static void map_remove_clause(tommy_hashlin *map, tommy_list *list, alma_functio
 // Searching positive or negative literals is decided by pos boolean
 static alma_function* literal_by_name(clause *c, char *name, int pos) {
   if (c != NULL) {
-    if (pos) {
-      for (int i = 0; i < c->pos_count; i++) {
-        if (strcmp(name, c->pos_lits[i]->name) == 0)
-          return c->pos_lits[i];
-      }
-    }
-    else {
-      for (int i = 0; i < c->neg_count; i++) {
-        if (strcmp(name, c->neg_lits[i]->name) == 0)
-          return c->neg_lits[i];
-      }
-    }
+    int count = pos ? c->pos_count : c->neg_count;
+    alma_function **lits = pos ? c->pos_lits : c->neg_lits;
+    for (int i = 0; i < count; i++)
+      if (strcmp(name, lits[i]->name) == 0)
+        return lits[i];
   }
   return NULL;
 }
@@ -778,8 +771,10 @@ void remove_clause(kb *collection, clause *c) {
     // fif must be removed from fif_map and all fif tasks using it deleted
     char *name = c->fif->conclusion->name;
     fif_mapping *fifm = tommy_hashlin_search(&collection->fif_map, fifm_compare, name, tommy_hash_u64(0, name, strlen(name)));
-    if (fifm != NULL)
+    if (fifm != NULL) {
+      tommy_hashlin_remove_existing(&collection->fif_map, &fifm->node);
       free_fif_mapping(fifm);
+    }
 
     for (int i = 0; i < c->fif->premise_count; i++) {
       alma_function *f = fif_access(c, i);
@@ -815,58 +810,92 @@ void remove_clause(kb *collection, clause *c) {
       int cterms = compare_pos ? c->neg_lits[0]->term_count : c->pos_lits[0]->term_count;
       int count = 1;
       char **names = malloc(sizeof(*names));
+      int prev_count = 0;
+      char **prev_names = NULL;
       // Always process mapping for singleton's clause
       names[0] = compare_pos ? name_with_arity(c->neg_lits[0]->name, c->neg_lits[0]->term_count) : name_with_arity(c->pos_lits[0]->name, c->pos_lits[0]->term_count);
 
-      // Check all fif clauses for containing premise matching c
-      tommy_size_t bucket_max = collection->fif_map.low_max + collection->fif_map.split;
-      for (tommy_size_t pos = 0; pos < bucket_max; ++pos) {
-        tommy_hashlin_node *node = *tommy_hashlin_pos(&collection->fif_map, pos);
+      // Check if fif tasks exist singleton
+      if (tommy_hashlin_search(&collection->fif_tasks, fif_taskm_compare, names[0], tommy_hash_u64(0, names[0], strlen(names[0]))) != NULL) {
+        // Check all fif clauses for containing premise matching c
+        tommy_size_t bucket_max = collection->fif_map.low_max + collection->fif_map.split;
+        for (tommy_size_t pos = 0; pos < bucket_max; ++pos) {
+          tommy_hashlin_node *node = *tommy_hashlin_pos(&collection->fif_map, pos);
 
-        while (node) {
-          fif_mapping *data = node->data;
-          node = node->next;
+          while (node) {
+            fif_mapping *data = node->data;
+            node = node->next;
 
-          for (int i = 0; i < data->num_clauses; i++) {
-            for (int j = 0; j < data->clauses[i]->fif->premise_count; j++) {
-              alma_function *premise = fif_access(data->clauses[i], j);
+            for (int i = 0; i < data->num_clauses; i++) {
+              for (int j = 0; j < data->clauses[i]->fif->premise_count; j++) {
+                alma_function *premise = fif_access(data->clauses[i], j);
 
-              // For each match, collect premises after singleton's location
-              if (strcmp(premise->name, cname) == 0 && premise->term_count == cterms) {
-                names = realloc(names, sizeof(*names) * (count + data->clauses[i]->fif->premise_count - j- 1));
-                for (int k = j+1; k < data->clauses[i]->fif->premise_count; k++) {
-                  premise = fif_access(data->clauses[i], k);
-                  names[count] = name_with_arity(premise->name, premise->term_count);
-                  count++;
+                // For each match, collect premises after singleton's location
+                if (strcmp(premise->name, cname) == 0 && premise->term_count == cterms) {
+                  if (j > 0) {
+                    prev_count++;
+                    prev_names = realloc(prev_names, sizeof(*prev_names) * prev_count);
+                    alma_function *pf = fif_access(data->clauses[i], j-1);
+                    prev_names[prev_count-1] = name_with_arity(pf->name, pf->term_count);
+                  }
+                  names = realloc(names, sizeof(*names) * (count + data->clauses[i]->fif->premise_count - j- 1));
+                  for (int k = j+1; k < data->clauses[i]->fif->premise_count; k++) {
+                    premise = fif_access(data->clauses[i], k);
+                    names[count] = name_with_arity(premise->name, premise->term_count);
+                    count++;
+                  }
+                  break;
                 }
-                break;
-              }
-            }
-          }
-        }
-      }
-
-      // fif_task_mappings have tasks deleted if they have unified with c
-      for (int i = 0; i < count; i++) {
-        fif_task_mapping *tm = tommy_hashlin_search(&collection->fif_tasks, fif_taskm_compare, names[i], tommy_hash_u64(0, names[i], strlen(names[i])));
-        if (tm != NULL) {
-          tommy_node *curr = tommy_list_head(&tm->tasks);
-          while (curr) {
-            fif_task *currdata = curr->data;
-            curr = curr->next;
-
-            for (int j = 0; j < currdata->num_unified; j++) {
-              if (currdata->unified_clauses[j] == c->index) {
-                tommy_list_remove_existing(&tm->tasks, &currdata->node);
-                free_fif_task(currdata);
               }
             }
           }
         }
 
-        free(names[i]);
+        // fif_task_mappings have tasks deleted if they have unified with c
+        for (int i = 0; i < count; i++) {
+          fif_task_mapping *tm = tommy_hashlin_search(&collection->fif_tasks, fif_taskm_compare, names[i], tommy_hash_u64(0, names[i], strlen(names[i])));
+          if (tm != NULL) {
+            tommy_node *curr = tommy_list_head(&tm->tasks);
+            while (curr) {
+              fif_task *currdata = curr->data;
+              curr = curr->next;
+
+              if (currdata->to_unify == c) {
+                currdata->to_unify = NULL;
+              }
+            }
+          }
+
+          free(names[i]);
+        }
+        free(names);
+
+        for (int i = 0; i < prev_count; i++) {
+          fif_task_mapping *tm = tommy_hashlin_search(&collection->fif_tasks, fif_taskm_compare, prev_names[i], tommy_hash_u64(0, prev_names[i], strlen(prev_names[i])));
+          if (tm != NULL) {
+            tommy_node *curr = tommy_list_head(&tm->tasks);
+            while (curr) {
+              fif_task *currdata = curr->data;
+              curr = curr->next;
+
+              for (int j = 0; j < currdata->num_unified; j++) {
+                if (currdata->unified_clauses[j] == c->index) {
+                  tommy_list_remove_existing(&tm->tasks, &currdata->node);
+                  free_fif_task(currdata);
+                }
+              }
+            }
+          }
+
+          free(prev_names[i]);
+        }
+      free(prev_names);
       }
-      free(names);
+      else {
+        // Doesn't appear in fif tasks, no need to check
+        free(names[0]);
+        free(names);
+      }
     }
   }
 
@@ -1249,25 +1278,22 @@ void process_fif_tasks(kb *collection, tommy_array *new_clauses) {
   }
 }
 
-// Finds new res tasks based on matching pos/neg predicate pairs, where one is from the KB and the other from arg
-// Tasks are added into the res_task_list of collection
-// TODO: Refactor to remove code duplication
-void res_tasks_from_clause(kb *collection, clause *c, int process_negatives) {
-  // Iterate positive literals of clauses and match against negative literals of collection
-  for (int j = 0; j < c->pos_count; j++) {
-    char *name = name_with_arity(c->pos_lits[j]->name, c->pos_lits[j]->term_count);
-    predname_mapping *result = tommy_hashlin_search(&collection->neg_map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
-    // If a negative literal is found to match a positive literal, add tasks
+// Helper of res_tasks_from_clause
+static void make_res_tasks(kb *collection, clause *c, int count, alma_function **lits, tommy_hashlin *map) {
+  for (int i = 0; i < count; i++) {
+    char *name = name_with_arity(lits[i]->name, lits[i]->term_count);
+    predname_mapping *result = tommy_hashlin_search(map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
+
     // New tasks are from Cartesian product of result's clauses with clauses' ith
     if (result != NULL) {
-      for (int k = 0; k < result->num_clauses; k++) {
-        if (c != result->clauses[k]) {
-          alma_function *lit = literal_by_name(result->clauses[k], c->pos_lits[j]->name, 0);
+      for (int j = 0; j < result->num_clauses; j++) {
+        if (c != result->clauses[j]) {
+          alma_function *lit = literal_by_name(result->clauses[j], lits[i]->name, 0);
           if (lit != NULL) {
             res_task *t = malloc(sizeof(*t));
             t->x = c;
-            t->pos = c->pos_lits[j];
-            t->y = result->clauses[k];
+            t->pos = lits[i];
+            t->y = result->clauses[j];
             t->neg = lit;
             tommy_array_insert(&collection->res_task_list, t);
             collection->res_task_count++;
@@ -1277,33 +1303,15 @@ void res_tasks_from_clause(kb *collection, clause *c, int process_negatives) {
     }
     free(name);
   }
-  // Iterate negative literals of clauses and match against positive literals of collection
+}
+
+// Finds new res tasks based on matching pos/neg predicate pairs, where one is from the KB and the other from arg
+// Tasks are added into the res_task_list of collection
+void res_tasks_from_clause(kb *collection, clause *c, int process_negatives) {
+  make_res_tasks(collection, c, c->pos_count, c->pos_lits, &collection->neg_map);
   // Only done if clauses differ from KB's clauses (i.e. after first task generation)
-  if (process_negatives) {
-    for (int j = 0; j < c->neg_count; j++) {
-      char *name = name_with_arity(c->neg_lits[j]->name, c->neg_lits[j]->term_count);
-      predname_mapping *result = tommy_hashlin_search(&collection->pos_map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
-      // If a positive literal is found to match a negative literal, add tasks
-      // New tasks are from Cartesian product of result's clauses with clauses' ith
-      if (result != NULL) {
-        for (int k = 0; k < result->num_clauses; k++) {
-          if (c != result->clauses[k]) {
-            alma_function *lit = literal_by_name(result->clauses[k], c->neg_lits[j]->name, 1);
-            if (lit != NULL) {
-              res_task *t = malloc(sizeof(*t));
-              t->x = result->clauses[k];
-              t->pos = lit;
-              t->y = c;
-              t->neg = c->neg_lits[j];
-              tommy_array_insert(&collection->res_task_list, t);
-              collection->res_task_count++;
-            }
-          }
-        }
-      }
-      free(name);
-    }
-  }
+  if (process_negatives)
+    make_res_tasks(collection, c, c->neg_count, c->neg_lits, &collection->pos_map);
 }
 
 // Returns boolean based on success of string parse
@@ -1347,73 +1355,43 @@ int delete_formula(kb *collection, char *string) {
   return 0;
 }
 
+// Resolve helper
+static void lits_copy(int count, alma_function **lits, alma_function *cmp, binding_list *mgu, alma_function **res_lits, int *res_count) {
+  for (int i = 0; i < count; i++) {
+    // In calls cmp can be assigned to resolvent to not copy it
+    if (lits[i] != cmp) {
+      alma_function *litcopy = malloc(sizeof(*litcopy));
+      copy_alma_function(lits[i], litcopy);
+      for (int j = 0; j < litcopy->term_count; j++)
+        subst(mgu, litcopy->terms+j);
+      res_lits[*res_count] = litcopy;
+      (*res_count)++;
+    }
+  }
+}
+
 // Given an MGU, substitute on literals other than pair unified and make a single resulting clause
 void resolve(res_task *t, binding_list *mgu, clause *result) {
-  //int max_pos = t->x->pos_count + t->y->pos_count - 1;
-  //int max_neg = t->x->neg_count + t->y->neg_count - 1;
   result->pos_count = 0;
   if (t->x->pos_count + t->y->pos_count - 1 > 0) {
     result->pos_lits = malloc(sizeof(*result->pos_lits) * (t->x->pos_count + t->y->pos_count - 1));
-
-    // Copy positive literal from t->x and t->y
-    for (int i = 0; i < t->x->pos_count; i++) {
-      if (t->x->pos_lits[i] != t->pos) {
-        alma_function *litcopy = malloc(sizeof(*litcopy));
-        copy_alma_function(t->x->pos_lits[i], litcopy);
-        for (int j = 0; j < litcopy->term_count; j++)
-          subst(mgu, litcopy->terms+j);
-        result->pos_lits[result->pos_count] = litcopy;
-        result->pos_count++;
-        // if (result->pos_count > max_pos)
-        //   abort();
-      }
-    }
-    for (int i = 0; i < t->y->pos_count; i++) {
-      alma_function *litcopy = malloc(sizeof(*litcopy));
-      copy_alma_function(t->y->pos_lits[i], litcopy);
-      for (int j = 0; j < litcopy->term_count; j++)
-        subst(mgu, litcopy->terms+j);
-      result->pos_lits[result->pos_count] = litcopy;
-      result->pos_count++;
-      // if (result->pos_count > max_pos)
-      //   abort();
-    }
+    // Copy positive literals from t->x and t->y
+    lits_copy(t->x->pos_count, t->x->pos_lits, t->pos, mgu, result->pos_lits, &result->pos_count);
+    lits_copy(t->y->pos_count, t->y->pos_lits, NULL, mgu, result->pos_lits, &result->pos_count);
   }
-  else {
+  else
     result->pos_lits = NULL;
-  }
 
   result->neg_count = 0;
   if (t->x->neg_count + t->y->neg_count - 1 > 0) {
     result->neg_lits = malloc(sizeof(*result->neg_lits) * (t->x->neg_count + t->y->neg_count - 1));
-
-    // Copy negative literal from t->x and t->y
-    for (int i = 0; i < t->y->neg_count; i++) {
-      if (t->y->neg_lits[i] != t->neg) {
-        alma_function *litcopy = malloc(sizeof(*litcopy));
-        copy_alma_function(t->y->neg_lits[i], litcopy);
-        for (int j = 0; j < litcopy->term_count; j++)
-          subst(mgu, litcopy->terms+j);
-        result->neg_lits[result->neg_count] = litcopy;
-        result->neg_count++;
-        // if (result->neg_count > max_neg)
-        //   abort();
-      }
-    }
-    for (int i = 0; i < t->x->neg_count; i++) {
-      alma_function *litcopy = malloc(sizeof(*litcopy));
-      copy_alma_function(t->x->neg_lits[i], litcopy);
-      for (int j = 0; j < litcopy->term_count; j++)
-        subst(mgu, litcopy->terms+j);
-      result->neg_lits[result->neg_count] = litcopy;
-      result->neg_count++;
-      // if (result->neg_count > max_neg)
-      //   abort();
-    }
+    // Copy negative literals from t->x and t->y
+    lits_copy(t->y->neg_count, t->y->neg_lits, t->neg, mgu, result->neg_lits, &result->neg_count);
+    lits_copy(t->x->neg_count, t->x->neg_lits, NULL, mgu, result->neg_lits, &result->neg_count);
   }
-  else {
+  else
     result->neg_lits = NULL;
-  }
+
   result->tag = NONE; // TODO: Deal with tags for bif case
   result->fif = NULL;
 }
@@ -1500,8 +1478,6 @@ void forward_chain(kb *collection) {
     else
       delete_formula(collection, "now(1).");
     prev_str = now_str;
-
-    delete_formula(collection, "premise.");
 
     // Process resolution tasks and place results in new_clauses
     for (tommy_size_t i = 0; i < tommy_array_size(&collection->res_task_list); i++) {
