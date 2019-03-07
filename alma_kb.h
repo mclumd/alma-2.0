@@ -5,6 +5,7 @@
 #include "tommyds/tommyds/tommyarray.h"
 #include "tommyds/tommyds/tommyhashlin.h"
 #include "tommyds/tommyds/tommylist.h"
+#include "alma_parser.h"
 #include "alma_formula.h"
 #include "alma_unify.h"
 
@@ -41,6 +42,13 @@ typedef struct fif_info {
 // Simple definition for now, likely to expand significantly in future
 // Hashsets and lists used together for multi-indexing http://www.tommyds.it/doc/multiindex.html
 typedef struct kb {
+  long time;
+  char *now_str; // String representation of now(time).
+  char *prev_str; // String representation of now(time-1).
+
+  int idling; // Boolean for idle KB state, from lack of tasks to advance
+  tommy_array new_clauses; // Clauses to be permanently added when next step
+
   tommy_list clauses; // Linked list storing index_mappings, keeps track of all clauses
   tommy_hashlin index_map; // Maps index value to a clause
 
@@ -117,9 +125,11 @@ typedef struct res_task {
   alma_function *neg; // Negative literal from y
 } res_task;
 
-void kb_init(alma_node *trees, int num_trees, kb **collection);
-void free_kb(kb *collection);
+void kb_init(kb **collection, char *file);
+void kb_step(kb *collection);
 void kb_print(kb *collection);
+void kb_halt(kb *collection);
+void kb_assert(kb *collection, char *string);
 
 clause* duplicate_check(kb *collection, clause *c);
 void add_clause(kb *collection, clause *curr);
@@ -131,6 +141,5 @@ void res_tasks_from_clause(kb *collection, clause *c, int process_negatives);
 int assert_formula(char *string, tommy_array *clauses);
 int delete_formula(kb *collection, char *string);
 void resolve(res_task *t, binding_list *mgu, clause *result);
-void forward_chain(kb *collection);
 
 #endif

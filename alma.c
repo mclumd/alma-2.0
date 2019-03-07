@@ -1,8 +1,8 @@
 #include <stdio.h>
-#include "alma_parser.h"
-#include "alma_formula.h"
+#include <string.h>
 #include "alma_kb.h"
-#include "alma_unify.h"
+
+#define LINELEN 1000
 
 // Initialize global variable (declared in alma_formula header) to count up vairable IDs
 long long variable_id_count = 0;
@@ -20,26 +20,52 @@ int main(int argc, char **argv) {
     return 0;
   }
 
-  parse_init();
+  int run = 0;
+  if (argc > 2 && strcmp(argv[2], "run") == 0)
+    run = 1;
 
-  alma_node *formulas;
-  int formula_count;
-  if (formulas_from_source(argv[1], 1, &formula_count, &formulas)) {
+  kb *alma_kb;
+  kb_init(&alma_kb, argv[1]);
 
-    kb *alma_kb;
-    kb_init(formulas, formula_count, &alma_kb);
-    tommy_array now1;
-    tommy_array_init(&now1);
-    assert_formula("now(1).", &now1);
-    add_clause(alma_kb, tommy_array_get(&now1, 0));
-    tommy_array_done(&now1);
-    kb_print(alma_kb);
+  kb_print(alma_kb);
 
-    forward_chain(alma_kb);
-
-    free_kb(alma_kb);
+  if (run) {
+    while (!alma_kb->idling) {
+      kb_step(alma_kb);
+      kb_print(alma_kb);
+    }
+    kb_halt(alma_kb);
   }
-  parse_cleanup();
+  else {
+    char line[LINELEN];
+
+    while (1) {
+      printf("alma: ");
+
+      if (fgets(line, LINELEN, stdin) != NULL) {
+        int len = strlen(line);
+        line[len-1] = '\0';
+
+        char *pos;
+        if (strcmp(line, "step") == 0) {
+          kb_step(alma_kb);
+        }
+        else if (strcmp(line, "print") == 0) {
+          kb_print(alma_kb);
+        }
+        else if (strcmp(line, "halt") == 0) {
+          kb_halt(alma_kb);
+          break;
+        }
+        else if ((pos = strstr(line, "add ")) != NULL && pos == line) {
+          char *assertion = malloc(len - 4);
+          strncpy(assertion, line+4, len-4);
+          kb_assert(alma_kb, assertion);
+          free(assertion);
+        }
+      }
+    }
+  }
 
   return 0;
 }

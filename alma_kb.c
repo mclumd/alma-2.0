@@ -227,10 +227,16 @@ static void fif_to_front(tommy_array *clauses) {
 }
 
 // Caller will need to free collection
-void kb_init(alma_node *trees, int num_trees, kb **collection) {
+void kb_init(kb **collection, char *file) {
   // Allocate and initialize
   *collection = malloc(sizeof(**collection));
   kb *collec = *collection;
+
+  collec->time = 1;
+  collec->prev_str = NULL;
+  collec->now_str = NULL;
+  collec->idling = 0;
+  tommy_array_init(&collec->new_clauses);
   tommy_list_init(&collec->clauses);
   tommy_hashlin_init(&collec->index_map);
   tommy_hashlin_init(&collec->pos_map);
@@ -243,14 +249,34 @@ void kb_init(alma_node *trees, int num_trees, kb **collection) {
   tommy_hashlin_init(&collec->fif_tasks);
   tommy_hashlin_init(&collec->distrusted);
 
+  parse_init();
   tommy_array clauses;
   tommy_array_init(&clauses);
-  nodes_to_clauses(trees, num_trees, &clauses);
-  fif_to_front(&clauses);
+  assert_formula("now(1).", &clauses);
 
-  // Insert into KB if not duplicate
+  // Given a file argument, obtain other initial clauses from
+  if (file != NULL) {
+    alma_node *trees;
+    int num_trees;
+
+    if (formulas_from_source(file, 1, &num_trees, &trees)) {
+      nodes_to_clauses(trees, num_trees, &clauses);
+      fif_to_front(&clauses);
+    }
+    // If file cannot parse, cleanup and exit
+    else {
+      for (tommy_size_t i = 0; i < tommy_array_size(&clauses); i++)
+        free_clause(tommy_array_get(&clauses, i));
+      tommy_array_done(&clauses);
+      kb_halt(collec);
+      exit(0);
+    }
+  }
+
+  // Insert starting clauses
   for (tommy_size_t i = 0; i < tommy_array_size(&clauses); i++) {
     clause *c = tommy_array_get(&clauses, i);
+    // Insert into KB if not duplicate
     if (duplicate_check(collec, c) == NULL)
       add_clause(collec, c);
     else
@@ -276,7 +302,7 @@ static void free_predname_mapping(void *arg) {
   predname_mapping *entry = arg;
   free(entry->predname);
   free(entry->clauses);
-  // Note: clause entries ARE NOT FREED because they alias the clause objects freed in free_kb
+  // Note: clause entries ARE NOT FREED because they alias the clause objects freed in kb_halt
   free(entry);
 }
 
@@ -284,12 +310,12 @@ static void free_fif_mapping(void *arg) {
   fif_mapping *entry = arg;
   free(entry->conclude_name);
   free(entry->clauses);
-  // Note: clause entries ARE NOT FREED because they alias the clause objects freed in free_kb
+  // Note: clause entries ARE NOT FREED because they alias the clause objects freed in kb_halt
   free(entry);
 }
 
 static void free_fif_task(fif_task *task) {
-  // Note: clause entries ARE NOT FREED because they alias the clause objects freed in free_kb
+  // Note: clause entries ARE NOT FREED because they alias the clause objects freed in kb_halt
   cleanup_bindings(task->bindings);
   free(task->unified_clauses);
   free(task);
@@ -307,7 +333,14 @@ static void free_fif_task_mapping(void *arg) {
   free(entry);
 }
 
-void free_kb(kb *collection) {
+void kb_halt(kb *collection) {
+  // now_str and prev_str alias at this point, only free one
+  free(collection->now_str);
+
+  for (tommy_size_t i = 0; i < tommy_array_size(&collection->new_clauses); i++)
+    free_clause(tommy_array_get(&collection->new_clauses, i));
+  tommy_array_done(&collection->new_clauses);
+
   tommy_node *curr = tommy_list_head(&collection->clauses);
   while (curr) {
     index_mapping *data = curr->data;
@@ -327,9 +360,8 @@ void free_kb(kb *collection) {
   tommy_hashlin_done(&collection->fif_map);
 
   // Res task pointers are aliases to those freed from collection->clauses, so only free overall task here
-  for (tommy_size_t i = 0; i < tommy_array_size(&collection->res_task_list); i++) {
+  for (tommy_size_t i = 0; i < tommy_array_size(&collection->res_task_list); i++)
     free(tommy_array_get(&collection->res_task_list, i));
-  }
   tommy_array_done(&collection->res_task_list);
 
   tommy_hashlin_foreach(&collection->fif_tasks, free_fif_task_mapping);
@@ -339,6 +371,8 @@ void free_kb(kb *collection) {
   tommy_hashlin_done(&collection->distrusted);
 
   free(collection);
+
+  parse_cleanup();
 }
 
 
@@ -471,7 +505,7 @@ static int fif_taskm_compare(const void *arg, const void *obj) {
 }
 
 // Given "name" and integer arity, returns "name/arity"
-// Allocated cstring is later placed in predname_mapping, and eventually freed by free_kb
+// Allocated cstring is later placed in predname_mapping, and eventually freed by kb_halt
 static char* name_with_arity(char *name, int arity) {
   int arity_len = snprintf(NULL, 0, "%d", arity);
   char *arity_str = malloc(arity_len+1);
@@ -1326,6 +1360,12 @@ int assert_formula(char *string, tommy_array *clauses) {
   return 0;
 }
 
+void kb_assert(kb *collection, char *string) {
+  if(assert_formula(string, &collection->new_clauses)) {
+    
+  }
+}
+
 int delete_formula(kb *collection, char *string) {
   alma_node *formulas;
   int formula_count;
@@ -1459,171 +1499,159 @@ static void distrust_recursive(kb *collection, clause *c, long time, tommy_array
   }
 }
 
-void forward_chain(kb *collection) {
-  int chain = 1;
-  long time = 1;
-  char *prev_str = NULL;
-  char *now_str = NULL;
-  while(chain) {
-    time++;
-    tommy_array new_clauses;
-    tommy_array_init(&new_clauses);
+void kb_step(kb *collection) {
+  collection->time++;
 
-    now_str = now(time);
-    assert_formula(now_str, &new_clauses);
-    if (prev_str != NULL) {
-      delete_formula(collection, prev_str);
-      free(prev_str);
-    }
-    else
-      delete_formula(collection, "now(1).");
-    prev_str = now_str;
+  collection->now_str = now(collection->time);
+  assert_formula(collection->now_str, &collection->new_clauses);
+  if (collection->prev_str != NULL) {
+    delete_formula(collection, collection->prev_str);
+    free(collection->prev_str);
+  }
+  else
+    delete_formula(collection, "now(1).");
+  collection->prev_str = collection->now_str;
 
-    // Process resolution tasks and place results in new_clauses
-    for (tommy_size_t i = 0; i < tommy_array_size(&collection->res_task_list); i++) {
-      res_task *current_task = tommy_array_get(&collection->res_task_list, i);
-      if (current_task != NULL) {
-        // Does not do resolution with a distrusted clause
-        if (!is_distrusted(collection, current_task->x->index) && !is_distrusted(collection,  current_task->y->index)) {
-          binding_list *theta = malloc(sizeof(*theta));
-          theta->list = NULL;
-          theta->num_bindings = 0;
-          // Given a res_task, attempt unification
-          if (pred_unify(current_task->pos, current_task->neg, theta)) {
-            // If successful, create clause for result of resolution and add to new_clauses
-            clause *res_result = malloc(sizeof(*res_result));
-            resolve(current_task, theta, res_result);
+  // Process resolution tasks and place results in new_clauses
+  for (tommy_size_t i = 0; i < tommy_array_size(&collection->res_task_list); i++) {
+    res_task *current_task = tommy_array_get(&collection->res_task_list, i);
+    if (current_task != NULL) {
+      // Does not do resolution with a distrusted clause
+      if (!is_distrusted(collection, current_task->x->index) && !is_distrusted(collection,  current_task->y->index)) {
+        binding_list *theta = malloc(sizeof(*theta));
+        theta->list = NULL;
+        theta->num_bindings = 0;
+        // Given a res_task, attempt unification
+        if (pred_unify(current_task->pos, current_task->neg, theta)) {
+          // If successful, create clause for result of resolution and add to new_clauses
+          clause *res_result = malloc(sizeof(*res_result));
+          resolve(current_task, theta, res_result);
 
-            // An empty resolution result is not a valid clause to add to KB
-            if (res_result->pos_count > 0 || res_result->neg_count > 0) {
-              // Initialize parents of result
-              res_result->parent_set_count = 1;
-              res_result->parents = malloc(sizeof(*res_result->parents));
-              res_result->parents[0].count = 2;
-              res_result->parents[0].clauses = malloc(sizeof(*res_result->parents[0].clauses) * 2);
-              res_result->parents[0].clauses[0] = current_task->x;
-              res_result->parents[0].clauses[1] = current_task->y;
-              res_result->children_count = 0;
-              res_result->children = NULL;
+          // An empty resolution result is not a valid clause to add to KB
+          if (res_result->pos_count > 0 || res_result->neg_count > 0) {
+            // Initialize parents of result
+            res_result->parent_set_count = 1;
+            res_result->parents = malloc(sizeof(*res_result->parents));
+            res_result->parents[0].count = 2;
+            res_result->parents[0].clauses = malloc(sizeof(*res_result->parents[0].clauses) * 2);
+            res_result->parents[0].clauses[0] = current_task->x;
+            res_result->parents[0].clauses[1] = current_task->y;
+            res_result->children_count = 0;
+            res_result->children = NULL;
 
-              tommy_array_insert(&new_clauses, res_result);
-            }
-            else {
-              free(res_result);
-
-              // Empty resolution result indicates a contradiction between clauses
-              char *arg1 = long_to_str(current_task->x->index);
-              char *arg2 = long_to_str(current_task->y->index);
-              char *time_str = long_to_str(time);
-
-              char *contra_str = malloc(strlen(arg1) + strlen(arg2) + strlen(time_str) + 12);
-              strcpy(contra_str, "contra(");
-              int loc = 7;
-              strcpy(contra_str+loc, arg1);
-              loc += strlen(arg1);
-              free(arg1);
-              contra_str[loc++] = ',';
-              strcpy(contra_str+loc, arg2);
-              loc += strlen(arg2);
-              free(arg2);
-              contra_str[loc++] = ',';
-              strcpy(contra_str+loc, time_str);
-              loc += strlen(time_str);
-              free(time_str);
-              strcpy(contra_str+loc, ").");
-
-              // Assert contra and distrusted
-              assert_formula(contra_str, &new_clauses);
-              free(contra_str);
-              distrust_recursive(collection, current_task->x, time, &new_clauses);
-              distrust_recursive(collection, current_task->y, time, &new_clauses);
-            }
+            tommy_array_insert(&collection->new_clauses, res_result);
           }
-          cleanup_bindings(theta);
-        }
+          else {
+            free(res_result);
 
-        collection->res_task_count--;
-        free(current_task);
-      }
-    }
-    tommy_array_done(&collection->res_task_list);
-    tommy_array_init(&collection->res_task_list);
+            // Empty resolution result indicates a contradiction between clauses
+            char *arg1 = long_to_str(current_task->x->index);
+            char *arg2 = long_to_str(current_task->y->index);
+            char *time_str = long_to_str(collection->time);
 
-    // Process fif tasks and place results in new_clauses
-    process_fif_tasks(collection, &new_clauses);
+            char *contra_str = malloc(strlen(arg1) + strlen(arg2) + strlen(time_str) + 12);
+            strcpy(contra_str, "contra(");
+            int loc = 7;
+            strcpy(contra_str+loc, arg1);
+            loc += strlen(arg1);
+            free(arg1);
+            contra_str[loc++] = ',';
+            strcpy(contra_str+loc, arg2);
+            loc += strlen(arg2);
+            free(arg2);
+            contra_str[loc++] = ',';
+            strcpy(contra_str+loc, time_str);
+            loc += strlen(time_str);
+            free(time_str);
+            strcpy(contra_str+loc, ").");
 
-    // Time always advances; continues while other clauses are added
-    if (tommy_array_size(&new_clauses) > 1) {
-      fif_to_front(&new_clauses);
-
-      // Insert new clauses derived that are not duplicates
-      for (tommy_size_t i = 0; i < tommy_array_size(&new_clauses); i++) {
-        clause *c = tommy_array_get(&new_clauses, i);
-        clause *dupe = duplicate_check(collection, c);
-        if (dupe == NULL) {
-          res_tasks_from_clause(collection, c, 1);
-          fif_tasks_from_clause(collection, c);
-
-          add_clause(collection, c);
-
-          if (c->parents != NULL) {
-            int distrust = 0;
-            // Update child info for parents of new clause, check for distrusted parents
-            for (int j = 0; j < c->parents[0].count; j++) {
-              add_child(c->parents[0].clauses[j], c);
-              if (is_distrusted(collection, c->parents[0].clauses[j]->index))
-                distrust = 1;
-            }
-            if (distrust)
-              distrust_recursive(collection, c, time, &new_clauses);
+            // Assert contra and distrusted
+            assert_formula(contra_str, &collection->new_clauses);
+            free(contra_str);
+            distrust_recursive(collection, current_task->x, collection->time, &collection->new_clauses);
+            distrust_recursive(collection, current_task->y, collection->time, &collection->new_clauses);
           }
         }
-        else {
-          if (c->parents != NULL) {
-            // A duplicate clause derivation should be acknowledged by adding extra parents to the clause it duplicates
-            // Copy parents of c to dupe
-            dupe->parents = realloc(dupe->parents, sizeof(*dupe->parents) * (dupe->parent_set_count + c->parent_set_count));
-            for (int j = dupe->parent_set_count, k = 0; j < dupe->parent_set_count + c->parent_set_count; j++, k++) {
-              dupe->parents[j].count = c->parents[k].count;
-              dupe->parents[j].clauses = malloc(sizeof(*dupe->parents[j].clauses) * dupe->parents[j].count);
-              memcpy(dupe->parents[j].clauses, c->parents[k].clauses, sizeof(*dupe->parents[j].clauses) * dupe->parents[j].count);
-            }
-            //memcpy(dupe->parents + dupe->parent_set_count, c->parents, sizeof(*c->parents) * c->parent_set_count);
-            dupe->parent_set_count += c->parent_set_count;
-
-            // Parents of c also gain new child in dupe
-            // Also check if parents of c are distrusted
-            int distrust = 0;
-            for (int j = 0; j < c->parents[0].count; j++) {
-              int insert = 1;
-              if (is_distrusted(collection, c->parents[0].clauses[j]->index))
-                distrust = 1;
-              for (int k = 0; k < c->parents[0].clauses[j]->children_count; k++) {
-                if (c->parents[0].clauses[j]->children[k] == dupe) {
-                  insert = 0;
-                  break;
-                }
-              }
-              if (insert)
-                add_child(c->parents[0].clauses[j], dupe);
-            }
-            if (distrust && !is_distrusted(collection, dupe->index))
-              distrust_recursive(collection, dupe, time, &new_clauses);
-
-          }
-
-          free_clause(c);
-        }
+        cleanup_bindings(theta);
       }
 
-      kb_print(collection);
+      collection->res_task_count--;
+      free(current_task);
+    }
+  }
+  tommy_array_done(&collection->res_task_list);
+  tommy_array_init(&collection->res_task_list);
+
+  // Process fif tasks and place results in new_clauses
+  process_fif_tasks(collection, &collection->new_clauses);
+
+
+  fif_to_front(&collection->new_clauses);
+  // Insert new clauses derived that are not duplicates
+  for (tommy_size_t i = 0; i < tommy_array_size(&collection->new_clauses); i++) {
+    clause *c = tommy_array_get(&collection->new_clauses, i);
+    clause *dupe = duplicate_check(collection, c);
+    if (dupe == NULL) {
+      res_tasks_from_clause(collection, c, 1);
+      fif_tasks_from_clause(collection, c);
+
+      add_clause(collection, c);
+
+      if (c->parents != NULL) {
+        int distrust = 0;
+        // Update child info for parents of new clause, check for distrusted parents
+        for (int j = 0; j < c->parents[0].count; j++) {
+          add_child(c->parents[0].clauses[j], c);
+          if (is_distrusted(collection, c->parents[0].clauses[j]->index))
+            distrust = 1;
+        }
+        if (distrust)
+          distrust_recursive(collection, c, collection->time, &collection->new_clauses);
+      }
     }
     else {
-      chain = 0;
-      free(now_str);
-      free_clause(tommy_array_get(&new_clauses, 0));
-      printf("Idling...\n");
+      if (c->parents != NULL) {
+        // A duplicate clause derivation should be acknowledged by adding extra parents to the clause it duplicates
+        // Copy parents of c to dupe
+        dupe->parents = realloc(dupe->parents, sizeof(*dupe->parents) * (dupe->parent_set_count + c->parent_set_count));
+        for (int j = dupe->parent_set_count, k = 0; j < dupe->parent_set_count + c->parent_set_count; j++, k++) {
+          dupe->parents[j].count = c->parents[k].count;
+          dupe->parents[j].clauses = malloc(sizeof(*dupe->parents[j].clauses) * dupe->parents[j].count);
+          memcpy(dupe->parents[j].clauses, c->parents[k].clauses, sizeof(*dupe->parents[j].clauses) * dupe->parents[j].count);
+        }
+        //memcpy(dupe->parents + dupe->parent_set_count, c->parents, sizeof(*c->parents) * c->parent_set_count);
+        dupe->parent_set_count += c->parent_set_count;
+
+        // Parents of c also gain new child in dupe
+        // Also check if parents of c are distrusted
+        int distrust = 0;
+        for (int j = 0; j < c->parents[0].count; j++) {
+          int insert = 1;
+          if (is_distrusted(collection, c->parents[0].clauses[j]->index))
+            distrust = 1;
+          for (int k = 0; k < c->parents[0].clauses[j]->children_count; k++) {
+            if (c->parents[0].clauses[j]->children[k] == dupe) {
+              insert = 0;
+              break;
+            }
+          }
+          if (insert)
+            add_child(c->parents[0].clauses[j], dupe);
+        }
+        if (distrust && !is_distrusted(collection, dupe->index))
+          distrust_recursive(collection, dupe, collection->time, &collection->new_clauses);
+
+      }
+
+      free_clause(c);
     }
-    tommy_array_done(&new_clauses);
   }
+
+  // Time always advances; continues while other clauses are added
+  if (tommy_array_size(&collection->new_clauses) <= 1) {
+    collection->idling = 1;
+    printf("Idling...\n");
+  }
+  tommy_array_done(&collection->new_clauses);
+  tommy_array_init(&collection->new_clauses);
 }
