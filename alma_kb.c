@@ -1313,7 +1313,7 @@ void process_fif_tasks(kb *collection, tommy_array *new_clauses) {
 }
 
 // Helper of res_tasks_from_clause
-static void make_res_tasks(kb *collection, clause *c, int count, alma_function **lits, tommy_hashlin *map) {
+static void make_res_tasks(kb *collection, clause *c, int count, alma_function **lits, tommy_hashlin *map, int pos) {
   for (int i = 0; i < count; i++) {
     char *name = name_with_arity(lits[i]->name, lits[i]->term_count);
     predname_mapping *result = tommy_hashlin_search(map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
@@ -1322,13 +1322,22 @@ static void make_res_tasks(kb *collection, clause *c, int count, alma_function *
     if (result != NULL) {
       for (int j = 0; j < result->num_clauses; j++) {
         if (c != result->clauses[j]) {
-          alma_function *lit = literal_by_name(result->clauses[j], lits[i]->name, 0);
+          alma_function *lit = literal_by_name(result->clauses[j], lits[i]->name, pos);
           if (lit != NULL) {
             res_task *t = malloc(sizeof(*t));
-            t->x = c;
-            t->pos = lits[i];
-            t->y = result->clauses[j];
-            t->neg = lit;
+            if (!pos) {
+              t->x = c;
+              t->pos = lits[i];
+              t->y = result->clauses[j];
+              t->neg = lit;
+            }
+            else {
+              t->x = result->clauses[j];
+              t->pos = lit;
+              t->y = c;
+              t->neg = lits[i];
+            }
+
             tommy_array_insert(&collection->res_task_list, t);
             collection->res_task_count++;
           }
@@ -1342,10 +1351,10 @@ static void make_res_tasks(kb *collection, clause *c, int count, alma_function *
 // Finds new res tasks based on matching pos/neg predicate pairs, where one is from the KB and the other from arg
 // Tasks are added into the res_task_list of collection
 void res_tasks_from_clause(kb *collection, clause *c, int process_negatives) {
-  make_res_tasks(collection, c, c->pos_count, c->pos_lits, &collection->neg_map);
+  make_res_tasks(collection, c, c->pos_count, c->pos_lits, &collection->neg_map, 0);
   // Only done if clauses differ from KB's clauses (i.e. after first task generation)
   if (process_negatives)
-    make_res_tasks(collection, c, c->neg_count, c->neg_lits, &collection->pos_map);
+    make_res_tasks(collection, c, c->neg_count, c->neg_lits, &collection->pos_map, 1);
 }
 
 // Returns boolean based on success of string parse
@@ -1362,7 +1371,7 @@ int assert_formula(char *string, tommy_array *clauses) {
 
 void kb_assert(kb *collection, char *string) {
   if(assert_formula(string, &collection->new_clauses)) {
-    
+    // TODO
   }
 }
 
@@ -1396,10 +1405,10 @@ int delete_formula(kb *collection, char *string) {
 }
 
 // Resolve helper
-static void lits_copy(int count, alma_function **lits, alma_function *cmp, binding_list *mgu, alma_function **res_lits, int *res_count) {
+static void lits_copy(int count, alma_function **lits, alma_function **cmp, binding_list *mgu, alma_function **res_lits, int *res_count) {
   for (int i = 0; i < count; i++) {
     // In calls cmp can be assigned to resolvent to not copy it
-    if (lits[i] != cmp) {
+    if (cmp == NULL || lits[i] != *cmp) {
       alma_function *litcopy = malloc(sizeof(*litcopy));
       copy_alma_function(lits[i], litcopy);
       for (int j = 0; j < litcopy->term_count; j++)
@@ -1416,7 +1425,7 @@ void resolve(res_task *t, binding_list *mgu, clause *result) {
   if (t->x->pos_count + t->y->pos_count - 1 > 0) {
     result->pos_lits = malloc(sizeof(*result->pos_lits) * (t->x->pos_count + t->y->pos_count - 1));
     // Copy positive literals from t->x and t->y
-    lits_copy(t->x->pos_count, t->x->pos_lits, t->pos, mgu, result->pos_lits, &result->pos_count);
+    lits_copy(t->x->pos_count, t->x->pos_lits, &t->pos, mgu, result->pos_lits, &result->pos_count);
     lits_copy(t->y->pos_count, t->y->pos_lits, NULL, mgu, result->pos_lits, &result->pos_count);
   }
   else
@@ -1426,7 +1435,7 @@ void resolve(res_task *t, binding_list *mgu, clause *result) {
   if (t->x->neg_count + t->y->neg_count - 1 > 0) {
     result->neg_lits = malloc(sizeof(*result->neg_lits) * (t->x->neg_count + t->y->neg_count - 1));
     // Copy negative literals from t->x and t->y
-    lits_copy(t->y->neg_count, t->y->neg_lits, t->neg, mgu, result->neg_lits, &result->neg_count);
+    lits_copy(t->y->neg_count, t->y->neg_lits, &t->neg, mgu, result->neg_lits, &result->neg_count);
     lits_copy(t->x->neg_count, t->x->neg_lits, NULL, mgu, result->neg_lits, &result->neg_count);
   }
   else
