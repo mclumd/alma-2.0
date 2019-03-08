@@ -130,16 +130,18 @@ void kb_step(kb *collection);
 void kb_print(kb *collection);
 void kb_halt(kb *collection);
 void kb_assert(kb *collection, char *string);
+void kb_remove(kb *collection, char *string);
 
 clause* duplicate_check(kb *collection, clause *c);
 void add_clause(kb *collection, clause *curr);
 void remove_clause(kb *collection, clause *c);
 void fif_task_map_init(kb *collection, clause *c);
 void fif_tasks_from_clause(kb *collection, clause *c);
-void process_fif_tasks(kb *collection, tommy_array *new_clauses);
+void process_fif_tasks(kb *collection);
+void process_res_tasks(kb *collection);
 void res_tasks_from_clause(kb *collection, clause *c, int process_negatives);
-int assert_formula(char *string, tommy_array *clauses);
-int delete_formula(kb *collection, char *string);
+int assert_formula(kb *collection, char *string, int print);
+int delete_formula(kb *collection, char *string, int print);
 void resolve(res_task *t, binding_list *mgu, clause *result);
 
 #endif

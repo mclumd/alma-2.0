@@ -176,16 +176,13 @@ int formulas_from_source(char *source, int file_src, int *formula_count, alma_no
     // Obtain ALMA tree representations from MPC's AST
     generate_alma_trees(ast, formulas, formula_count);
     mpc_ast_delete(ast);
-    // for (int i = 0; i < formula_count; i++)
-    //   alma_print(formulas+i);
-    // printf("\n");
 
     // Flatten CNF list into KB of clauses
     for (int i = 0; i < *formula_count; i++)
       make_cnf(*formulas+i);
     // printf("CNF equivalents:\n");
-    // for (int i = 0; i < formula_count; i++)
-    //   alma_print(formulas+i);
+    // for (int i = 0; i < *formula_count; i++)
+    //   alma_print(*formulas+i);
     // printf("\n");
 
     return 1;
