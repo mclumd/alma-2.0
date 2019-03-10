@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include <string.h>
 #include "alma_unify.h"
 
@@ -133,15 +134,6 @@ int pred_unify(alma_function *x, alma_function *y, binding_list *theta) {
 
   // Unification suceeded; bindings must be cleaned up by caller
   return 1;
-}
-
-
-void print_bindings(binding_list *theta) {
-  for (int i = 0; i < theta->num_bindings; i++) {
-    printf("%s / ", theta->list[i].var->name);
-    alma_term_print(theta->list[i].term);
-    printf("\n");
-  }
 }
 
 // Function to free binding block, after failure or success

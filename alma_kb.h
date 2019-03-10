@@ -5,7 +5,7 @@
 #include "tommyds/tommyds/tommyarray.h"
 #include "tommyds/tommyds/tommyhashlin.h"
 #include "tommyds/tommyds/tommylist.h"
-#include "alma_parser.h"
+#include "alma_command.h"
 #include "alma_formula.h"
 #include "alma_unify.h"
 
@@ -39,9 +39,7 @@ typedef struct fif_info {
   alma_function *conclusion; // Pointer to track conclusion of fif
 } fif_info;
 
-// Simple definition for now, likely to expand significantly in future
-// Hashsets and lists used together for multi-indexing http://www.tommyds.it/doc/multiindex.html
-typedef struct kb {
+struct kb {
   long time;
   char *now_str; // String representation of now(time).
   char *prev_str; // String representation of now(time-1).
@@ -52,9 +50,9 @@ typedef struct kb {
   tommy_list clauses; // Linked list storing index_mappings, keeps track of all clauses
   tommy_hashlin index_map; // Maps index value to a clause
 
+  // Hashsets and lists used together for multi-indexing http://www.tommyds.it/doc/multiindex.html
   tommy_hashlin pos_map; // Maps each predicate name to the set of clauses where it appears as positive literal
   tommy_list pos_list; // Linked list for iterating pos_map
-
   tommy_hashlin neg_map; // Maps each predicate name to the set of clauses where it appears as negative literal
   tommy_list neg_list; // Linked list for iterating neg_map
 
@@ -67,7 +65,7 @@ typedef struct kb {
   tommy_hashlin fif_tasks; // Stores tasks for fif rules
 
   tommy_hashlin distrusted; // Stores distrusted items by clause index
-} kb;
+};
 
 // Map used for entries in index_map
 typedef struct index_mapping {
@@ -125,13 +123,6 @@ typedef struct res_task {
   alma_function *neg; // Negative literal from y
 } res_task;
 
-void kb_init(kb **collection, char *file);
-void kb_step(kb *collection);
-void kb_print(kb *collection);
-void kb_halt(kb *collection);
-void kb_assert(kb *collection, char *string);
-void kb_remove(kb *collection, char *string);
-
 clause* duplicate_check(kb *collection, clause *c);
 void add_clause(kb *collection, clause *curr);
 void remove_clause(kb *collection, clause *c);
@@ -143,5 +134,19 @@ void res_tasks_from_clause(kb *collection, clause *c, int process_negatives);
 int assert_formula(kb *collection, char *string, int print);
 int delete_formula(kb *collection, char *string, int print);
 void resolve(res_task *t, binding_list *mgu, clause *result);
+
+// Functions used in alma_command
+char* now(long t);
+void free_clause(clause *c);
+void free_fif_task_mapping(void *arg);
+alma_function* fif_access(clause *c, int i);
+void nodes_to_clauses(alma_node *trees, int num_trees, tommy_array *clauses, int print);
+void fif_to_front(tommy_array *clauses);
+void free_predname_mapping(void *arg);
+void free_fif_mapping(void *arg);
+int is_distrusted(kb *collection, long index);
+char* long_to_str(long x);
+void add_child(clause *parent, clause *child);
+void distrust_recursive(kb *collection, clause *c, char *time);
 
 #endif

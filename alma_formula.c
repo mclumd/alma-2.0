@@ -1,6 +1,9 @@
+#include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include "alma_formula.h"
+#include "alma_print.h"
+#include "alma_parser.h"
 
 // TODO: Longer term, check for error codes of library functions used
 // TODO: Functions to return error instead of void
@@ -182,7 +185,7 @@ int formulas_from_source(char *source, int file_src, int *formula_count, alma_no
       make_cnf(*formulas+i);
     // printf("CNF equivalents:\n");
     // for (int i = 0; i < *formula_count; i++)
-    //   alma_print(*formulas+i);
+    //   alma_fol_print(*formulas+i);
     // printf("\n");
 
     return 1;
@@ -489,85 +492,4 @@ void make_cnf(alma_node *node) {
   eliminate_conditionals(node);
   negation_inwards(node);
   dist_or_over_and(node);
-}
-
-
-void alma_term_print(alma_term *term) {
-  switch (term->type) {
-    case VARIABLE:
-      printf("%s%lld", term->variable->name, term->variable->id);
-      break;
-    case CONSTANT:
-      printf("%s", term->constant->name);
-      break;
-    case FUNCTION:
-      alma_function_print(term->function);
-      break;
-  }
-}
-
-void alma_function_print(alma_function *func) {
-  printf("%s", func->name);
-  if (func->term_count > 0) {
-    printf("(");
-    for (int i = 0; i < func->term_count; i++) {
-      if (i > 0)
-        printf(", ");
-      alma_term_print(func->terms + i);
-    }
-    printf(")");
-  }
-}
-
-static void alma_print_rec(alma_node *node, int indent) {
-  char *spacing = malloc(indent*2 + 1);
-  if (indent > 0)
-    memset(spacing, ' ', indent*2);
-  spacing[indent*2] = '\0';
-
-  if (node->type == FOL) {
-    char *op;
-    switch (node->fol->op) {
-      case NOT:
-        op = "NOT"; break;
-      case OR:
-        op = "OR"; break;
-      case AND:
-        op = "AND"; break;
-      case IF:
-      default:
-        op = "IF"; break;
-    }
-
-    if (node->fol->tag != NONE) {
-      char *tag = "";
-      switch (node->fol->tag) {
-        case FIF:
-          tag = "FIF"; break;
-        case BIF:
-          tag = "BIF"; break;
-        case NONE:
-          tag = "NONE"; break;
-      }
-      printf("%sFOL: %s, tag: %s\n", spacing, op, tag);
-    }
-    else {
-      printf("%sFOL: %s\n", spacing, op);
-    }
-
-    alma_print_rec(node->fol->arg1, indent+1);
-    if (node->fol->arg2 != NULL) {
-      alma_print_rec(node->fol->arg2, indent+1);
-    }
-  }
-  else {
-    printf("%sPREDICATE: ", spacing);
-    alma_function_print(node->predicate);
-    printf("\n");
-  }
-  free(spacing);
-}
-
-void alma_print(alma_node *node) {
-  alma_print_rec(node, 0);
 }

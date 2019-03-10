@@ -2,7 +2,6 @@
 #define alma_formula_h
 
 #include "mpc/mpc.h"
-#include "alma_parser.h"
 
 extern long long variable_id_count;
 
@@ -81,9 +80,5 @@ void eliminate_conditionals(alma_node *node);
 void negation_inwards(alma_node *node);
 void dist_or_over_and(alma_node *node);
 void make_cnf(alma_node *node);
-
-void alma_term_print(alma_term *term);
-void alma_function_print(alma_function *func);
-void alma_print(alma_node *node);
 
 #endif

@@ -1,5 +1,7 @@
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include "alma_command.h"
 #include "alma_kb.h"
 
 #define LINELEN 1000
