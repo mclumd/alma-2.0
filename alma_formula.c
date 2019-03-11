@@ -8,8 +8,6 @@
 // TODO: Longer term, check for error codes of library functions used
 // TODO: Functions to return error instead of void
 
-// TODO: Tag management when rewriting needs to be considered more carefully
-
 // Constructs ALMA FOL operator (i.e. AND/OR/NOT/IF) from arguments
 void alma_fol_init(alma_node *node, alma_operator op, alma_node *arg1, alma_node *arg2, if_tag tag) {
   node->type = FOL;

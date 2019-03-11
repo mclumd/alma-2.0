@@ -149,7 +149,11 @@ static int function_compare(const void *p1, const void *p2) {
 // Recursively calls when an AND is found to separate conjunctions
 static void flatten_node(alma_node *node, tommy_array *clauses, int print) {
   if (node->type == FOL && node->fol->op == AND) {
+    if (node->fol->arg1->type == FOL)
+      node->fol->arg1->fol->tag = node->fol->tag;
     flatten_node(node->fol->arg1, clauses, print);
+    if (node->fol->arg2->type == FOL)
+      node->fol->arg2->fol->tag = node->fol->tag;
     flatten_node(node->fol->arg2, clauses, print);
   }
   else {
@@ -1240,7 +1244,7 @@ void resolve(res_task *t, binding_list *mgu, clause *result) {
   else
     result->neg_lits = NULL;
 
-  result->tag = NONE; // TODO: Deal with tags for bif case
+  result->tag = NONE;
   result->fif = NULL;
 }
 

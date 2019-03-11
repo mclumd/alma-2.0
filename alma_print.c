@@ -83,6 +83,18 @@ void alma_fol_print(alma_node *node) {
   alma_fol_print_rec(node, 0);
 }
 
+static void lits_print(alma_function **lits, int count, char *delimiter, int negate) {
+  for (int i = 0; i < count; i++) {
+    if (negate)
+      printf("not(");
+    alma_function_print(lits[i]);
+    if (negate)
+      printf(")");
+    if (i < count-1)
+      printf(" %s ", delimiter);
+  }
+}
+
 void clause_print(clause *c) {
   // Print fif in original format
   if (c->tag == FIF) {
@@ -106,34 +118,22 @@ void clause_print(clause *c) {
   // Non-fif case
   else {
     if (c->pos_count == 0) {
-      for (int i = 0; i < c->neg_count; i++) {
-        printf("not(");
-        alma_function_print(c->neg_lits[i]);
-        printf(")");
-        if (i < c->neg_count-1)
-          printf(" \\/ ");
+      if (c->tag == BIF) {
+        lits_print(c->neg_lits, c->neg_count, "/\\", 0);
+        printf(" -b-> F");
       }
+      else
+        lits_print(c->neg_lits, c->neg_count, "\\/", 1);
     }
     else if (c->neg_count == 0) {
-      for (int i = 0; i < c->pos_count; i++) {
-        alma_function_print(c->pos_lits[i]);
-        if (i < c->pos_count-1)
-          printf(" \\/ ");
-      }
+      if (c->tag == BIF)
+        printf("T -b-> ");
+      lits_print(c->pos_lits, c->pos_count, "\\/", 0);
     }
     else {
-      for (int i = 0; i < c->neg_count; i++) {
-        alma_function_print(c->neg_lits[i]);
-        if (i < c->neg_count-1)
-          printf(" /\\");
-        printf(" ");
-      }
-      printf("---> ");
-      for (int i = 0; i < c->pos_count; i++) {
-        alma_function_print(c->pos_lits[i]);
-        if (i < c->pos_count-1)
-          printf(" \\/ ");
-      }
+      lits_print(c->neg_lits, c->neg_count, "/\\", 0);
+      printf(" -%c-> ", c->tag == BIF ? 'b' : '-');
+      lits_print(c->pos_lits, c->pos_count, "\\/", 0);
     }
     if (c->parents != NULL || c->children != NULL) {
       printf(" (");
