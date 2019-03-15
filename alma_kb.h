@@ -58,11 +58,12 @@ struct kb {
 
   tommy_hashlin fif_map; // Tracks fif formulas in clauses
 
-  tommy_array res_task_list; // Stores tasks for resolution (non-tagged clauses) in next step
-  long long res_task_count;
+  tommy_array res_tasks; // Stores tasks for resolution (non-tagged clauses) in next step
 
-  // TODO: If grow to have many fifs, having pos and neg versions may help
+  // If grow to have many fifs, having pos and neg versions may help
   tommy_hashlin fif_tasks; // Stores tasks for fif rules
+
+  tommy_list backsearch_tasks;
 
   tommy_hashlin distrusted; // Stores distrusted items by clause index
 };
@@ -123,6 +124,18 @@ typedef struct res_task {
   alma_function *neg; // Negative literal from y
 } res_task;
 
+// Allows tomyds types to hold clauses
+typedef struct clause_wrap {
+  clause *c;
+  tommy_node node;
+} clause_wrap;
+
+typedef struct backsearch_task {
+  clause *target;
+  tommy_array clauses;
+  tommy_array to_resolve;
+} backsearch_task;
+
 clause* duplicate_check(kb *collection, clause *c);
 void add_clause(kb *collection, clause *curr);
 void remove_clause(kb *collection, clause *c);
@@ -130,10 +143,16 @@ void fif_task_map_init(kb *collection, clause *c);
 void fif_tasks_from_clause(kb *collection, clause *c);
 void process_fif_tasks(kb *collection);
 void process_res_tasks(kb *collection);
+void process_backward_tasks(kb *collection);
 void res_tasks_from_clause(kb *collection, clause *c, int process_negatives);
 int assert_formula(kb *collection, char *string, int print);
 int delete_formula(kb *collection, char *string, int print);
 void resolve(res_task *t, binding_list *mgu, clause *result);
+
+void backsearch_from_clause(kb *collection, clause *c);
+void generate_backsearch_tasks(kb *collection, backsearch_task *t);
+void process_backsearch_tasks(kb *collection);
+void backsearch_halt(kb *collection, backsearch_task *t);
 
 // Functions used in alma_command
 char* now(long t);

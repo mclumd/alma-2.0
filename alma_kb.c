@@ -568,11 +568,11 @@ void add_clause(kb *collection, clause *c) {
 
 // Remove res tasks using clause
 static void remove_res_tasks(kb *collection, clause *c) {
-  for (tommy_size_t i = 0; i < tommy_array_size(&collection->res_task_list); i++) {
-    res_task *current_task = tommy_array_get(&collection->res_task_list, i);
+  for (tommy_size_t i = 0; i < tommy_array_size(&collection->res_tasks); i++) {
+    res_task *current_task = tommy_array_get(&collection->res_tasks, i);
     if (current_task != NULL && (current_task->x == c || current_task->y == c)) {
       // Removed task set to null; null checked for when processing later
-      tommy_array_set(&collection->res_task_list, i, NULL);
+      tommy_array_set(&collection->res_tasks, i, NULL);
       free(current_task);
     }
   }
@@ -1140,8 +1140,7 @@ static void make_res_tasks(kb *collection, clause *c, int count, alma_function *
               t->neg = lits[i];
             }
 
-            tommy_array_insert(&collection->res_task_list, t);
-            collection->res_task_count++;
+            tommy_array_insert(&collection->res_tasks, t);
             if (collection->idling)
               collection->idling = 0;
           }
@@ -1153,7 +1152,7 @@ static void make_res_tasks(kb *collection, clause *c, int count, alma_function *
 }
 
 // Finds new res tasks based on matching pos/neg predicate pairs, where one is from the KB and the other from arg
-// Tasks are added into the res_task_list of collection
+// Tasks are added into the res_tasks of collection
 void res_tasks_from_clause(kb *collection, clause *c, int process_negatives) {
   make_res_tasks(collection, c, c->pos_count, c->pos_lits, &collection->neg_map, 0);
   // Only done if clauses differ from KB's clauses (i.e. after first task generation)
@@ -1311,8 +1310,8 @@ void distrust_recursive(kb *collection, clause *c, char *time) {
 
 // Process resolution tasks and place results in new_clauses
 void process_res_tasks(kb *collection) {
-  for (tommy_size_t i = 0; i < tommy_array_size(&collection->res_task_list); i++) {
-    res_task *current_task = tommy_array_get(&collection->res_task_list, i);
+  for (tommy_size_t i = 0; i < tommy_array_size(&collection->res_tasks); i++) {
+    res_task *current_task = tommy_array_get(&collection->res_tasks, i);
     if (current_task != NULL) {
       // Does not do resolution with a distrusted clause
       if (!is_distrusted(collection, current_task->x->index) && !is_distrusted(collection,  current_task->y->index)) {
@@ -1373,10 +1372,39 @@ void process_res_tasks(kb *collection) {
         cleanup_bindings(theta);
       }
 
-      collection->res_task_count--;
       free(current_task);
     }
   }
-  tommy_array_done(&collection->res_task_list);
-  tommy_array_init(&collection->res_task_list);
+  tommy_array_done(&collection->res_tasks);
+  tommy_array_init(&collection->res_tasks);
 }
+
+// Initializes backward search with negation of clause argument
+void backsearch_from_clause(kb *collection, clause *c) {
+
+}
+
+// Given particular task, populate to_resolve based on each clause
+void generate_backsearch_tasks(kb *collection, backsearch_task *t) {
+  for (int i = 0; i < tommy_array_size(&t->clauses); i++) {
+
+  }
+}
+
+// Advances by resolving available tasks
+void process_backsearch_tasks(kb *collection) {
+  tommy_node *curr = tommy_list_head(&collection->backsearch_tasks);
+  while (curr) {
+    backsearch_task *t = curr->data;
+    for (int i = 0; i < tommy_array_size(&t->to_resolve); i++) {
+
+    }
+    curr = curr->next;
+  }
+}
+
+void backsearch_halt(kb *collection, backsearch_task *t) {
+
+}
+
+// TODO: also must free in kb_halt

@@ -27,9 +27,9 @@ void kb_init(kb **collection, char *file) {
   tommy_hashlin_init(&collec->neg_map);
   tommy_list_init(&collec->neg_list);
   tommy_hashlin_init(&collec->fif_map);
-  tommy_array_init(&collec->res_task_list);
-  collec->res_task_count = 0;
+  tommy_array_init(&collec->res_tasks);
   tommy_hashlin_init(&collec->fif_tasks);
+  tommy_list_init(&collec->backsearch_tasks);
   tommy_hashlin_init(&collec->distrusted);
 
   parse_init();
@@ -92,6 +92,7 @@ void kb_step(kb *collection) {
 
   process_res_tasks(collection);
   process_fif_tasks(collection);
+  process_backsearch_tasks(collection);
 
 
   fif_to_front(&collection->new_clauses);
@@ -211,9 +212,9 @@ void kb_halt(kb *collection) {
   tommy_hashlin_done(&collection->fif_map);
 
   // Res task pointers are aliases to those freed from collection->clauses, so only free overall task here
-  for (tommy_size_t i = 0; i < tommy_array_size(&collection->res_task_list); i++)
-    free(tommy_array_get(&collection->res_task_list, i));
-  tommy_array_done(&collection->res_task_list);
+  for (tommy_size_t i = 0; i < tommy_array_size(&collection->res_tasks); i++)
+    free(tommy_array_get(&collection->res_tasks, i));
+  tommy_array_done(&collection->res_tasks);
 
   tommy_hashlin_foreach(&collection->fif_tasks, free_fif_task_mapping);
   tommy_hashlin_done(&collection->fif_tasks);
