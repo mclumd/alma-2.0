@@ -9,13 +9,6 @@
 // Initialize global variable (declared in alma_formula header) to count up vairable IDs
 long long variable_id_count = 0;
 
-// ALMA currently:
-// 1. parses an input file into an MPC AST
-// 2. obtains a FOL representation from the AST
-// 3. converts this general FOL into CNF
-// 4. converts CNF into a collection of clauses for the KB
-// 5. constructs KB with list of clauses, hashmaps + linked lists indexing predicates
-// 6. runs forward chaining, which loops through executing resolution tasks, adding to KB, obtaining new tasks
 int main(int argc, char **argv) {
   if (argc <= 1) {
     printf("Please run with an input file argument.\n");
@@ -69,6 +62,12 @@ int main(int argc, char **argv) {
           char *assertion = malloc(len - 4);
           strncpy(assertion, line+4, len-4);
           kb_remove(alma_kb, assertion);
+          free(assertion);
+        }
+        else if ((pos = strstr(line, "bs ")) != NULL && pos == line) {
+          char *assertion = malloc(len - 3);
+          strncpy(assertion, line+3, len-3);
+          kb_backsearch(alma_kb, assertion);
           free(assertion);
         }
         else {

@@ -134,6 +134,7 @@ typedef struct backsearch_task {
   clause *target;
   tommy_array clauses;
   tommy_array to_resolve;
+  tommy_node node;
 } backsearch_task;
 
 clause* duplicate_check(kb *collection, clause *c);
@@ -142,7 +143,7 @@ void remove_clause(kb *collection, clause *c);
 void fif_task_map_init(kb *collection, clause *c);
 void fif_tasks_from_clause(kb *collection, clause *c);
 void process_fif_tasks(kb *collection);
-void process_res_tasks(kb *collection);
+void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr, backsearch_task *bs);
 void process_backward_tasks(kb *collection);
 void res_tasks_from_clause(kb *collection, clause *c, int process_negatives);
 int assert_formula(kb *collection, char *string, int print);
@@ -150,15 +151,16 @@ int delete_formula(kb *collection, char *string, int print);
 void resolve(res_task *t, binding_list *mgu, clause *result);
 
 void backsearch_from_clause(kb *collection, clause *c);
-void generate_backsearch_tasks(kb *collection, backsearch_task *t);
+void generate_backsearch_tasks(kb *collection, backsearch_task *bt);
 void process_backsearch_tasks(kb *collection);
-void backsearch_halt(kb *collection, backsearch_task *t);
+void backsearch_halt(backsearch_task *t);
 
 // Functions used in alma_command
 char* now(long t);
 void free_clause(clause *c);
 void free_fif_task_mapping(void *arg);
 alma_function* fif_access(clause *c, int i);
+void flatten_node(alma_node *node, tommy_array *clauses, int print);
 void nodes_to_clauses(alma_node *trees, int num_trees, tommy_array *clauses, int print);
 void fif_to_front(tommy_array *clauses);
 void free_predname_mapping(void *arg);
@@ -166,6 +168,7 @@ void free_fif_mapping(void *arg);
 int is_distrusted(kb *collection, long index);
 char* long_to_str(long x);
 void add_child(clause *parent, clause *child);
+void transfer_parent(kb *collection, clause *target, clause *source, int add_children);
 void distrust_recursive(kb *collection, clause *c, char *time);
 
 #endif

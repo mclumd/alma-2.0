@@ -9,5 +9,6 @@ void kb_print(kb *collection);
 void kb_halt(kb *collection);
 void kb_assert(kb *collection, char *string);
 void kb_remove(kb *collection, char *string);
+void kb_backsearch(kb *collection, char *string);
 
 #endif

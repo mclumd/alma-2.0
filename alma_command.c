@@ -90,10 +90,9 @@ void kb_step(kb *collection) {
     delete_formula(collection, "now(1).", 0);
   collection->prev_str = collection->now_str;
 
-  process_res_tasks(collection);
+  process_res_tasks(collection, &collection->res_tasks, &collection->new_clauses, NULL);
   process_fif_tasks(collection);
   process_backsearch_tasks(collection);
-
 
   fif_to_front(&collection->new_clauses);
   // Insert new clauses derived that are not duplicates
@@ -122,50 +121,24 @@ void kb_step(kb *collection) {
       }
     }
     else {
-      if (c->parents != NULL) {
-        // A duplicate clause derivation should be acknowledged by adding extra parents to the clause it duplicates
-        // Copy parents of c to dupe
-        dupe->parents = realloc(dupe->parents, sizeof(*dupe->parents) * (dupe->parent_set_count + c->parent_set_count));
-        for (int j = dupe->parent_set_count, k = 0; j < dupe->parent_set_count + c->parent_set_count; j++, k++) {
-          dupe->parents[j].count = c->parents[k].count;
-          dupe->parents[j].clauses = malloc(sizeof(*dupe->parents[j].clauses) * dupe->parents[j].count);
-          memcpy(dupe->parents[j].clauses, c->parents[k].clauses, sizeof(*dupe->parents[j].clauses) * dupe->parents[j].count);
-        }
-        //memcpy(dupe->parents + dupe->parent_set_count, c->parents, sizeof(*c->parents) * c->parent_set_count);
-        dupe->parent_set_count += c->parent_set_count;
-
-        // Parents of c also gain new child in dupe
-        // Also check if parents of c are distrusted
-        int distrust = 0;
-        for (int j = 0; j < c->parents[0].count; j++) {
-          int insert = 1;
-          if (is_distrusted(collection, c->parents[0].clauses[j]->index))
-            distrust = 1;
-          for (int k = 0; k < c->parents[0].clauses[j]->children_count; k++) {
-            if (c->parents[0].clauses[j]->children[k] == dupe) {
-              insert = 0;
-              break;
-            }
-          }
-          if (insert)
-            add_child(c->parents[0].clauses[j], dupe);
-        }
-        if (distrust && !is_distrusted(collection, dupe->index)) {
-          char *time_str = long_to_str(collection->time);
-          distrust_recursive(collection, dupe, time_str);
-          free(time_str);
-        }
-
-      }
+      if (c->parents != NULL)
+        transfer_parent(collection, dupe, c, 1);
 
       free_clause(c);
     }
   }
 
-  // Time always advances; idle when no other clauses are added
-  if (tommy_array_size(&collection->new_clauses) <= 1) {
-    collection->idling = 1;
+  // Generate new backsearch tasks
+  tommy_node *i = tommy_list_head(&collection->backsearch_tasks);
+  while (i) {
+    generate_backsearch_tasks(collection, i->data);
+    i = i->next;
   }
+
+  // Time always advances; idle when no other clauses are added
+  if (tommy_array_size(&collection->new_clauses) <= 1)
+    collection->idling = 1;
+
   if (collection->idling)
     printf("Idling...\n");
 
@@ -181,6 +154,21 @@ void kb_print(kb *collection) {
     clause_print(data->value);
     printf("\n");
     i = i->next;
+  }
+
+  i = tommy_list_head(&collection->backsearch_tasks);
+  if (i) {
+    printf("Back searches:\n");
+    for (int count = 0; i != NULL; i = i->next, count++) {
+      printf("%d\n", count);
+      backsearch_task *t = i->data;
+      for (tommy_size_t j = 0; j < tommy_array_size(&t->clauses); j++) {
+        clause *c = tommy_array_get(&t->clauses, j);
+        printf("%ld: ", c->index);
+        clause_print(c);
+      }
+      printf("\n");
+    }
   }
   printf("\n");
 }
@@ -219,6 +207,13 @@ void kb_halt(kb *collection) {
   tommy_hashlin_foreach(&collection->fif_tasks, free_fif_task_mapping);
   tommy_hashlin_done(&collection->fif_tasks);
 
+  curr = tommy_list_head(&collection->backsearch_tasks);
+  while (curr) {
+    backsearch_task *data = curr->data;
+    curr = curr->next;
+    backsearch_halt(data);
+  }
+
   tommy_hashlin_foreach(&collection->distrusted, free);
   tommy_hashlin_done(&collection->distrusted);
 
@@ -233,4 +228,32 @@ void kb_assert(kb *collection, char *string) {
 
 void kb_remove(kb *collection, char *string) {
   delete_formula(collection, string, 1);
+}
+
+void kb_backsearch(kb *collection, char *string) {
+  // Parse string into clauses
+  alma_node *formulas;
+  int formula_count;
+  if (formulas_from_source(string, 0, &formula_count, &formulas)) {
+    tommy_array arr;
+    tommy_array_init(&arr);
+    flatten_node(formulas, &arr, 0);
+    clause *c = tommy_array_get(&arr, 0);
+
+    for (int i = 1; i < formula_count; i++)
+      free_alma_tree(formulas+i);
+    for (int i = 1; i < tommy_array_size(&arr); i++)
+      free_clause(tommy_array_get(&arr, i));
+    tommy_array_done(&arr);
+
+    if (c->pos_count + c->neg_count > 1) {
+      printf("query clause has too many literals\n");
+      free_clause(c);
+    }
+    else {
+      if (collection->idling)
+        collection->idling = 0;
+      backsearch_from_clause(collection, c);
+    }
+  }
 }
