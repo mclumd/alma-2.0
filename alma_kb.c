@@ -931,6 +931,8 @@ static clause* fif_conclude(kb *collection, fif_task *task, binding_list *bindin
   conclusion->tag = NONE;
   conclusion->fif = NULL;
 
+  set_variable_ids(conclusion);
+
   return conclusion;
 }
 
@@ -1390,6 +1392,7 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
             res_result->parents[0].clauses[1] = current_task->y;
             res_result->children_count = 0;
             res_result->children = NULL;
+            set_variable_ids(res_result);
 
             tommy_array_insert(new_arr, res_result);
           }
@@ -1410,6 +1413,7 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
                 copy_alma_function(bs->target->neg_lits[0], answer->neg_lits[0]);
               }
 
+              // TODO: parent setup for answer?
               // TODO: substitute binding process on answer
               tommy_array_insert(&collection->new_clauses, answer);
             }

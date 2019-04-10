@@ -6,7 +6,7 @@
 
 #define LINELEN 1000
 
-// Initialize global variable (declared in alma_formula header) to count up vairable IDs
+// Initialize global variable (declared in alma_formula header) to count up variable IDs
 long long variable_id_count = 0;
 
 int main(int argc, char **argv) {
