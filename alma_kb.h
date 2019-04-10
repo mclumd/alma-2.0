@@ -133,6 +133,7 @@ typedef struct clause_wrap {
 typedef struct backsearch_task {
   clause *target;
   tommy_array clauses;
+  tommy_array new_clauses;
   tommy_array to_resolve;
   tommy_node node;
 } backsearch_task;
@@ -145,6 +146,7 @@ void fif_tasks_from_clause(kb *collection, clause *c);
 void process_fif_tasks(kb *collection);
 void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr, backsearch_task *bs);
 void process_backward_tasks(kb *collection);
+void make_single_task(kb *collection, clause *c, alma_function *c_lit, clause *other, tommy_array *tasks, int use_bif, int pos);
 void res_tasks_from_clause(kb *collection, clause *c, int process_negatives);
 int assert_formula(kb *collection, char *string, int print);
 int delete_formula(kb *collection, char *string, int print);

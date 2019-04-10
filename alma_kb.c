@@ -1114,39 +1114,42 @@ void process_fif_tasks(kb *collection) {
   }
 }
 
+void make_single_task(kb *collection, clause *c, alma_function *c_lit, clause *other, tommy_array *tasks, int use_bif, int pos) {
+  if (c != other && (other->tag != BIF || use_bif)) {
+    alma_function *other_lit = literal_by_name(other, c_lit->name, pos);
+    if (other_lit != NULL) {
+      res_task *t = malloc(sizeof(*t));
+      if (!pos) {
+        t->x = c;
+        t->pos = c_lit;
+        t->y = other;
+        t->neg = other_lit;
+      }
+      else {
+        t->x = other;
+        t->pos = other_lit;
+        t->y = c;
+        t->neg = c_lit;
+      }
+
+      tommy_array_insert(tasks, t);
+      if (collection->idling)
+        collection->idling = 0;
+    }
+  }
+}
+
 // Helper of res_tasks_from_clause
-static void make_res_tasks(kb *collection, clause *c, int count, alma_function **lits, tommy_hashlin *map, tommy_array *tasks, int use_bif, int pos) {
+static void make_res_tasks(kb *collection, clause *c, int count, alma_function **c_lits, tommy_hashlin *map, tommy_array *tasks, int use_bif, int pos) {
   for (int i = 0; i < count; i++) {
-    char *name = name_with_arity(lits[i]->name, lits[i]->term_count);
+    char *name = name_with_arity(c_lits[i]->name, c_lits[i]->term_count);
     predname_mapping *result = tommy_hashlin_search(map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
 
     // New tasks are from Cartesian product of result's clauses with clauses' ith
-    if (result != NULL) {
-      for (int j = 0; j < result->num_clauses; j++) {
-        if (c != result->clauses[j] && (result->clauses[j]->tag != BIF || use_bif)) {
-          alma_function *lit = literal_by_name(result->clauses[j], lits[i]->name, pos);
-          if (lit != NULL) {
-            res_task *t = malloc(sizeof(*t));
-            if (!pos) {
-              t->x = c;
-              t->pos = lits[i];
-              t->y = result->clauses[j];
-              t->neg = lit;
-            }
-            else {
-              t->x = result->clauses[j];
-              t->pos = lit;
-              t->y = c;
-              t->neg = lits[i];
-            }
+    if (result != NULL)
+      for (int j = 0; j < result->num_clauses; j++)
+        make_single_task(collection, c, c_lits[i], result->clauses[j], tasks, use_bif, pos);
 
-            tommy_array_insert(tasks, t);
-            if (collection->idling)
-              collection->idling = 0;
-          }
-        }
-      }
-    }
     free(name);
   }
 }
@@ -1394,37 +1397,21 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
             free(res_result);
 
             if (bs) {
-              // For empty clause obtained in a backward search,
-
-              // Check if positive parent is from bs
-              int pos_in_bs = 1;
-              char *name = name_with_arity(current_task->pos->name, current_task->pos->term_count);
-              predname_mapping *result = tommy_hashlin_search(&collection->pos_map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
-              for (int j = 0; j < result->num_clauses; j++) {
-                if (result->clauses[j] == current_task->x) {
-                  pos_in_bs = 0;
-                  break;
-                }
+              clause *answer = malloc(sizeof(*answer));
+              memcpy(answer, bs->target, sizeof(*answer));
+              if (bs->target->pos_count == 1){
+                answer->pos_lits = malloc(sizeof(*answer->pos_lits));
+                answer->pos_lits[0] = malloc(sizeof(*answer->pos_lits[0]));
+                copy_alma_function(bs->target->pos_lits[0], answer->pos_lits[0]);
               }
-              free(name);
-
-              // Check if negative parent is from bs
-              int neg_in_bs = 1;
-              name = name_with_arity(current_task->neg->name, current_task->neg->term_count);
-              result = tommy_hashlin_search(&collection->neg_map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
-              for (int j = 0; j < result->num_clauses; j++) {
-                if (result->clauses[j] == current_task->y) {
-                  neg_in_bs = 0;
-                  break;
-                }
-              }
-              free(name);
-
-              // If ONLY ONE belongs to backward search, a conclusion has been found
-              if (pos_in_bs ^ neg_in_bs) {
-                // TODO: assert to main KB negation of task's target !WITH SUBSTITUTION!
+              else {
+                answer->neg_lits = malloc(sizeof(*answer->neg_lits));
+                answer->neg_lits[0] = malloc(sizeof(*answer->neg_lits[0]));
+                copy_alma_function(bs->target->neg_lits[0], answer->neg_lits[0]);
               }
 
+              // TODO: substitute binding process on answer
+              tommy_array_insert(&collection->new_clauses, answer);
             }
             else {
               // If not a backward search, empty resolution result indicates a contradiction between clauses
@@ -1472,34 +1459,34 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
 void backsearch_from_clause(kb *collection, clause *c) {
   backsearch_task *bt = malloc(sizeof(*bt));
   c->index = -1;
-  // Negate lone literal of c
+  bt->target = c;
+
+  clause *negated = malloc(sizeof(*negated));
+  memcpy(negated, c, sizeof(*negated));
   if (c->pos_count == 1){
-      c->neg_count = 1;
-      c->neg_lits = c->pos_lits;
-      c->pos_count = 0;
-      c->pos_lits = NULL;
+    negated->neg_count = 1;
+    negated->neg_lits = malloc(sizeof(*negated->neg_lits));
+    negated->neg_lits[0] = malloc(sizeof(*negated->neg_lits[0]));
+    copy_alma_function(c->pos_lits[0], negated->neg_lits[0]);
+    negated->pos_count = 0;
+    negated->pos_lits = NULL;
   }
   else {
-    c->pos_count = 1;
-    c->pos_lits = c->neg_lits;
-    c->neg_count = 0;
-    c->neg_lits = NULL;
+    negated->pos_count = 1;
+    negated->pos_lits = malloc(sizeof(*negated->pos_lits));
+    negated->pos_lits[0] = malloc(sizeof(*negated->pos_lits[0]));
+    copy_alma_function(c->neg_lits[0], negated->pos_lits[0]);
+    negated->neg_count = 0;
+    negated->neg_lits = NULL;
   }
+
   tommy_array_init(&bt->clauses);
-  tommy_array_insert(&bt->clauses, c);
+
+  tommy_array_init(&bt->new_clauses);
+  tommy_array_insert(&bt->new_clauses, negated);
 
   tommy_array_init(&bt->to_resolve);
   tommy_list_insert_tail(&collection->backsearch_tasks, &bt->node, bt);
-}
-
-// Given particular task, populate to_resolve based on each clause
-void generate_backsearch_tasks(kb *collection, backsearch_task *bt) {
-  for (int i = 0; i < tommy_array_size(&bt->clauses); i++) {
-    clause *c = tommy_array_get(&bt->clauses, i);
-    make_res_tasks(collection, c, c->pos_count, c->pos_lits, &collection->neg_map, &bt->to_resolve, 1, 0);
-    make_res_tasks(collection, c, c->neg_count, c->neg_lits, &collection->pos_map, &bt->to_resolve, 1, 1);
-    // redo generation with more efficient method, TODO
-  }
 }
 
 static clause* backsearch_duplicate_check(kb *collection, backsearch_task *task, clause *c) {
@@ -1511,37 +1498,60 @@ static clause* backsearch_duplicate_check(kb *collection, backsearch_task *task,
   return NULL;
 }
 
+// Given particular task, populate to_resolve based on each clause
+void generate_backsearch_tasks(kb *collection, backsearch_task *bt) {
+  for (int i = 0; i < tommy_array_size(&bt->new_clauses); i++) {
+    clause *c = tommy_array_get(&bt->new_clauses, i);
+    clause *dupe = backsearch_duplicate_check(collection, bt, c);
+    if (dupe == NULL) {
+      c->index = -1;
+
+      // Obtain tasks between new backward search clauses and KB items
+      make_res_tasks(collection, c, c->pos_count, c->pos_lits, &collection->neg_map, &bt->to_resolve, 1, 0);
+      make_res_tasks(collection, c, c->neg_count, c->neg_lits, &collection->pos_map, &bt->to_resolve, 1, 1);
+
+      // Obtain tasks between pairs of backsearch clauses
+      // Currently a linear scan, perhaps to adjust later
+      for (int j = 0; j < tommy_array_size(&bt->clauses); j++) {
+        clause *jth = tommy_array_get(&bt->clauses, j);
+
+        for (int k = 0; k < c->pos_count; k++)
+          make_single_task(collection, c, c->pos_lits[k], jth, &bt->to_resolve, 1, 0);
+        for (int k = 0; k < c->neg_count; k++)
+          make_single_task(collection, c, c->neg_lits[k], jth, &bt->to_resolve, 1, 1);
+      }
+
+      tommy_array_insert(&bt->clauses, c);
+    }
+    else {
+      transfer_parent(collection, dupe, c, 0);
+      free_clause(c);
+    }
+  }
+  tommy_array_done(&bt->new_clauses);
+  tommy_array_init(&bt->new_clauses);
+}
+
 // Advances by resolving available tasks
 void process_backsearch_tasks(kb *collection) {
   tommy_node *curr = tommy_list_head(&collection->backsearch_tasks);
   while (curr) {
     backsearch_task *t = curr->data;
-    tommy_array new_clauses;
-    tommy_array_init(&new_clauses);
-    process_res_tasks(collection, &t->to_resolve, &new_clauses, t);
-
-    for (int i = 0; i < tommy_array_size(&new_clauses); i++) {
-      clause *c = tommy_array_get(&new_clauses, i);
-      clause *dupe = backsearch_duplicate_check(collection, t, c);
-      if (dupe != NULL) {
-        c->index = -1;
-        tommy_array_insert(&t->clauses, c);
-      }
-      else {
-        transfer_parent(collection, dupe, c, 0);
-        free_clause(c);
-      }
-    }
-    tommy_array_done(&new_clauses);
-
+    process_res_tasks(collection, &t->to_resolve, &t->new_clauses, t);
     curr = curr->next;
   }
 }
 
 void backsearch_halt(backsearch_task *t) {
+  free_clause(t->target);
+
   for (tommy_size_t i = 0; i < tommy_array_size(&t->clauses); i++)
     free_clause(tommy_array_get(&t->clauses, i));
   tommy_array_done(&t->clauses);
+
+  for (tommy_size_t i = 0; i < tommy_array_size(&t->new_clauses); i++)
+    free_clause(tommy_array_get(&t->new_clauses, i));
+  tommy_array_done(&t->new_clauses);
 
   for (tommy_size_t i = 0; i < tommy_array_size(&t->to_resolve); i++)
     free(tommy_array_get(&t->to_resolve, i));

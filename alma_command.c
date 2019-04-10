@@ -103,6 +103,21 @@ void kb_step(kb *collection) {
       res_tasks_from_clause(collection, c, 1);
       fif_tasks_from_clause(collection, c);
 
+      // Get tasks between new KB clauses and all bs clauses
+      tommy_node *curr = tommy_list_head(&collection->backsearch_tasks);
+      while (curr) {
+        backsearch_task *t = curr->data;
+        for (int j = 0; j < tommy_array_size(&t->clauses); j++) {
+          clause *bt_c = tommy_array_get(&t->clauses, j);
+          //make_res_tasks(collection, c
+          for (int k = 0; k < bt_c->pos_count; k++)
+            make_single_task(collection, bt_c, bt_c->pos_lits[k], c, &t->to_resolve, 1, 0);
+          for (int k = 0; k < bt_c->neg_count; k++)
+            make_single_task(collection, bt_c, bt_c->neg_lits[k], c, &t->to_resolve, 1, 1);
+        }
+        curr = curr->next;
+      }
+
       add_clause(collection, c);
 
       if (c->parents != NULL) {
@@ -166,8 +181,8 @@ void kb_print(kb *collection) {
         clause *c = tommy_array_get(&t->clauses, j);
         printf("%ld: ", c->index);
         clause_print(c);
+        printf("\n");
       }
-      printf("\n");
     }
   }
   printf("\n");
@@ -240,8 +255,9 @@ void kb_backsearch(kb *collection, char *string) {
     flatten_node(formulas, &arr, 0);
     clause *c = tommy_array_get(&arr, 0);
 
-    for (int i = 1; i < formula_count; i++)
+    for (int i = 0; i < formula_count; i++)
       free_alma_tree(formulas+i);
+    free(formulas);
     for (int i = 1; i < tommy_array_size(&arr); i++)
       free_clause(tommy_array_get(&arr, i));
     tommy_array_done(&arr);
