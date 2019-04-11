@@ -1,5 +1,5 @@
-bif(a,b).
-bif(b,c).
-bif(c,d).
+bif(a(N),b(M, N)).
+bif(b(Y,X),c(X)).
+bif(c(X),d(X)).
 
-bif(not(b),c).
+bif(not(b(Z, foo)),c(foo)).

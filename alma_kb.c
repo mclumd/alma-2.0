@@ -1406,11 +1406,15 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
                 answer->pos_lits = malloc(sizeof(*answer->pos_lits));
                 answer->pos_lits[0] = malloc(sizeof(*answer->pos_lits[0]));
                 copy_alma_function(bs->target->pos_lits[0], answer->pos_lits[0]);
+                for (int j = 0; j < answer->pos_lits[0]->term_count; j++)
+                  subst(theta, answer->pos_lits[0]->terms+j);
               }
               else {
                 answer->neg_lits = malloc(sizeof(*answer->neg_lits));
                 answer->neg_lits[0] = malloc(sizeof(*answer->neg_lits[0]));
                 copy_alma_function(bs->target->neg_lits[0], answer->neg_lits[0]);
+                for (int j = 0; j < answer->neg_lits[0]->term_count; j++)
+                  subst(theta, answer->neg_lits[0]->terms+j);
               }
 
               // TODO: parent setup for answer?
@@ -1506,7 +1510,13 @@ static clause* backsearch_duplicate_check(kb *collection, backsearch_task *task,
 void generate_backsearch_tasks(kb *collection, backsearch_task *bt) {
   for (int i = 0; i < tommy_array_size(&bt->new_clauses); i++) {
     clause *c = tommy_array_get(&bt->new_clauses, i);
-    clause *dupe = backsearch_duplicate_check(collection, bt, c);
+    clause *dupe = duplicate_check(collection, c);
+    int bs_dupe = 0;
+    if (dupe == NULL) {
+      dupe = backsearch_duplicate_check(collection, bt, c);
+      bs_dupe = 1;
+    }
+
     if (dupe == NULL) {
       c->index = -1;
 
@@ -1528,7 +1538,8 @@ void generate_backsearch_tasks(kb *collection, backsearch_task *bt) {
       tommy_array_insert(&bt->clauses, c);
     }
     else {
-      transfer_parent(collection, dupe, c, 0);
+      if (bs_dupe)
+        transfer_parent(collection, dupe, c, 0);
       free_clause(c);
     }
   }
