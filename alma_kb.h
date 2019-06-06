@@ -132,6 +132,7 @@ typedef struct clause_wrap {
 
 typedef struct backsearch_task {
   clause *target;
+  int clause_count;
   tommy_array clauses;
   tommy_array new_clauses;
   tommy_array to_resolve;

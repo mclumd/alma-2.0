@@ -35,35 +35,26 @@ static void make_clause(alma_node *node, clause *c) {
   }
 }
 
-static void find_variable_names(tommy_array *list, alma_term *term) {
+static void find_variable_names(tommy_array *list, alma_term *term, int id_from_name) {
   switch (term->type) {
     case VARIABLE: {
-      char *varname = term->variable->name;
       for (tommy_size_t i = 0; i < tommy_array_size(list); i++) {
-        if(strcmp(varname, tommy_array_get(list, i)) == 0)
-          return;
+        if (id_from_name) {
+          if (strcmp(term->variable->name, tommy_array_get(list, i)) == 0)
+            return;
+        }
+        else {
+          if (term->variable->id == *(long long *)tommy_array_get(list, i))
+            return;
+        }
       }
-      tommy_array_insert(list, varname);
-      break;
-    }
-    case CONSTANT: {
-      return;
-    }
-    case FUNCTION: {
-      for (int i = 0; i < term->function->term_count; i++) {
-        find_variable_names(list, term->function->terms+i);
+      if (id_from_name) {
+        tommy_array_insert(list, term->variable->name);
       }
-    }
-  }
-}
-
-static void set_variable_names(tommy_array *list, alma_term *term) {
-  switch (term->type) {
-    case VARIABLE: {
-      char *varname = term->variable->name;
-      for (tommy_size_t i = 0; i < tommy_array_size(list); i++) {
-        if(strcmp(varname, tommy_array_get(list, i)) == 0)
-          term->variable->id = variable_id_count + i;
+      else {
+        long long *id = malloc(sizeof(*id));
+        *id =  term->variable->id;
+        tommy_array_insert(list, id);
       }
       break;
     }
@@ -72,39 +63,72 @@ static void set_variable_names(tommy_array *list, alma_term *term) {
     }
     case FUNCTION: {
       for (int i = 0; i < term->function->term_count; i++) {
-        set_variable_names(list, term->function->terms+i);
+        find_variable_names(list, term->function->terms+i, id_from_name);
       }
     }
   }
 }
 
-// Given a clause, assign the ID fields of each variable, giving those with the same name matching IDs
+static void set_variable_names(tommy_array *list, alma_term *term, int id_from_name) {
+  switch (term->type) {
+    case VARIABLE: {
+      for (tommy_size_t i = 0; i < tommy_array_size(list); i++) {
+        if (id_from_name) {
+          if (strcmp(term->variable->name, tommy_array_get(list, i)) == 0)
+            term->variable->id = variable_id_count + i;
+        }
+        else {
+          if (term->variable->id == *(long long *)tommy_array_get(list, i))
+            term->variable->id = variable_id_count + i;
+        }
+      }
+      break;
+    }
+    case CONSTANT: {
+      return;
+    }
+    case FUNCTION: {
+      for (int i = 0; i < term->function->term_count; i++) {
+        set_variable_names(list, term->function->terms+i, id_from_name);
+      }
+    }
+  }
+}
+
+// Given a clause, assign the ID fields of each variable
+// Two cases:
+// 1) If clause is result of resolution, replace existing matching IDs with fresh values each
+// 2) Otherwise, give variables with the same name matching IDs
 // Fresh ID values drawn from variable_id_count global variable
-static void set_variable_ids(clause *c) {
-  tommy_array var_names;
-  tommy_array_init(&var_names);
+static void set_variable_ids(clause *c, int id_from_name) {
+  tommy_array vars;
+  tommy_array_init(&vars);
   for (int i = 0; i < c->pos_count; i++) {
     for (int j = 0; j < c->pos_lits[i]->term_count; j++) {
-      find_variable_names(&var_names, c->pos_lits[i]->terms+j);
+      find_variable_names(&vars, c->pos_lits[i]->terms+j, id_from_name);
     }
   }
   for (int i = 0; i < c->neg_count; i++) {
     for (int j = 0; j < c->neg_lits[i]->term_count; j++) {
-      find_variable_names(&var_names, c->neg_lits[i]->terms+j);
+      find_variable_names(&vars, c->neg_lits[i]->terms+j, id_from_name);
     }
   }
   for (int i = 0; i < c->pos_count; i++) {
     for (int j = 0; j < c->pos_lits[i]->term_count; j++) {
-      set_variable_names(&var_names, c->pos_lits[i]->terms+j);
+      set_variable_names(&vars, c->pos_lits[i]->terms+j, id_from_name);
     }
   }
   for (int i = 0; i < c->neg_count; i++) {
     for (int j = 0; j < c->neg_lits[i]->term_count; j++) {
-      set_variable_names(&var_names, c->neg_lits[i]->terms+j);
+      set_variable_names(&vars, c->neg_lits[i]->terms+j, id_from_name);
     }
   }
-  variable_id_count += tommy_array_size(&var_names);
-  tommy_array_done(&var_names);
+  variable_id_count += tommy_array_size(&vars);
+  if (!id_from_name) {
+    for (int i = 0; i < tommy_array_size(&vars); i++)
+      free(tommy_array_get(&vars, i));
+  }
+  tommy_array_done(&vars);
 }
 
 static void init_ordering_rec(fif_info *info, alma_node *node, int *next, int *pos, int *neg) {
@@ -166,7 +190,7 @@ void flatten_node(alma_node *node, tommy_array *clauses, int print) {
     c->tag = NONE;
     c->fif = NULL;
     make_clause(node, c);
-    set_variable_ids(c);
+    set_variable_ids(c, 1);
 
     // If clause is fif, initialize additional info
     if (c->tag == FIF) {
@@ -931,7 +955,7 @@ static clause* fif_conclude(kb *collection, fif_task *task, binding_list *bindin
   conclusion->tag = NONE;
   conclusion->fif = NULL;
 
-  set_variable_ids(conclusion);
+  set_variable_ids(conclusion, 1);
 
   return conclusion;
 }
@@ -1158,11 +1182,14 @@ static void make_res_tasks(kb *collection, clause *c, int count, alma_function *
 
 // Finds new res tasks based on matching pos/neg predicate pairs, where one is from the KB and the other from arg
 // Tasks are added into the res_tasks of collection
+// Used only for non-bif resolution tasks; hence checks tag of c
 void res_tasks_from_clause(kb *collection, clause *c, int process_negatives) {
-  make_res_tasks(collection, c, c->pos_count, c->pos_lits, &collection->neg_map, &collection->res_tasks, 0, 0);
-  // Only done if clauses differ from KB's clauses (i.e. after first task generation)
-  if (process_negatives)
-    make_res_tasks(collection, c, c->neg_count, c->neg_lits, &collection->pos_map, &collection->res_tasks, 0, 1);
+  if (c->tag != BIF) {
+    make_res_tasks(collection, c, c->pos_count, c->pos_lits, &collection->neg_map, &collection->res_tasks, 0, 0);
+    // Only done if clauses differ from KB's clauses (i.e. after first task generation)
+    if (process_negatives)
+      make_res_tasks(collection, c, c->neg_count, c->neg_lits, &collection->pos_map, &collection->res_tasks, 0, 1);
+  }
 }
 
 // Returns boolean based on success of string parse
@@ -1392,7 +1419,7 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
             res_result->parents[0].clauses[1] = current_task->y;
             res_result->children_count = 0;
             res_result->children = NULL;
-            set_variable_ids(res_result);
+            set_variable_ids(res_result, 0);
 
             tommy_array_insert(new_arr, res_result);
           }
@@ -1466,7 +1493,8 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
 // Initializes backward search with negation of clause argument
 void backsearch_from_clause(kb *collection, clause *c) {
   backsearch_task *bt = malloc(sizeof(*bt));
-  c->index = -1;
+  bt->clause_count = 0;
+  c->index = --bt->clause_count;
   bt->target = c;
 
   clause *negated = malloc(sizeof(*negated));
@@ -1518,7 +1546,7 @@ void generate_backsearch_tasks(kb *collection, backsearch_task *bt) {
     }
 
     if (dupe == NULL) {
-      c->index = -1;
+      c->index = --bt->clause_count;
 
       // Obtain tasks between new backward search clauses and KB items
       make_res_tasks(collection, c, c->pos_count, c->pos_lits, &collection->neg_map, &bt->to_resolve, 1, 0);
