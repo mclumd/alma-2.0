@@ -141,8 +141,10 @@ void cleanup_bindings(binding_list *theta) {
   for (int i = 0; i < theta->num_bindings; i++) {
     free(theta->list[i].var->name);
     free(theta->list[i].var);
-    free_term(theta->list[i].term);
-    free(theta->list[i].term);
+    if (theta->list[i].term != NULL) {
+      free_term(theta->list[i].term);
+      free(theta->list[i].term);
+    }
   }
   free(theta->list);
   free(theta);
@@ -156,8 +158,12 @@ void copy_bindings(binding_list *dest, binding_list *src) {
     for (int i = 0; i < src->num_bindings; i++) {
       dest->list[i].var = malloc(sizeof(alma_variable));
       copy_alma_var(src->list[i].var, dest->list[i].var);
-      dest->list[i].term = malloc(sizeof(alma_term));
-      copy_alma_term(src->list[i].term, dest->list[i].term);
+      if (src->list[i].term != NULL) {
+        dest->list[i].term = malloc(sizeof(alma_term));
+        copy_alma_term(src->list[i].term, dest->list[i].term);
+      }
+      else
+        dest->list[i].term = NULL;
     }
   }
   else

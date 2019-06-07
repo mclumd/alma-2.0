@@ -124,17 +124,26 @@ typedef struct res_task {
   alma_function *neg; // Negative literal from y
 } res_task;
 
-// Allows tomyds types to hold clauses
-typedef struct clause_wrap {
-  clause *c;
+// Used to keep track of binding lists for given clause of backsearch
+typedef struct binding_mapping {
+  long key;
+  binding_list *bindings;
   tommy_node node;
-} clause_wrap;
+} binding_mapping;
 
 typedef struct backsearch_task {
   clause *target;
+  // Model empty binding list to be copied for others
+  binding_list *target_vars;
+
   int clause_count;
+
   tommy_array clauses;
+  tommy_hashlin clause_bindings;
+
   tommy_array new_clauses;
+  tommy_array new_clause_bindings;
+
   tommy_array to_resolve;
   tommy_node node;
 } backsearch_task;
@@ -173,5 +182,7 @@ char* long_to_str(long x);
 void add_child(clause *parent, clause *child);
 void transfer_parent(kb *collection, clause *target, clause *source, int add_children);
 void distrust_recursive(kb *collection, clause *c, char *time);
+
+int bm_compare(const void *arg, const void *obj);
 
 #endif

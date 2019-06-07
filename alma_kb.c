@@ -329,6 +329,12 @@ static int fif_taskm_compare(const void *arg, const void *obj) {
   return strcmp((const char*)arg, ((const fif_task_mapping*)obj)->predname);
 }
 
+// Compare function to be used by tommy_hashlin_search for binding_mapping
+// Compares long arg to key of binding_mapping
+int bm_compare(const void *arg, const void *obj) {
+  return *(const long*)arg - ((const binding_mapping*)obj)->key;
+}
+
 // Given "name" and integer arity, returns "name/arity"
 // Allocated cstring is later placed in predname_mapping, and eventually freed by kb_halt
 static char* name_with_arity(char *name, int arity) {
@@ -1392,6 +1398,41 @@ void distrust_recursive(kb *collection, clause *c, char *time) {
   }
 }
 
+static binding_list* parent_binding_prepare(backsearch_task *bs, long parent_index, binding_list *theta) {
+  // Retrieve parent existing bindings, if any
+  binding_mapping *mapping;
+  if (parent_index < 0)
+    mapping = tommy_hashlin_search(&bs->clause_bindings, bm_compare, &parent_index, tommy_hash_u64(0, &parent_index, sizeof(parent_index)));
+
+  // Substitute based on MGU obtained when unifying
+  if (mapping != NULL) {
+    binding_list *copy = malloc(sizeof(*copy));
+    copy_bindings(copy, mapping->bindings);
+    for (int i = 0; i < copy->num_bindings; i++)
+      if (copy->list[i].term != NULL)
+        subst(theta, copy->list[i].term);
+
+    // Scan MGU and flip any bindings between variable pairs; if do so then substitute one more time
+    int vars_flipped = 0;
+    for (int i = 0; i < theta->num_bindings; i++) {
+      if (theta->list[i].term->type == VARIABLE) {
+        vars_flipped = 1;
+        alma_variable *temp = theta->list[i].var;
+        theta->list[i].var = theta->list[i].term->variable;
+        theta->list[i].term->variable = temp;
+      }
+    }
+    if (vars_flipped) {
+      for (int i = 0; i < copy->num_bindings; i++)
+        if (copy->list[i].term != NULL)
+          subst(theta, copy->list[i].term);
+    }
+    return copy;
+  }
+  else
+    return NULL;
+}
+
 // Process resolution tasks from argument and place results in new_arr
 void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr, backsearch_task *bs) {
   for (tommy_size_t i = 0; i < tommy_array_size(tasks); i++) {
@@ -1408,6 +1449,38 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
           clause *res_result = malloc(sizeof(*res_result));
           resolve(current_task, theta, res_result);
 
+          if (bs) {
+            binding_list *x_bindings = parent_binding_prepare(bs, current_task->x->index, theta);
+            binding_list *y_bindings = parent_binding_prepare(bs, current_task->y->index, theta);
+            if (x_bindings != NULL && y_bindings != NULL) {
+              // Check that tracked bindings for unified pair are compatible/unifiable
+              binding_list *parent_theta = malloc(sizeof(*parent_theta));
+              parent_theta->num_bindings = 0;
+              parent_theta->list = NULL;
+              int unify_fail = 0;
+              for (int j = 0; j < x_bindings->num_bindings; j++) {
+                if (x_bindings->list[j].term != NULL && y_bindings->list[j].term != NULL) {
+                  if (!unify(x_bindings->list[j].term, y_bindings->list[j].term, parent_theta)) {
+                    unify_fail = 1;
+                    break;
+                  }
+                }
+              }
+              if (!unify_fail) {
+                // Use new MGU + x/y combined for final result
+                // TODO
+              }
+              cleanup_bindings(parent_theta);
+            }
+
+            // Consolidate to only x_bindings used for all three cases
+            if (x_bindings == NULL)
+              x_bindings = y_bindings;
+
+            // TODO: use x_bindings with collected info as binding stuff as
+
+          }
+
           // An empty resolution result is not a valid clause to add to KB
           if (res_result->pos_count > 0 || res_result->neg_count > 0) {
             // Initialize parents of result
@@ -1419,9 +1492,24 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
             res_result->parents[0].clauses[1] = current_task->y;
             res_result->children_count = 0;
             res_result->children = NULL;
+
+            if (bs) {
+              // Dummy thing for now to ensure all have bindings along with
+              binding_list *copy = malloc(sizeof(*copy));
+              binding_mapping *m = tommy_hashlin_search(&bs->clause_bindings, bm_compare, &current_task->x->index, tommy_hash_u64(0, &current_task->x->index, sizeof(current_task->x->index)));
+              if (m == NULL)
+                m = tommy_hashlin_search(&bs->clause_bindings, bm_compare, &current_task->y->index, tommy_hash_u64(0, &current_task->y->index, sizeof(current_task->y->index)));
+              copy_bindings(copy, m->bindings);
+              tommy_array_insert(&bs->new_clause_bindings, copy);
+
+              // Something for tracking bindings TODO
+            }
             set_variable_ids(res_result, 0);
 
             tommy_array_insert(new_arr, res_result);
+            if (bs) {
+              // TODO add to clause bindings
+            }
           }
           else {
             free(res_result);
@@ -1490,6 +1578,26 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
 }
 
 
+static void collect_variables(alma_term *term, binding_list *b) {
+  switch(term->type) {
+    case VARIABLE: {
+      b->num_bindings++;
+      b->list = realloc(b->list, sizeof(*b->list) * b->num_bindings);
+      b->list[b->num_bindings-1].var = malloc(sizeof(alma_variable));
+      copy_alma_var(term->variable, b->list[b->num_bindings-1].var);
+      b->list[b->num_bindings-1].term = NULL;
+      break;
+    }
+    case CONSTANT: {
+      return;
+    }
+    case FUNCTION: {
+      for (int i = 0; i < term->function->term_count; i++)
+        collect_variables(term->function->terms+i, b);
+    }
+  }
+}
+
 // Initializes backward search with negation of clause argument
 void backsearch_from_clause(kb *collection, clause *c) {
   backsearch_task *bt = malloc(sizeof(*bt));
@@ -1499,10 +1607,11 @@ void backsearch_from_clause(kb *collection, clause *c) {
 
   clause *negated = malloc(sizeof(*negated));
   memcpy(negated, c, sizeof(*negated));
+  alma_function *negated_lit;
   if (c->pos_count == 1){
     negated->neg_count = 1;
     negated->neg_lits = malloc(sizeof(*negated->neg_lits));
-    negated->neg_lits[0] = malloc(sizeof(*negated->neg_lits[0]));
+    negated_lit = negated->neg_lits[0] = malloc(sizeof(*negated->neg_lits[0]));
     copy_alma_function(c->pos_lits[0], negated->neg_lits[0]);
     negated->pos_count = 0;
     negated->pos_lits = NULL;
@@ -1510,16 +1619,26 @@ void backsearch_from_clause(kb *collection, clause *c) {
   else {
     negated->pos_count = 1;
     negated->pos_lits = malloc(sizeof(*negated->pos_lits));
-    negated->pos_lits[0] = malloc(sizeof(*negated->pos_lits[0]));
+    negated_lit = negated->pos_lits[0] = malloc(sizeof(*negated->pos_lits[0]));
     copy_alma_function(c->neg_lits[0], negated->pos_lits[0]);
     negated->neg_count = 0;
     negated->neg_lits = NULL;
   }
 
   tommy_array_init(&bt->clauses);
+  tommy_hashlin_init(&bt->clause_bindings);
 
   tommy_array_init(&bt->new_clauses);
   tommy_array_insert(&bt->new_clauses, negated);
+  tommy_array_init(&bt->new_clause_bindings);
+  binding_list *negated_bindings = malloc(sizeof(*negated_bindings));
+  negated_bindings->list = NULL;
+  negated_bindings->num_bindings = 0;
+  // Create initial bindings where each variable in negated target is present, but each term is set to NULL
+  for (int i = 0; i < negated_lit->term_count; i++)
+    collect_variables(negated_lit->terms+i, negated_bindings);
+  bt->target_vars = negated_bindings;
+  tommy_array_insert(&bt->new_clause_bindings, negated_bindings);
 
   tommy_array_init(&bt->to_resolve);
   tommy_list_insert_tail(&collection->backsearch_tasks, &bt->node, bt);
@@ -1564,15 +1683,24 @@ void generate_backsearch_tasks(kb *collection, backsearch_task *bt) {
       }
 
       tommy_array_insert(&bt->clauses, c);
+
+      // Insert corresponding binding into hashmap
+      binding_mapping *entry = malloc(sizeof(*entry));
+      entry->key = c->index;
+      entry->bindings = tommy_array_get(&bt->new_clause_bindings, i);
+      tommy_hashlin_insert(&bt->clause_bindings, &entry->node, entry, tommy_hash_u64(0, &entry->key, sizeof(entry->key)));
     }
     else {
       if (bs_dupe)
         transfer_parent(collection, dupe, c, 0);
+      cleanup_bindings(tommy_array_get(&bt->new_clause_bindings, i));
       free_clause(c);
     }
   }
   tommy_array_done(&bt->new_clauses);
   tommy_array_init(&bt->new_clauses);
+  tommy_array_done(&bt->new_clause_bindings);
+  tommy_array_init(&bt->new_clause_bindings);
 }
 
 // Advances by resolving available tasks
@@ -1585,16 +1713,27 @@ void process_backsearch_tasks(kb *collection) {
   }
 }
 
+static void free_binding_mapping(void *arg) {
+  binding_mapping *bm = arg;
+  cleanup_bindings(bm->bindings);
+  free(bm);
+}
+
 void backsearch_halt(backsearch_task *t) {
   free_clause(t->target);
 
   for (tommy_size_t i = 0; i < tommy_array_size(&t->clauses); i++)
     free_clause(tommy_array_get(&t->clauses, i));
   tommy_array_done(&t->clauses);
+  tommy_hashlin_foreach(&t->clause_bindings, free_binding_mapping);
+  tommy_hashlin_done(&t->clause_bindings);
 
   for (tommy_size_t i = 0; i < tommy_array_size(&t->new_clauses); i++)
     free_clause(tommy_array_get(&t->new_clauses, i));
   tommy_array_done(&t->new_clauses);
+  for (tommy_size_t i = 0; i < tommy_array_size(&t->new_clause_bindings); i++)
+    free_clause(tommy_array_get(&t->new_clause_bindings, i));
+  tommy_array_done(&t->new_clause_bindings);
 
   for (tommy_size_t i = 0; i < tommy_array_size(&t->to_resolve); i++)
     free(tommy_array_get(&t->to_resolve, i));

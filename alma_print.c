@@ -168,8 +168,11 @@ void clause_print(clause *c) {
 
 void print_bindings(binding_list *theta) {
   for (int i = 0; i < theta->num_bindings; i++) {
-    printf("%s / ", theta->list[i].var->name);
-    alma_term_print(theta->list[i].term);
-    printf("\n");
+    printf("%s%lld/", theta->list[i].var->name, theta->list[i].var->id);
+    if (theta->list[i].term != NULL)
+      alma_term_print(theta->list[i].term);
+    else
+      printf("-");
+    printf(", ");
   }
 }

@@ -109,7 +109,6 @@ void kb_step(kb *collection) {
         backsearch_task *t = curr->data;
         for (int j = 0; j < tommy_array_size(&t->clauses); j++) {
           clause *bt_c = tommy_array_get(&t->clauses, j);
-          //make_res_tasks(collection, c
           for (int k = 0; k < bt_c->pos_count; k++)
             make_single_task(collection, bt_c, bt_c->pos_lits[k], c, &t->to_resolve, 1, 0);
           for (int k = 0; k < bt_c->neg_count; k++)
@@ -181,6 +180,12 @@ void kb_print(kb *collection) {
         clause *c = tommy_array_get(&t->clauses, j);
         printf("%ld: ", c->index);
         clause_print(c);
+        binding_mapping *m = tommy_hashlin_search(&t->clause_bindings, bm_compare, &c->index, tommy_hash_u64(0, &c->index, sizeof(c->index)));
+        if (m != NULL) {
+          printf(" (bindings: ");
+          print_bindings(m->bindings);
+          printf(")");
+        }
         printf("\n");
       }
     }
