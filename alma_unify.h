@@ -13,6 +13,7 @@ typedef struct binding_list {
   binding *list;
 } binding_list;
 
+alma_term* bindings_contain(binding_list *theta, alma_variable *var);
 void subst(binding_list *theta, alma_term *term);
 int unify(alma_term *x, alma_term *y, binding_list *theta);
 int pred_unify(alma_function *x, alma_function *y, binding_list *theta);
