@@ -1406,7 +1406,7 @@ void distrust_recursive(kb *collection, clause *c, char *time) {
   }
 }
 
-static void binding_subst_with_flip(binding_list *target, binding_list *theta) {
+static void binding_subst(binding_list *target, binding_list *theta) {
   for (int i = 0; i < target->num_bindings; i++)
     subst(theta, target->list[i].term);
 }
@@ -1421,7 +1421,7 @@ static binding_list* parent_binding_prepare(backsearch_task *bs, long parent_ind
   if (mapping != NULL) {
     binding_list *copy = malloc(sizeof(*copy));
     copy_bindings(copy, mapping->bindings);
-    binding_subst_with_flip(copy, theta);
+    binding_subst(copy, theta);
     return copy;
   }
   else
@@ -1460,24 +1460,36 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
                   break;
                 }
               }
+              cleanup_bindings(y_bindings);
               if (unify_fail) {
                 cleanup_bindings(parent_theta);
                 cleanup_bindings(x_bindings);
-                cleanup_bindings(y_bindings);
+
+                if (res_result->pos_count > 0) {
+                  for (int j = 0; j < res_result->pos_count; j++)
+                    free_function(res_result->pos_lits[j]);
+                  free(res_result->pos_lits);
+                }
+                if (res_result->neg_count > 0) {
+                  for (int j = 0; j < res_result->neg_count; j++)
+                    free_function(res_result->neg_lits[j]);
+                  free(res_result->neg_lits);
+                }
+                free(res_result);
                 goto cleanup;
               }
               else {
-                // For null entries in x_bindings, assign from y_bindings
-                for (int j = 0; j < x_bindings->num_bindings; j++) {
-                  if (x_bindings->list[j].term == NULL) {
-                    x_bindings->list[j].term = y_bindings->list[j].term;
-                     y_bindings->list[j].term = NULL;
-                  }
-                }
-                cleanup_bindings(y_bindings);
-
                 // Use x_bindings with collected info as binding stuff
-                binding_subst_with_flip(x_bindings, parent_theta);
+                binding_subst(x_bindings, parent_theta);
+
+                // Apply parent_theta to resolution result as well
+                for (int j = 0; j < res_result->pos_count; j++)
+                  for (int k = 0; k < res_result->pos_lits[j]->term_count; k++)
+                    subst(parent_theta, res_result->pos_lits[j]->terms+k);
+                for (int j = 0; j < res_result->neg_count; j++)
+                  for (int k = 0; k < res_result->neg_lits[j]->term_count; k++)
+                    subst(parent_theta, res_result->neg_lits[j]->terms+k);
+
                 cleanup_bindings(parent_theta);
               }
             }
@@ -1528,6 +1540,7 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
 
               // TODO: parent setup for answer?
               tommy_array_insert(&collection->new_clauses, answer);
+              cleanup_bindings(x_bindings);
             }
             else {
               // If not a backward search, empty resolution result indicates a contradiction between clauses
