@@ -5,8 +5,8 @@ TOMMY = tommyds/tommyds/
 
 all: alma.x
 
-alma.x: alma.o tommyarray.o tommyhashlin.o tommyhash.o tommylist.o mpc.o alma_parser.o alma_formula.o alma_kb.o alma_unify.o alma_command.o alma_print.o
-	$(CC) alma.o tommyarray.o tommyhashlin.o tommyhash.o tommylist.o mpc.o alma_parser.o alma_formula.o alma_kb.o alma_unify.o alma_command.o alma_print.o -o alma.x
+alma.x: alma.o tommyarray.o tommyhashlin.o tommyhash.o tommylist.o mpc.o alma_parser.o alma_formula.o alma_kb.o alma_unify.o alma_command.o alma_print.o alma_proc.o
+	$(CC) alma.o tommyarray.o tommyhashlin.o tommyhash.o tommylist.o mpc.o alma_parser.o alma_formula.o alma_kb.o alma_unify.o alma_command.o alma_print.o alma_proc.o -o alma.x
 
 alma.o: alma.c alma_command.h alma_kb.h
 	$(CC) $(CFLAGS) -c alma.c
@@ -43,6 +43,9 @@ alma_unify.o: alma_unify.c alma_unify.h alma_formula.h
 
 alma_print.o: alma_print.c alma_kb.h alma_formula.h alma_unify.h alma_print.h
 	$(CC) $(CFLAGS) -c alma_print.c
+
+alma_proc.o: alma_proc.c alma_kb.h alma_formula.h alma_unify.h alma_proc.h
+	$(CC) $(CFLAGS) -c alma_proc.c
 
 clean:
 	rm -f *.x *.o
