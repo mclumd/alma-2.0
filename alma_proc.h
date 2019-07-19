@@ -6,7 +6,7 @@
 #include "alma_kb.h"
 
 int proc_valid(alma_function *proc);
-int proc_bound_check(alma_term *bound_list);
-binding_list* proc_run(alma_function *proc, kb *alma);
+int proc_bound_check(alma_function *proc, binding_list *bindings);
+int proc_run(alma_function *proc, binding_list *bindings, kb *alma);
 
 #endif
