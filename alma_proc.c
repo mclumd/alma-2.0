@@ -32,20 +32,60 @@ static int neg_int(alma_function *introspect, alma_term *bound, binding_list *bi
   return 0;
 }
 
-// Must match the schema learned(literal(...), Var) OR learned(not(literal(...)), Var)
+// Must match (given bindings) the schema learned(literal(...), Var) OR learned(not(literal(...)), Var)
 // Stub currently returns the first match, even if KB and unification give multiple options
 static int learned(alma_function *learned, alma_term *bound, binding_list *bindings, kb *alma) {
-  if (learned->term_count == 2 && learned->terms[0].type == FUNCTION && learned->terms[1].type == VARIABLE
+  if (learned->term_count == 2 && learned->terms[1].type == VARIABLE
       && (bindings == NULL || !bindings_contain(bindings, learned->terms[1].variable))) {
-    alma_function *search = learned->terms[0].function;
+
+    // Create copy and substitute based on bindings available
+    alma_term *search_term = malloc(sizeof(*search_term));
+    copy_alma_term(learned->terms, search_term);
+    subst(bindings, search_term);
+
+    alma_function *search;
     tommy_hashlin *map = &alma->pos_map;
     int pos = 1;
-    if (strcmp(search->name, "not") == 0) {
-      pos = 0;
-      map = &alma->neg_map;
-      if (search->term_count != 1 || search->terms[0].type != FUNCTION)
-        return 0;
-      search = search->terms[0].function;
+
+    if (search_term->type == VARIABLE) {
+      free_term(search_term);
+      return 0;
+    }
+    else if (search_term->type == FUNCTION) {
+      search = search_term->function;
+
+      // Extract from not, if present
+      if (strcmp(search->name, "not") == 0) {
+        pos = 0;
+        map = &alma->neg_map;
+        if (search->term_count != 1) {
+          free_term(search_term);
+          return 0;
+        }
+
+        alma_term *temp = search_term;
+        search_term = search->terms;
+        free(temp->function->name);
+        free(temp->function);
+        free(temp);
+
+        if (search_term->type == FUNCTION)
+          search = search_term->function;
+        else if (search_term->type == VARIABLE) {
+          free_term(search_term);
+          return 0;
+        }
+      }
+    }
+    else {
+      search = malloc(sizeof(*search));
+      search->name = search_term->constant->name;
+      search->term_count = 0;
+      search->terms = NULL;
+      search_term->constant->name = NULL;
+      free(search_term->constant);
+      search_term->function = search;
+      search_term->type = FUNCTION;
     }
 
     char *name = name_with_arity(search->name, search->term_count);
@@ -91,12 +131,14 @@ static int learned(alma_function *learned, alma_term *bound, binding_list *bindi
           bindings->list[bindings->num_bindings-1].var = learned->terms[1].variable;
           bindings->list[bindings->num_bindings-1].term = time_term;
 
+          free_term(search_term);
           return 1;
         }
         cleanup_bindings(copy);
       }
       free_predname_mapping(result);
     }
+    free_term(search_term);
   }
   return 0;
 }
@@ -106,7 +148,7 @@ int proc_run(alma_function *proc, binding_list *bindings, kb *alma) {
   if (strcmp(proc->terms[0].function->name, "neg_int") == 0) {
     return neg_int(proc->terms[0].function, proc->terms+1, bindings, alma);
   }
-  else if (strcmp(proc->terms[0].function->name, "found") == 0) {
+  else if (strcmp(proc->terms[0].function->name, "learned") == 0) {
     return learned(proc->terms[0].function, proc->terms+1, bindings, alma);
   }
   return 0;
