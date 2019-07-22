@@ -501,6 +501,8 @@ static int clauses_differ(clause *x, clause *y) {
         if (function_compare(&xf, &yf) || functions_differ(xf, yf, &matches))
           return release_matches(&matches, 1);
       }
+      if (function_compare(&x->fif->conclusion, &y->fif->conclusion) || functions_differ(x->fif->conclusion, y->fif->conclusion, &matches))
+        return release_matches(&matches, 1);
     }
     else {
       for (int i = 0; i < x->pos_count; i++) {
@@ -1206,7 +1208,7 @@ static void process_fif_task_mapping(kb *collection, fif_task_mapping *entry, to
           fif_task_unify_loop(collection, &to_progress, progressed, new_clauses);
         }
       }
-      else {
+      else if (copy != NULL){
         cleanup_bindings(copy);
       }
     }
