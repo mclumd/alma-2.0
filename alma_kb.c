@@ -1142,6 +1142,7 @@ static void process_fif_task_mapping(kb *collection, fif_task_mapping *entry, to
             // Reset from copy
             cleanup_bindings(f->bindings);
             f->bindings = copy;
+            copy = NULL;
           }
         }
         else {
@@ -1188,13 +1189,13 @@ static void process_fif_task_mapping(kb *collection, fif_task_mapping *entry, to
         else {
           f->premises_done++;
           if (f->to_unify != NULL) {
-            cleanup_bindings(copy);
             f->num_unified++;
             f->unified_clauses = realloc(f->unified_clauses, sizeof(*f->unified_clauses)*f->num_unified);
             f->unified_clauses[f->num_unified-1] = f->to_unify->index;
             f->to_unify = NULL;
             f->proc_next = proc_valid(fif_access(f->fif, f->premises_done));
           }
+          cleanup_bindings(copy);
 
           tommy_list_remove_existing(&entry->tasks, &f->node);
           tommy_list to_progress;
@@ -1204,6 +1205,9 @@ static void process_fif_task_mapping(kb *collection, fif_task_mapping *entry, to
           // Unification succeeded; progress further on task as able in call
           fif_task_unify_loop(collection, &to_progress, progressed, new_clauses);
         }
+      }
+      else {
+        cleanup_bindings(copy);
       }
     }
   }

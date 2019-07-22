@@ -32,6 +32,13 @@ static int neg_int(alma_function *introspect, alma_term *bound, binding_list *bi
   return 0;
 }
 
+// Positive introspection procedure
+// Stub currently returns the first match, even if KB and unification give multiple options
+// Also presently stubbed to only introspect for single predicate without operator
+static int pos_int(alma_function *introspect, alma_term *bound, binding_list *bindings, kb* alma) {
+  return 0;
+}
+
 // Must match (given bindings) the schema learned(literal(...), Var) OR learned(not(literal(...)), Var)
 // Stub currently returns the first match, even if KB and unification give multiple options
 static int learned(alma_function *learned, alma_term *bound, binding_list *bindings, kb *alma) {
@@ -43,7 +50,7 @@ static int learned(alma_function *learned, alma_term *bound, binding_list *bindi
     copy_alma_term(learned->terms, search_term);
     subst(bindings, search_term);
 
-    alma_function *search;
+    alma_function *search = NULL;
     tommy_hashlin *map = &alma->pos_map;
     int pos = 1;
 
@@ -80,7 +87,8 @@ static int learned(alma_function *learned, alma_term *bound, binding_list *bindi
         }
       }
     }
-    else {
+    // Separate if as this may happen after function case for not(constant)
+    if (search_term->type == CONSTANT) {
       search = malloc(sizeof(*search));
       search->name = search_term->constant->name;
       search->term_count = 0;
@@ -89,6 +97,12 @@ static int learned(alma_function *learned, alma_term *bound, binding_list *bindi
       free(search_term->constant);
       search_term->function = search;
       search_term->type = FUNCTION;
+    }
+
+    if (search == NULL) {
+      free_term(search_term);
+      free(search_term);
+      return 0;
     }
 
     char *name = name_with_arity(search->name, search->term_count);
@@ -150,6 +164,9 @@ static int learned(alma_function *learned, alma_term *bound, binding_list *bindi
 int proc_run(alma_function *proc, binding_list *bindings, kb *alma) {
   if (strcmp(proc->terms[0].function->name, "neg_int") == 0) {
     return neg_int(proc->terms[0].function, proc->terms+1, bindings, alma);
+  }
+  else if (strcmp(proc->terms[0].function->name, "pos_int") == 0) {
+    return pos_int(proc->terms[0].function, proc->terms+1, bindings, alma);
   }
   else if (strcmp(proc->terms[0].function->name, "learned") == 0) {
     return learned(proc->terms[0].function, proc->terms+1, bindings, alma);
