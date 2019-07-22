@@ -26,6 +26,7 @@ typedef struct clause {
   if_tag tag;
   struct fif_info *fif; // Data used to store additional fif information; non-null only if FIF tagged
   long index; // Index of clause, used as key in index_map of KB
+  long learned; // Time asserted to KB
 } clause;
 
 typedef struct parent_set {
@@ -111,9 +112,11 @@ typedef struct fif_task_mapping {
 typedef struct fif_task {
   clause *fif;
   binding_list *bindings;
+  int premises_done;
   int num_unified;
-  long *unified_clauses; // Indices of clauses task has unfied with
+  long *unified_clauses; // Indices of clauses task has unified with
   clause *to_unify;
+  int proc_next; // Boolean indicating next as a proc instead of unifiable
   tommy_node node; // For storage in fif_mapping's list
 } fif_task;
 
@@ -183,6 +186,8 @@ void add_child(clause *parent, clause *child);
 void transfer_parent(kb *collection, clause *target, clause *source, int add_children);
 void distrust_recursive(kb *collection, clause *c, char *time);
 
+int pm_compare(const void *arg, const void *obj);
 int bm_compare(const void *arg, const void *obj);
+char* name_with_arity(char *name, int arity);
 
 #endif
