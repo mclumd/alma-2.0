@@ -49,6 +49,7 @@ static int learned(alma_function *learned, alma_term *bound, binding_list *bindi
 
     if (search_term->type == VARIABLE) {
       free_term(search_term);
+      free(search_term);
       return 0;
     }
     else if (search_term->type == FUNCTION) {
@@ -60,6 +61,7 @@ static int learned(alma_function *learned, alma_term *bound, binding_list *bindi
         map = &alma->neg_map;
         if (search->term_count != 1) {
           free_term(search_term);
+          free(search_term);
           return 0;
         }
 
@@ -73,6 +75,7 @@ static int learned(alma_function *learned, alma_term *bound, binding_list *bindi
           search = search_term->function;
         else if (search_term->type == VARIABLE) {
           free_term(search_term);
+          free(search_term);
           return 0;
         }
       }
@@ -107,8 +110,6 @@ static int learned(alma_function *learned, alma_term *bound, binding_list *bindi
 
         // Returning first match based at the moment
         if (pred_unify(search, lit, copy)) {
-          free_predname_mapping(result);
-
           binding *temp = bindings->list;
           bindings->list = copy->list;
           copy->list = temp;
@@ -128,17 +129,19 @@ static int learned(alma_function *learned, alma_term *bound, binding_list *bindi
           // Insert answer of learned query into binding set
           bindings->num_bindings++;
           bindings->list = realloc(bindings->list, sizeof(*bindings->list) * bindings->num_bindings);
-          bindings->list[bindings->num_bindings-1].var = learned->terms[1].variable;
+          bindings->list[bindings->num_bindings-1].var = malloc(sizeof(alma_variable));
+          copy_alma_var(learned->terms[1].variable, bindings->list[bindings->num_bindings-1].var);
           bindings->list[bindings->num_bindings-1].term = time_term;
 
           free_term(search_term);
+          free(search_term);
           return 1;
         }
         cleanup_bindings(copy);
       }
-      free_predname_mapping(result);
     }
     free_term(search_term);
+    free(search_term);
   }
   return 0;
 }

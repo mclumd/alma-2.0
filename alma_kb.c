@@ -1126,14 +1126,12 @@ static void process_fif_task_mapping(kb *collection, fif_task_mapping *entry, to
 
     if (f->to_unify != NULL || f->proc_next) {
       int premise_progress = 0;
-      binding_list *copy;
+      binding_list *copy = malloc(sizeof(*copy));
+      copy_bindings(copy, f->bindings);
 
       if (f->to_unify != NULL) {
         // Clause to_unify must not have become distrusted since it was connected to the fif task
         if (!is_distrusted(collection, f->to_unify->index)) {
-          copy = malloc(sizeof(*copy));
-          copy_bindings(copy, f->bindings);
-
           alma_function *fif_func = fif_access(f->fif, f->premises_done);
           alma_function *to_unify_func = (f->to_unify->pos_count > 0) ? f->to_unify->pos_lits[0] : f->to_unify->neg_lits[0];
 
@@ -1175,14 +1173,14 @@ static void process_fif_task_mapping(kb *collection, fif_task_mapping *entry, to
 
             clause *conclusion = fif_conclude(collection, f, f->bindings);
             tommy_array_insert(new_clauses, conclusion);
+            // Reset from copy
+            f->bindings = copy;
 
             f->premises_done--;
             if (f->to_unify != NULL) {
               f->to_unify = NULL;
               f->proc_next = proc_valid(fif_access(f->fif, f->premises_done));
               f->num_unified--;
-              // Reset from copy
-              f->bindings = copy;
             }
           }
         }
