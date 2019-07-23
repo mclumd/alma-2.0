@@ -77,6 +77,23 @@ void kb_init(kb **collection, char *file) {
   }
 }
 
+// System idles if there are no resolution tasks, backsearch tasks, or to_unify fif values
+// First of these is true when no new clauses (source of res tasks) exist
+// To_unify values are all removed in current implementation each step from exhaustive fif
+static int idling_check(kb *collection) {
+  if (tommy_array_size(&collection->new_clauses) <= 1) {
+    tommy_node *i = tommy_list_head(&collection->backsearch_tasks);
+    while (i) {
+      backsearch_task *bt = i->data;
+      if (tommy_array_size(&bt->to_resolve) > 0)
+        return 0;
+      i = i->next;
+    }
+    return 1;
+  }
+  return 0;
+}
+
 void kb_step(kb *collection) {
   collection->time++;
 
@@ -149,8 +166,7 @@ void kb_step(kb *collection) {
     i = i->next;
   }
 
-  // Time always advances; idle when no other clauses are added
-  if (tommy_array_size(&collection->new_clauses) <= 1)
+  if (idling_check(collection))
     collection->idling = 1;
 
   if (collection->idling)
@@ -272,8 +288,7 @@ void kb_backsearch(kb *collection, char *string) {
       free_clause(c);
     }
     else {
-      if (collection->idling)
-        collection->idling = 0;
+      collection->idling = 0;
       backsearch_from_clause(collection, c);
     }
   }
