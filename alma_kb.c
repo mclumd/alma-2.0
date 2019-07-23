@@ -842,6 +842,10 @@ void fif_task_map_init(kb *collection, clause *c) {
   if (c->tag == FIF) {
     for (int i = 0; i < c->fif->premise_count; i++) {
       alma_function *f = fif_access(c, i);
+
+      // Don't make task mappings for middle proc premises
+      if (i > 0 && strcmp(f->name, "proc") == 0)
+        continue;
       char *name = name_with_arity(f->name, f->term_count);
       fif_task_mapping *result = tommy_hashlin_search(&collection->fif_tasks, fif_taskm_compare, name, tommy_hash_u64(0, name, strlen(name)));
 
@@ -893,7 +897,6 @@ void fif_tasks_from_clause(kb *collection, clause *c) {
       tommy_node *curr = tommy_list_head(&result->tasks);
 
       // Process original list contents and deal with to_unify
-      int set_first = 0;
       int i = 0;
       while (curr && i < len) {
         fif_task *data = curr->data;
@@ -901,7 +904,7 @@ void fif_tasks_from_clause(kb *collection, clause *c) {
         // Only modify to_unify if next for fif isn't a procedure predicate
         if (!data->proc_next) {
           int sign_match = (pos && data->fif->fif->ordering[data->num_unified] < 0) || (!pos && data->fif->fif->ordering[data->num_unified] >= 0);
-          if (sign_match && !(data->num_unified == 0 && set_first)) {
+          if (sign_match) {
             if (data->to_unify == NULL)
               data->to_unify = c;
             else {
@@ -918,8 +921,6 @@ void fif_tasks_from_clause(kb *collection, clause *c) {
               copy->proc_next = data->proc_next;
               tommy_list_insert_tail(&result->tasks, &copy->node, copy);
             }
-            // Special case -- c should only -once- be put into to_unify of a task with none unified
-            set_first = 1;
           }
         }
 
@@ -1283,7 +1284,6 @@ int assert_formula(kb *collection, char *string, int print) {
     nodes_to_clauses(formulas, formula_count, &collection->new_clauses, print);
     return 1;
   }
-  collection->idling = 0;
   return 0;
 }
 

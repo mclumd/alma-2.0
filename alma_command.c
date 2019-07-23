@@ -166,8 +166,7 @@ void kb_step(kb *collection) {
     i = i->next;
   }
 
-  if (idling_check(collection))
-    collection->idling = 1;
+  collection->idling = idling_check(collection);
 
   if (collection->idling)
     printf("Idling...\n");
