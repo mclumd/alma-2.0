@@ -1,6 +1,6 @@
 fif(
-    and(hearing(julia),proc(learned(not(talking),A),bound)),
-    conclusion(ros(speak()))).
+    and(hearing(julia),proc(neg_int(talking),bound)),
+    conclusion(ros(speak))).
 fif(
-    and(hearing(julia),proc(learned(not(talking),A),bound)),
-    conclusion(ros(raise_arm()))).
+    and(hearing(julia),proc(neg_int(talking),bound)),
+    conclusion(ros(raise_arm))).
