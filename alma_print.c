@@ -4,17 +4,10 @@
 static void alma_function_print(alma_function *func);
 
 static void alma_term_print(alma_term *term) {
-  switch (term->type) {
-    case VARIABLE:
-      printf("%s%lld", term->variable->name, term->variable->id);
-      break;
-    case CONSTANT:
-      printf("%s", term->constant->name);
-      break;
-    case FUNCTION:
-      alma_function_print(term->function);
-      break;
-  }
+  if (term->type == VARIABLE)
+    printf("%s%lld", term->variable->name, term->variable->id);
+  else
+    alma_function_print(term->function);
 }
 
 static void alma_function_print(alma_function *func) {
@@ -46,7 +39,6 @@ static void alma_fol_print_rec(alma_node *node, int indent) {
       case AND:
         op = "AND"; break;
       case IF:
-      default:
         op = "IF"; break;
     }
 

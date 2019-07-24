@@ -23,7 +23,7 @@ static int occurs_check(binding_list *theta, alma_variable *var, alma_term *x) {
       return occurs_check(theta, var, res);
   }
   // In function case occurs-check each argument
-  else if (x->type == FUNCTION){
+  else {
     for (int i = 0; i < x->function->term_count; i++) {
       if (occurs_check(theta, var, x->function->terms + i))
         return 1;
@@ -34,31 +34,24 @@ static int occurs_check(binding_list *theta, alma_variable *var, alma_term *x) {
 
 // For a given term, replace variables in the binding list, replace with what they're bound to
 void subst(binding_list *theta, alma_term *term) {
-  switch (term->type) {
-    case VARIABLE: {
-      alma_term *contained = bindings_contain(theta, term->variable);
-      if (contained != NULL) {
-        free(term->variable->name);
-        free(term->variable);
-        copy_alma_term(contained, term);
-      }
-      break;
+  if (term->type == VARIABLE) {
+    alma_term *contained = bindings_contain(theta, term->variable);
+    if (contained != NULL) {
+      free(term->variable->name);
+      free(term->variable);
+      copy_alma_term(contained, term);
     }
-    case CONSTANT:
-      return;
-    case FUNCTION: {
-      for (int i = 0; i < term->function->term_count; i++) {
-        subst(theta, term->function->terms+i);
-      }
-      break;
-    }
+  }
+  else {
+    for (int i = 0; i < term->function->term_count; i++)
+      subst(theta, term->function->terms+i);
   }
 }
 
 static void cascade_substitution(binding_list *theta) {
-  for (int i = 0; i < theta->num_bindings; i++) {
+  for (int i = 0; i < theta->num_bindings; i++)
     subst(theta, theta->list[i].term);
-  }
+
   // AIMA code examples process functions for a second time; may need to do here as well
 }
 
@@ -103,10 +96,6 @@ int unify(alma_term *x, alma_term *y, binding_list *theta) {
   else if (y->type == VARIABLE) {
     return unify_var(y, x, theta);
   }
-  else if (x->type == CONSTANT && y->type == CONSTANT
-          && strcmp(x->constant->name, y->constant->name) == 0) {
-    return 1;
-  }
   else if (x->type == FUNCTION && y->type == FUNCTION
           && strcmp(x->function->name, y->function->name) == 0
           && x->function->term_count == y->function->term_count) {
@@ -127,9 +116,8 @@ int pred_unify(alma_function *x, alma_function *y, binding_list *theta) {
 
   for (int i = 0; i < x->term_count; i++) {
     // Bindings build up over repeated calls
-    if (!unify(x->terms+i, y->terms+i, theta)) {
+    if (!unify(x->terms+i, y->terms+i, theta))
       return 0;
-    }
   }
 
   // Unification suceeded; bindings must be cleaned up by caller

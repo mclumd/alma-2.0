@@ -37,63 +37,43 @@ static void make_clause(alma_node *node, clause *c) {
 }
 
 static void find_variable_names(tommy_array *list, alma_term *term, int id_from_name) {
-  switch (term->type) {
-    case VARIABLE: {
-      for (tommy_size_t i = 0; i < tommy_array_size(list); i++) {
-        if (id_from_name) {
-          if (strcmp(term->variable->name, tommy_array_get(list, i)) == 0)
-            return;
-        }
-        else {
-          if (term->variable->id == *(long long *)tommy_array_get(list, i))
-            return;
-        }
-      }
+  if (term->type == VARIABLE) {
+    for (tommy_size_t i = 0; i < tommy_array_size(list); i++) {
       if (id_from_name) {
-        tommy_array_insert(list, term->variable->name);
+        if (strcmp(term->variable->name, tommy_array_get(list, i)) == 0)
+          return;
       }
-      else {
-        long long *id = malloc(sizeof(*id));
-        *id =  term->variable->id;
-        tommy_array_insert(list, id);
-      }
-      break;
+      else if (term->variable->id == *(long long *)tommy_array_get(list, i))
+        return;
     }
-    case CONSTANT: {
-      return;
+    if (id_from_name) {
+      tommy_array_insert(list, term->variable->name);
     }
-    case FUNCTION: {
-      for (int i = 0; i < term->function->term_count; i++) {
-        find_variable_names(list, term->function->terms+i, id_from_name);
-      }
+    else {
+      long long *id = malloc(sizeof(*id));
+      *id =  term->variable->id;
+      tommy_array_insert(list, id);
     }
   }
+  else
+    for (int i = 0; i < term->function->term_count; i++)
+      find_variable_names(list, term->function->terms+i, id_from_name);
 }
 
 static void set_variable_names(tommy_array *list, alma_term *term, int id_from_name) {
-  switch (term->type) {
-    case VARIABLE: {
-      for (tommy_size_t i = 0; i < tommy_array_size(list); i++) {
-        if (id_from_name) {
-          if (strcmp(term->variable->name, tommy_array_get(list, i)) == 0)
-            term->variable->id = variable_id_count + i;
-        }
-        else {
-          if (term->variable->id == *(long long *)tommy_array_get(list, i))
-            term->variable->id = variable_id_count + i;
-        }
+  if (term->type == VARIABLE) {
+    for (tommy_size_t i = 0; i < tommy_array_size(list); i++) {
+      if (id_from_name) {
+        if (strcmp(term->variable->name, tommy_array_get(list, i)) == 0)
+          term->variable->id = variable_id_count + i;
       }
-      break;
-    }
-    case CONSTANT: {
-      return;
-    }
-    case FUNCTION: {
-      for (int i = 0; i < term->function->term_count; i++) {
-        set_variable_names(list, term->function->terms+i, id_from_name);
-      }
+      else if (term->variable->id == *(long long *)tommy_array_get(list, i))
+        term->variable->id = variable_id_count + i;
     }
   }
+  else
+    for (int i = 0; i < term->function->term_count; i++)
+      set_variable_names(list, term->function->terms+i, id_from_name);
 }
 
 // Given a clause, assign the ID fields of each variable
@@ -104,33 +84,25 @@ static void set_variable_names(tommy_array *list, alma_term *term, int id_from_n
 static void set_variable_ids(clause *c, int id_from_name, binding_list *bs_bindings) {
   tommy_array vars;
   tommy_array_init(&vars);
-  for (int i = 0; i < c->pos_count; i++) {
-    for (int j = 0; j < c->pos_lits[i]->term_count; j++) {
+
+  for (int i = 0; i < c->pos_count; i++)
+    for (int j = 0; j < c->pos_lits[i]->term_count; j++)
       find_variable_names(&vars, c->pos_lits[i]->terms+j, id_from_name);
-    }
-  }
-  for (int i = 0; i < c->neg_count; i++) {
-    for (int j = 0; j < c->neg_lits[i]->term_count; j++) {
+  for (int i = 0; i < c->neg_count; i++)
+    for (int j = 0; j < c->neg_lits[i]->term_count; j++)
       find_variable_names(&vars, c->neg_lits[i]->terms+j, id_from_name);
-    }
-  }
-  for (int i = 0; i < c->pos_count; i++) {
-    for (int j = 0; j < c->pos_lits[i]->term_count; j++) {
+
+  for (int i = 0; i < c->pos_count; i++)
+    for (int j = 0; j < c->pos_lits[i]->term_count; j++)
       set_variable_names(&vars, c->pos_lits[i]->terms+j, id_from_name);
-    }
-  }
-  for (int i = 0; i < c->neg_count; i++) {
-    for (int j = 0; j < c->neg_lits[i]->term_count; j++) {
+  for (int i = 0; i < c->neg_count; i++)
+    for (int j = 0; j < c->neg_lits[i]->term_count; j++)
       set_variable_names(&vars, c->neg_lits[i]->terms+j, id_from_name);
-    }
-  }
 
   // If bindings for a backsearch have been passed in, update variable names for them as well
-  if (bs_bindings) {
-    for (int i = 0; i < bs_bindings->num_bindings; i++) {
+  if (bs_bindings)
+    for (int i = 0; i < bs_bindings->num_bindings; i++)
       set_variable_names(&vars, bs_bindings->list[i].term, id_from_name);
-    }
-  }
 
   variable_id_count += tommy_array_size(&vars);
   if (!id_from_name) {
@@ -143,9 +115,8 @@ static void set_variable_ids(clause *c, int id_from_name, binding_list *bs_bindi
 static void init_ordering_rec(fif_info *info, alma_node *node, int *next, int *pos, int *neg) {
   if (node->type == FOL) {
     // Neg lit case for NOT
-    if (node->fol->op == NOT) {
+    if (node->fol->op == NOT)
       info->ordering[(*next)++] = (*neg)--;
-    }
     // Case of node is OR
     else {
       init_ordering_rec(info, node->fol->arg1, next, pos, neg);
@@ -153,9 +124,8 @@ static void init_ordering_rec(fif_info *info, alma_node *node, int *next, int *p
     }
   }
   // Otherwise, pos lit
-  else {
+  else
     info->ordering[(*next)++] = (*pos)++;
-  }
 }
 
 // Given a node for a fif formula, record inorder traversal ofpositive and negative literals
@@ -435,34 +405,24 @@ static int functions_differ(alma_function *x, alma_function *y, var_matching *ma
   if (x->term_count == y->term_count && strcmp(x->name, y->name) == 0) {
     for (int i = 0; i < x->term_count; i++) {
       if (x->terms[i].type == y->terms[i].type) {
-          switch(x->terms[i].type) {
-            case VARIABLE: {
-              long long xval = x->terms[i].variable->id;
-              long long yval = y->terms[i].variable->id;
-              // Look for matching variable in var_matching's x and y
-              for (int j = 0; j < matches->count; j++) {
-                // If only one of xval and yval matches, return unequal
-                if ((xval == matches->x[j] && yval != matches->y[j]) || (yval == matches->y[j] && xval != matches->x[j]))
-                  return 1;
-              }
-              // No match was found, add a new one to the matching
-              matches->count++;
-              matches->x = realloc(matches->x, sizeof(*matches->x) * matches->count);
-              matches->x[matches->count -1] = xval;
-              matches->y = realloc(matches->y, sizeof(*matches->y) * matches->count);
-              matches->y[matches->count -1] = yval;
-              break;
-            }
-            case CONSTANT: {
-              if (strcmp(x->terms[i].constant->name, y->terms[i].constant->name) != 0)
-                return 1;
-              break;
-            }
-            case FUNCTION: {
-              if (functions_differ(x->terms[i].function, y->terms[i].function, matches))
-                return 1;
-            }
+        if (x->terms[i].type == VARIABLE) {
+          long long xval = x->terms[i].variable->id;
+          long long yval = y->terms[i].variable->id;
+          // Look for matching variable in var_matching's x and y
+          for (int j = 0; j < matches->count; j++) {
+            // If only one of xval and yval matches, return unequal
+            if ((xval == matches->x[j] && yval != matches->y[j]) || (yval == matches->y[j] && xval != matches->x[j]))
+              return 1;
           }
+          // No match was found, add a new one to the matching
+          matches->count++;
+          matches->x = realloc(matches->x, sizeof(*matches->x) * matches->count);
+          matches->x[matches->count -1] = xval;
+          matches->y = realloc(matches->y, sizeof(*matches->y) * matches->count);
+          matches->y[matches->count -1] = yval;
+        }
+        else if (functions_differ(x->terms[i].function, y->terms[i].function, matches))
+            return 1;
       }
       else
         return 1;
@@ -475,10 +435,8 @@ static int functions_differ(alma_function *x, alma_function *y, var_matching *ma
 
 // Function to call when short-circuiting clauses_differ to properly free var_matching instance
 static int release_matches(var_matching *matches, int retval) {
-  if (matches->x != NULL)
-    free(matches->x);
-  if (matches->y != NULL)
-    free(matches->y);
+  free(matches->x);
+  free(matches->y);
   return retval;
 }
 
@@ -1655,23 +1613,17 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
 
 
 static void collect_variables(alma_term *term, binding_list *b) {
-  switch(term->type) {
-    case VARIABLE: {
-      b->num_bindings++;
-      b->list = realloc(b->list, sizeof(*b->list) * b->num_bindings);
-      b->list[b->num_bindings-1].var = malloc(sizeof(alma_variable));
-      copy_alma_var(term->variable, b->list[b->num_bindings-1].var);
-      b->list[b->num_bindings-1].term = malloc(sizeof(alma_term));
-      copy_alma_term(term, b->list[b->num_bindings-1].term);
-      break;
-    }
-    case CONSTANT: {
-      return;
-    }
-    case FUNCTION: {
-      for (int i = 0; i < term->function->term_count; i++)
-        collect_variables(term->function->terms+i, b);
-    }
+  if (term->type == VARIABLE) {
+    b->num_bindings++;
+    b->list = realloc(b->list, sizeof(*b->list) * b->num_bindings);
+    b->list[b->num_bindings-1].var = malloc(sizeof(alma_variable));
+    copy_alma_var(term->variable, b->list[b->num_bindings-1].var);
+    b->list[b->num_bindings-1].term = malloc(sizeof(alma_term));
+    copy_alma_term(term, b->list[b->num_bindings-1].term);
+  }
+  else {
+    for (int i = 0; i < term->function->term_count; i++)
+      collect_variables(term->function->terms+i, b);
   }
 }
 

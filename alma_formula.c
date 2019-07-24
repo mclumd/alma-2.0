@@ -27,12 +27,6 @@ void alma_term_init(alma_term *term, mpc_ast_t *ast) {
     term->variable->id = 0;
     strcpy(term->variable->name, ast->contents);
   }
-  else if (strstr(ast->tag, "constant") != NULL) {
-    term->type = CONSTANT;
-    term->constant = malloc(sizeof(*term->constant));
-    term->constant->name = malloc(strlen(ast->contents)+1);
-    strcpy(term->constant->name, ast->contents);
-  }
   else {
     term->type = FUNCTION;
     term->function = malloc(sizeof(*term->function));
@@ -129,16 +123,12 @@ static void alma_tree_init(alma_node *alma_tree, mpc_ast_t *ast) {
       }
       else {
         // Set arg2 if operation is binary or/and/if
-        switch (alma_tree->fol->op) {
-          case OR:
-          case AND:
-          case IF:
-            alma_tree->fol->arg2 = malloc(sizeof(*alma_tree->fol->arg2));
-            alma_tree_init(alma_tree->fol->arg2, ast->children[3]);
-            break;
-          case NOT:
-            alma_tree->fol->arg2 = NULL;
-            break;
+        if (alma_tree->fol->op == NOT) {
+          alma_tree->fol->arg2 = NULL;
+        }
+        else {
+          alma_tree->fol->arg2 = malloc(sizeof(*alma_tree->fol->arg2));
+          alma_tree_init(alma_tree->fol->arg2, ast->children[3]);
         }
         if (strstr(ast->tag, "bformula") != NULL)
           alma_tree->fol->tag = BIF;
@@ -204,21 +194,12 @@ void free_function(alma_function *func) {
 
 // Does not free alloc for term pointer itself, due to how terms are allocated in alma_function
 void free_term(alma_term *term) {
-  switch (term->type) {
-    case VARIABLE: {
-      free(term->variable->name);
-      free(term->variable);
-      break;
-    }
-    case CONSTANT: {
-      free(term->constant->name);
-      free(term->constant);
-      break;
-    }
-    case FUNCTION: {
-      free_function(term->function);
-    }
+  if (term->type == VARIABLE) {
+    free(term->variable->name);
+    free(term->variable);
   }
+  else
+    free_function(term->function);
 }
 
 // If freeself is false, does NOT free the top-level alma_node
@@ -255,23 +236,13 @@ void copy_alma_var(alma_variable *original, alma_variable *copy) {
 // Space for copy must be allocated before call
 void copy_alma_term(alma_term *original, alma_term *copy) {
   copy->type = original->type;
-  switch (original->type) {
-    case VARIABLE: {
-      copy->variable = malloc(sizeof(*copy->variable));
-      copy_alma_var(original->variable, copy->variable);
-      break;
-    }
-    case CONSTANT: {
-      copy->constant = malloc(sizeof(*copy->constant));
-      copy->constant->name = malloc(strlen(original->constant->name)+1);
-      strcpy(copy->variable->name, original->constant->name);
-      break;
-    }
-    case FUNCTION: {
-      copy->function = malloc(sizeof(*copy->function));
-      copy_alma_function(original->function, copy->function);
-      break;
-    }
+  if (original->type == VARIABLE) {
+    copy->variable = malloc(sizeof(*copy->variable));
+    copy_alma_var(original->variable, copy->variable);
+  }
+  else {
+    copy->function = malloc(sizeof(*copy->function));
+    copy_alma_function(original->function, copy->function);
   }
 }
 
@@ -280,9 +251,8 @@ void copy_alma_function(alma_function *original, alma_function *copy) {
   copy->name = malloc(strlen(original->name)+1);
   strcpy(copy->name, original->name);
   copy->term_count = original->term_count;
-  if (original->terms == NULL) {
+  if (original->terms == NULL)
     copy->terms = NULL;
-  }
   else {
     copy->terms = malloc(sizeof(*copy->terms) * copy->term_count);
     for (int i = 0; i < copy->term_count; i++) {

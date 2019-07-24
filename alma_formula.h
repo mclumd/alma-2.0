@@ -34,17 +34,15 @@ typedef struct alma_function {
   struct alma_term *terms;
 } alma_function;
 
-typedef enum term_type {VARIABLE, CONSTANT, FUNCTION} term_type;
+typedef enum term_type {VARIABLE, FUNCTION} term_type;
 
 struct alma_variable;
-struct alma_constant;
 struct alma_function;
 
 typedef struct alma_term {
   term_type type;
   union {
     struct alma_variable *variable;
-    struct alma_constant *constant;
     alma_function *function;
   };
 } alma_term;
@@ -53,10 +51,6 @@ typedef struct alma_variable {
   char *name;
   long long id; // Not initialized until the variable in which it appears is converted into a clause
 } alma_variable;
-
-typedef struct alma_constant {
-  char *name;
-} alma_constant;
 
 // TODO: Determine which of this file's functions should have static linkage
 
