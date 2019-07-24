@@ -1,7 +1,7 @@
 #ifndef alma_command_h
 #define alma_command_h
 
-typedef struct kb kb;
+#include "alma_kb.h"
 
 void kb_init(kb **collection, char *file);
 void kb_step(kb *collection);

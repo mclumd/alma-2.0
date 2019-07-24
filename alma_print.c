@@ -1,5 +1,6 @@
 #include "alma_print.h"
 #include "alma_formula.h"
+#include "alma_fif.h"
 
 static void alma_function_print(alma_function *func);
 

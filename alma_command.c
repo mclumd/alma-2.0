@@ -1,11 +1,9 @@
 #include <stdlib.h>
 #include "alma_command.h"
-#include "tommyds/tommyds/tommytypes.h"
-#include "tommyds/tommyds/tommyarray.h"
-#include "tommyds/tommyds/tommyhashlin.h"
-#include "tommyds/tommyds/tommylist.h"
-#include "alma_kb.h"
+#include "tommy.h"
 #include "alma_formula.h"
+#include "alma_backsearch.h"
+#include "alma_fif.h"
 #include "alma_parser.h"
 #include "alma_print.h"
 

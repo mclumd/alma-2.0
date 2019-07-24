@@ -1,5 +1,6 @@
 #include <string.h>
 #include "alma_proc.h"
+#include "tommy.h"
 
 #define run_pos_int 0
 #define run_neg_int 1

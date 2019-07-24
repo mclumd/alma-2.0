@@ -1,11 +1,7 @@
 #ifndef alma_kb_h
 #define alma_kb_h
 
-#include "tommyds/tommyds/tommytypes.h"
-#include "tommyds/tommyds/tommyarray.h"
-#include "tommyds/tommyds/tommyhashlin.h"
-#include "tommyds/tommyds/tommylist.h"
-#include "alma_command.h"
+#include "tommy.h"
 #include "alma_formula.h"
 #include "alma_unify.h"
 
@@ -34,13 +30,7 @@ typedef struct parent_set {
   clause **clauses;
 } parent_set;
 
-typedef struct fif_info {
-  int premise_count;
-  int *ordering; // Records the interleaving order of positive and negative literals
-  alma_function *conclusion; // Pointer to track conclusion of fif
-} fif_info;
-
-struct kb {
+typedef struct kb {
   long time;
   char *now_str; // String representation of now(time).
   char *prev_str; // String representation of now(time-1).
@@ -67,7 +57,7 @@ struct kb {
   tommy_list backsearch_tasks;
 
   tommy_hashlin distrusted; // Stores distrusted items by clause index
-};
+} kb;
 
 // Map used for entries in index_map
 typedef struct index_mapping {
@@ -86,39 +76,12 @@ typedef struct predname_mapping {
   tommy_node list_node; // Node used for storage in tommy_list
 } predname_mapping;
 
-// Used to map set of fif clauses
-typedef struct fif_mapping {
-  char *conclude_name; // Key for hashing
-  int num_clauses;
-  clause **clauses;
-  tommy_node node;
-} fif_mapping;
-
 // Used to track entries in distrusted map
 typedef struct distrust_mapping {
   long key;
   clause *value;
   tommy_node node;
 } distrust_mapping;
-
-// Used to hold partial fif tasks in fif_tasks
-typedef struct fif_task_mapping {
-  char *predname; // Key for hashing -- name/arity of next literal to unify
-  tommy_list tasks; // List of specific tasks per predname
-  tommy_node node;
-} fif_task_mapping;
-
-// Tasks contained in an fif_mapping's list
-typedef struct fif_task {
-  clause *fif;
-  binding_list *bindings;
-  int premises_done;
-  int num_unified;
-  long *unified_clauses; // Indices of clauses task has unified with
-  clause *to_unify;
-  int proc_next; // Boolean indicating next as a proc instead of unifiable
-  tommy_node node; // For storage in fif_mapping's list
-} fif_task;
 
 typedef struct res_task {
   clause *x;
@@ -127,67 +90,34 @@ typedef struct res_task {
   alma_function *neg; // Negative literal from y
 } res_task;
 
-// Used to keep track of binding lists for given clause of backsearch
-typedef struct binding_mapping {
-  long key;
-  binding_list *bindings;
-  tommy_node node;
-} binding_mapping;
-
-typedef struct backsearch_task {
-  clause *target;
-  // Model empty binding list to be copied for others
-  binding_list *target_vars;
-
-  int clause_count;
-
-  tommy_array clauses;
-  tommy_hashlin clause_bindings;
-
-  tommy_array new_clauses;
-  tommy_array new_clause_bindings;
-
-  tommy_array to_resolve;
-  tommy_node node;
-} backsearch_task;
-
+int clauses_differ(clause *x, clause *y);
 clause* duplicate_check(kb *collection, clause *c);
 void add_clause(kb *collection, clause *curr);
 void remove_clause(kb *collection, clause *c);
-void fif_task_map_init(kb *collection, clause *c);
-void fif_tasks_from_clause(kb *collection, clause *c);
-void process_fif_tasks(kb *collection);
-void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr, backsearch_task *bs);
-void process_backward_tasks(kb *collection);
+struct backsearch_task;
+void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr, struct backsearch_task *bs);
 void make_single_task(kb *collection, clause *c, alma_function *c_lit, clause *other, tommy_array *tasks, int use_bif, int pos);
+void make_res_tasks(kb *collection, clause *c, int count, alma_function **c_lits, tommy_hashlin *map, tommy_array *tasks, int use_bif, int pos);
 void res_tasks_from_clause(kb *collection, clause *c, int process_negatives);
 int assert_formula(kb *collection, char *string, int print);
 int delete_formula(kb *collection, char *string, int print);
 void resolve(res_task *t, binding_list *mgu, clause *result);
 
-void backsearch_from_clause(kb *collection, clause *c);
-void generate_backsearch_tasks(kb *collection, backsearch_task *bt);
-void process_backsearch_tasks(kb *collection);
-void backsearch_halt(backsearch_task *t);
-
 // Functions used in alma_command
 char* now(long t);
 void free_clause(clause *c);
-void free_fif_task_mapping(void *arg);
-alma_function* fif_access(clause *c, int i);
+void set_variable_ids(clause *c, int id_from_name, binding_list *bs_bindings);
 void flatten_node(alma_node *node, tommy_array *clauses, int print);
 void nodes_to_clauses(alma_node *trees, int num_trees, tommy_array *clauses, int print);
-void fif_to_front(tommy_array *clauses);
 void free_predname_mapping(void *arg);
-void free_fif_mapping(void *arg);
 int is_distrusted(kb *collection, long index);
 char* long_to_str(long x);
 void add_child(clause *parent, clause *child);
 void transfer_parent(kb *collection, clause *target, clause *source, int add_children);
 void distrust_recursive(kb *collection, clause *c, char *time);
 
+int im_compare(const void *arg, const void *obj);
 int pm_compare(const void *arg, const void *obj);
-int bm_compare(const void *arg, const void *obj);
 char* name_with_arity(char *name, int arity);
 
 #endif
