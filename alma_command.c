@@ -95,19 +95,12 @@ static int idling_check(kb *collection) {
 void kb_step(kb *collection) {
   collection->time++;
 
-  collection->now_str = now(collection->time);
-  assert_formula(collection, collection->now_str, 0);
-  if (collection->prev_str != NULL) {
-    delete_formula(collection, collection->prev_str, 0);
-    free(collection->prev_str);
-  }
-  else
-    delete_formula(collection, "now(1).", 0);
-  collection->prev_str = collection->now_str;
-
   process_res_tasks(collection, &collection->res_tasks, &collection->new_clauses, NULL);
   process_fif_tasks(collection);
   process_backsearch_tasks(collection);
+
+  collection->now_str = now(collection->time);
+  assert_formula(collection, collection->now_str, 0);
 
   fif_to_front(&collection->new_clauses);
   // Insert new clauses derived that are not duplicates
@@ -163,6 +156,14 @@ void kb_step(kb *collection) {
     generate_backsearch_tasks(collection, i->data);
     i = i->next;
   }
+
+  if (collection->prev_str != NULL) {
+    delete_formula(collection, collection->prev_str, 0);
+    free(collection->prev_str);
+  }
+  else
+    delete_formula(collection, "now(1).", 0);
+  collection->prev_str = collection->now_str;
 
   collection->idling = idling_check(collection);
 
