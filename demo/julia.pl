@@ -1,8 +1,6 @@
 fif(
     and(hearing(julia, T),
     and(proc(neg_int(talking),bound),
-    now(X))),
+    proc(pos_int(now(X)), bound))),
     conclusion(ros(speak(), X))).
-fif(
-    and(hearing(julia, T),proc(neg_int(talking),bound)),
-    conclusion(ros(raise_arm(), X))).
+hearing(julia, 0).

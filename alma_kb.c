@@ -619,7 +619,6 @@ void remove_clause(kb *collection, clause *c) {
           }
         }
 
-        // fif_task_mappings have tasks deleted if they have unified with c
         for (int i = 0; i < count; i++) {
           fif_task_mapping *tm = tommy_hashlin_search(&collection->fif_tasks, fif_taskm_compare, names[i], tommy_hash_u64(0, names[i], strlen(names[i])));
           if (tm != NULL) {
@@ -628,8 +627,13 @@ void remove_clause(kb *collection, clause *c) {
               fif_task *currdata = curr->data;
               curr = curr->next;
 
-              if (currdata->to_unify == c) {
-                currdata->to_unify = NULL;
+              for (int j = 0; j < currdata->num_to_unify; j++) {
+                if (currdata->to_unify[j] == c) {
+                  currdata->num_to_unify--;
+                  currdata->to_unify[j] = currdata->to_unify[currdata->num_to_unify];
+                  currdata->to_unify = realloc(currdata->to_unify, sizeof(*currdata->to_unify)*currdata->num_to_unify);
+                  break;
+                }
               }
             }
           }
@@ -638,6 +642,7 @@ void remove_clause(kb *collection, clause *c) {
         }
         free(names);
 
+        // fif_task_mappings have tasks deleted if they have unified with c
         for (int i = 0; i < prev_count; i++) {
           fif_task_mapping *tm = tommy_hashlin_search(&collection->fif_tasks, fif_taskm_compare, prev_names[i], tommy_hash_u64(0, prev_names[i], strlen(prev_names[i])));
           if (tm != NULL) {

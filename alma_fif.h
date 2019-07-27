@@ -33,7 +33,8 @@ typedef struct fif_task {
   int premises_done;
   int num_unified;
   long *unified_clauses; // Indices of clauses task has unified with
-  clause *to_unify;
+  int num_to_unify;
+  clause **to_unify;
   int proc_next; // Boolean indicating next as a proc instead of unifiable
   tommy_node node; // For storage in fif_mapping's list
 } fif_task;

@@ -157,7 +157,7 @@ void clause_print(clause *c) {
       printf(")");
     }
   }
-  printf(" (L%ld)", c->learned);
+  //printf(" (L%ld)", c->learned);
 }
 
 void print_bindings(binding_list *theta) {

@@ -30,20 +30,18 @@ void fif_task_map_init(kb *collection, clause *c) {
         task->fif = c;
         task->bindings = malloc(sizeof(*task->bindings));
         task->bindings->list = NULL;
-        task->bindings->num_bindings = 0;
-        task->premises_done = 0;
-        task->num_unified = 0;
+        task->bindings->num_bindings = task->premises_done = task->num_unified = 0;
         task->unified_clauses = NULL;
+        task->num_to_unify = 0;
         task->to_unify = NULL;
-        task->proc_next = proc_valid(fif_access(c, 0));
+        task->proc_next = (strcmp(fif_access(c, 0)->name, "proc") == 0);
         tommy_list_insert_tail(&result->tasks, &task->node, task);
       }
     }
   }
 }
 
-// Given a non-fif singleton clause, sets to_unify pointers for fif tasks that have next clause to process matching it
-// If fif tasks have to_unify assigned; branches off new tasks as copies
+// Given a non-fif singleton clause, sets adds to_unify entries for fif tasks that have next clause to process matching it
 void fif_tasks_from_clause(kb *collection, clause *c) {
   if (c->fif == NONE && c->pos_count + c->neg_count == 1) {
     char *name;
@@ -61,31 +59,18 @@ void fif_tasks_from_clause(kb *collection, clause *c) {
       int len = tommy_list_count(&result->tasks);
       tommy_node *curr = tommy_list_head(&result->tasks);
 
-      // Process original list contents and deal with to_unify
+      // Process original list contents
       int i = 0;
       while (curr && i < len) {
         fif_task *data = curr->data;
 
-        // Only modify to_unify if next for fif isn't a procedure predicate
+        // Only modify add entry to to_unify if next for fif isn't a procedure predicate
         if (!data->proc_next) {
           int sign_match = (pos && data->fif->fif->ordering[data->num_unified] < 0) || (!pos && data->fif->fif->ordering[data->num_unified] >= 0);
           if (sign_match) {
-            if (data->to_unify == NULL)
-              data->to_unify = c;
-            else {
-              // If to_unify is already non-null, duplicate the task and assign to_unify of duplicate
-              fif_task *copy = malloc(sizeof(*copy));
-              copy->fif = data->fif;
-              copy->bindings = malloc(sizeof(*copy->bindings));
-              copy_bindings(copy->bindings, data->bindings);
-              copy->premises_done = data->premises_done;
-              copy->num_unified = data->num_unified;
-              copy->unified_clauses = malloc(sizeof(*data->unified_clauses) * data->num_unified);
-              memcpy(copy->unified_clauses, data->unified_clauses, sizeof(*data->unified_clauses) * data->num_unified);
-              copy->to_unify = c;
-              copy->proc_next = data->proc_next;
-              tommy_list_insert_tail(&result->tasks, &copy->node, copy);
-            }
+            data->num_to_unify++;
+            data->to_unify = realloc(data->to_unify, sizeof(*data->to_unify) * data->num_to_unify);
+            data->to_unify[data->num_to_unify-1] = c;
           }
         }
 
@@ -157,8 +142,8 @@ static void fif_task_unify_loop(kb *collection, tommy_list *tasks, tommy_list *s
     int task_erased = 0;
     alma_function *next_func = fif_access(next_task->fif, next_task->premises_done);
     // Proc case
-    if (proc_valid(next_func)) {
-      if (proc_bound_check(next_func, next_task->bindings) && proc_run(next_func, next_task->bindings, collection)) {
+    if (next_task->proc_next) {
+      if (proc_valid(next_func) && proc_bound_check(next_func, next_task->bindings) && proc_run(next_func, next_task->bindings, collection)) {
         next_task->premises_done++;
         if (next_task->premises_done == next_task->fif->fif->premise_count) {
           if (!fif_unified_distrusted(collection, next_task))
@@ -167,7 +152,7 @@ static void fif_task_unify_loop(kb *collection, tommy_list *tasks, tommy_list *s
         }
         // If incomplete modify current task for results to continue processing
         else {
-          next_task->proc_next = proc_valid(fif_access(next_task->fif, next_task->premises_done));
+          next_task->proc_next = (strcmp(fif_access(next_task->fif, next_task->premises_done)->name, "proc") == 0);
           tommy_list_insert_tail(tasks, &next_task->node, next_task);
         }
         task_erased = 1; // Set to not place next_task into stopped
@@ -182,7 +167,7 @@ static void fif_task_unify_loop(kb *collection, tommy_list *tasks, tommy_list *s
       char *name = name_with_arity(next_func->name, next_func->term_count);
 
       // Important: because of conversion to CNF, a negative in ordering means fif premise is positive
-      int search_pos = next_task->fif->fif->ordering[next_task->premises_done] < 0;
+      int search_pos = (next_task->fif->fif->ordering[next_task->premises_done] < 0);
       predname_mapping *m = tommy_hashlin_search(search_pos ? &collection->pos_map : &collection->neg_map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
       free(name);
 
@@ -224,8 +209,9 @@ static void fif_task_unify_loop(kb *collection, tommy_list *tasks, tommy_list *s
                 latest->unified_clauses = malloc(sizeof(*latest->unified_clauses)*latest->num_unified);
                 memcpy(latest->unified_clauses, next_task->unified_clauses, sizeof(*next_task->unified_clauses) * next_task->num_unified);
                 latest->unified_clauses[latest->num_unified-1] = jth->index;
+                latest->num_to_unify = 0;
                 latest->to_unify = NULL;
-                latest->proc_next = proc_valid(fif_access(latest->fif, latest->premises_done));
+                latest->proc_next = (strcmp(fif_access(latest->fif, latest->premises_done)->name, "proc") == 0);
                 tommy_list_insert_tail(tasks, &latest->node, latest);
               }
             }
@@ -259,89 +245,119 @@ static void process_fif_task_mapping(kb *collection, fif_task_mapping *entry, to
     curr = curr->next;
 
     if (f->to_unify != NULL || f->proc_next) {
-      int premise_progress = 0;
       binding_list *copy = malloc(sizeof(*copy));
       copy_bindings(copy, f->bindings);
 
       if (f->to_unify != NULL) {
-        // Clause to_unify must not have become distrusted since it was connected to the fif task
-        if (!is_distrusted(collection, f->to_unify->index)) {
-          alma_function *fif_func = fif_access(f->fif, f->premises_done);
-          alma_function *to_unify_func = (f->to_unify->pos_count > 0) ? f->to_unify->pos_lits[0] : f->to_unify->neg_lits[0];
-
-          premise_progress = pred_unify(fif_func, to_unify_func, f->bindings);
-
-          if (!premise_progress) {
-            f->to_unify = NULL;
-            // Reset from copy
-            cleanup_bindings(f->bindings);
-            f->bindings = copy;
-            copy = NULL;
-          }
+        if (fif_unified_distrusted(collection, f)) {
+          // If any unified clauses became distrusted, delete task
+          tommy_list_remove_existing(&entry->tasks, &f->node);
+          free_fif_task(f);
         }
         else {
+          for (int i = 0; i < f->num_to_unify; i++) {
+            clause *unify_target = f->to_unify[i];
+
+            // Clause to unify must not have become distrusted since it was connected to the fif task
+            if (!is_distrusted(collection, unify_target->index)) {
+              alma_function *to_unify_func = (unify_target->pos_count > 0) ? unify_target->pos_lits[0] : unify_target->neg_lits[0];
+
+              if (pred_unify(fif_access(f->fif, f->premises_done), to_unify_func, f->bindings)) {
+                // If task is now completed, obtain resulting clause and insert to new_clauses
+                if (f->premises_done + 1 == f->fif->fif->premise_count) {
+                  f->premises_done++;
+                  f->num_unified++;
+                  f->unified_clauses = realloc(f->unified_clauses, sizeof(*f->unified_clauses)*f->num_unified);
+                  f->unified_clauses[f->num_unified-1] = unify_target->index;
+                  tommy_array_insert(new_clauses, fif_conclude(collection, f, f->bindings));
+                  cleanup_bindings(f->bindings);
+                  f->premises_done--;
+                  f->num_unified--;
+                  f->unified_clauses = realloc(f->unified_clauses, sizeof(*f->unified_clauses)*f->num_unified);
+                }
+                // Otherwise, create copy of task and do unify loop call
+                else {
+                  fif_task *advanced = malloc(sizeof(*advanced));
+                  advanced->fif = f->fif;
+                  advanced->bindings = f->bindings;
+                  advanced->premises_done = f->premises_done + 1;
+                  advanced->num_unified = f->num_unified + 1;
+                  advanced->unified_clauses = malloc(sizeof(*advanced->unified_clauses)*advanced->num_unified);
+                  memcpy(advanced->unified_clauses, f->unified_clauses, sizeof(*f->unified_clauses)*f->num_unified);
+                  advanced->unified_clauses[advanced->num_unified-1] = unify_target->index;
+                  advanced->num_to_unify = 0;
+                  advanced->to_unify = NULL;
+                  advanced->proc_next = (strcmp(fif_access(advanced->fif, advanced->premises_done)->name, "proc") == 0);
+
+                  tommy_list to_progress;
+                  tommy_list_init(&to_progress);
+                  tommy_list_insert_tail(&to_progress, &advanced->node, advanced);
+
+                  // Unification succeeded; progress further on task as able in call
+                  fif_task_unify_loop(collection, &to_progress, progressed, new_clauses);
+                }
+                f->bindings = malloc(sizeof(*f->bindings));
+                copy_bindings(f->bindings, copy);
+              }
+              else {
+                cleanup_bindings(f->bindings);
+                f->bindings = malloc(sizeof(*f->bindings));
+                copy_bindings(f->bindings, copy);
+              }
+            }
+          }
+          free(f->to_unify);
           f->to_unify = NULL;
+          f->num_to_unify = 0;
+          f->proc_next = (strcmp(fif_access(f->fif, f->premises_done)->name, "proc") == 0);
+          cleanup_bindings(copy);
         }
       }
       else {
         alma_function *proc = fif_access(f->fif, f->premises_done);
-        if (proc_bound_check(proc, f->bindings)) {
-          premise_progress = proc_run(proc, f->bindings, collection);
-        }
-      }
-
-      if (premise_progress) {
-        // If task is now completed, obtain resulting clause and insert to new_clauses
-        if (f->premises_done + 1 == f->fif->fif->premise_count) {
-          if (fif_unified_distrusted(collection, f)) {
-            // If any unified clauses became distrusted, delete task
-            tommy_list_remove_existing(&entry->tasks, &f->node);
-            free_fif_task(f);
-          }
-          else {
-            f->premises_done++;
-            if (f->to_unify != NULL) {
-              f->num_unified++;
-              f->unified_clauses = realloc(f->unified_clauses, sizeof(*f->unified_clauses)*f->num_unified);
-              f->unified_clauses[f->num_unified-1] = f->to_unify->index;
+        if (proc_valid(proc) && proc_bound_check(proc, f->bindings)) {
+          if (proc_run(proc, f->bindings, collection)) {
+            // If task is now completed, obtain resulting clause and insert to new_clauses
+            if (f->premises_done + 1 == f->fif->fif->premise_count) {
+              if (fif_unified_distrusted(collection, f)) {
+                // If any unified clauses became distrusted, delete task
+                tommy_list_remove_existing(&entry->tasks, &f->node);
+                free_fif_task(f);
+                cleanup_bindings(copy);
+              }
+              else {
+                f->premises_done++;
+                tommy_array_insert(new_clauses, fif_conclude(collection, f, f->bindings));
+                cleanup_bindings(f->bindings);
+                f->bindings = copy;
+                f->premises_done--;
+              }
             }
+            // Otherwise, create copy of task and do unify loop call
+            else {
+              fif_task *advanced = malloc(sizeof(*advanced));
+              advanced->fif = f->fif;
+              advanced->bindings = f->bindings;
+              f->bindings = copy;
+              advanced->premises_done = f->premises_done + 1;
+              advanced->num_unified = f->num_unified;
+              advanced->unified_clauses = malloc(sizeof(*advanced->unified_clauses)*advanced->num_unified);
+              memcpy(advanced->unified_clauses, f->unified_clauses, sizeof(*advanced->unified_clauses)*advanced->num_unified);
+              advanced->num_to_unify = 0;
+              advanced->to_unify = NULL;
+              advanced->proc_next = (strcmp(fif_access(advanced->fif, advanced->premises_done)->name, "proc") == 0);
 
-            tommy_array_insert(new_clauses, fif_conclude(collection, f, f->bindings));
-            cleanup_bindings(f->bindings);
-            // Reset from copy
-            f->bindings = copy;
+              tommy_list to_progress;
+              tommy_list_init(&to_progress);
+              tommy_list_insert_tail(&to_progress, &advanced->node, advanced);
 
-            f->premises_done--;
-            if (f->to_unify != NULL) {
-              f->to_unify = NULL;
-              f->proc_next = proc_valid(fif_access(f->fif, f->premises_done));
-              f->num_unified--;
+              // Unification succeeded; progress further on task as able in call
+              fif_task_unify_loop(collection, &to_progress, progressed, new_clauses);
             }
           }
+          else
+            cleanup_bindings(copy);
         }
-        // Otherwise, adjust task and do unify loop call
-        else {
-          f->premises_done++;
-          if (f->to_unify != NULL) {
-            f->num_unified++;
-            f->unified_clauses = realloc(f->unified_clauses, sizeof(*f->unified_clauses)*f->num_unified);
-            f->unified_clauses[f->num_unified-1] = f->to_unify->index;
-            f->to_unify = NULL;
-            f->proc_next = proc_valid(fif_access(f->fif, f->premises_done));
-          }
-          cleanup_bindings(copy);
-
-          tommy_list_remove_existing(&entry->tasks, &f->node);
-          tommy_list to_progress;
-          tommy_list_init(&to_progress);
-          tommy_list_insert_tail(&to_progress, &f->node, f);
-
-          // Unification succeeded; progress further on task as able in call
-          fif_task_unify_loop(collection, &to_progress, progressed, new_clauses);
-        }
-      }
-      else if (copy != NULL){
-        cleanup_bindings(copy);
       }
     }
   }
@@ -375,7 +391,8 @@ void process_fif_tasks(kb *collection) {
     alma_function *f = fif_access(data->fif, data->premises_done);
     char *name = name_with_arity(f->name, f->term_count);
     fif_task_mapping *result = tommy_hashlin_search(&collection->fif_tasks, fif_taskm_compare, name, tommy_hash_u64(0, name, strlen(name)));
-    tommy_list_insert_tail(&result->tasks, &data->node, data);
+    if (result != NULL)
+      tommy_list_insert_tail(&result->tasks, &data->node, data);
     free(name);
   }
 }
@@ -406,6 +423,7 @@ void free_fif_task(fif_task *task) {
   // Note: clause entries ARE NOT FREED because they alias the clause objects freed in kb_halt
   cleanup_bindings(task->bindings);
   free(task->unified_clauses);
+  free(task->to_unify);
   free(task);
 }
 

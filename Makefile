@@ -23,7 +23,7 @@ tommylist.o: $(TOMMY)tommylist.c $(TOMMY)tommytypes.h $(TOMMY)tommychain.h $(TOM
 tommyhash.o: $(TOMMY)tommyhash.c $(TOMMY)tommytypes.h $(TOMMY)tommyhash.h
 	$(CC) $(CFLAGS) -c $(TOMMY)tommyhash.c
 
-tommy: $(TOMMY)tommyhash.c $(TOMMY)tommytypes.h $(TOMMY)tommyhash.h
+tommy: $(TOMMY)tommytypes.h $(TOMMY)tommyhash.h $(TOMMY)tommylist.h $(TOMMY)tommyhashlin.h $(TOMMY)tommyarray.h $(TOMMY)tommychain.h
 	touch tommy.h
 
 mpc.o: mpc/mpc.c mpc/mpc.h
