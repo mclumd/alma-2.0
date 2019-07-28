@@ -12,43 +12,42 @@ make
 ```
 cd alma-2.0
 ./alma.x \path\to\pl\file
-# Example:
+# Examples:
 ./alma.x demo/fc-test.pl
+./alma.x demo/cycle.pl run
 ```
 #### Commands
-`step`: Makes one derivation step. Will print `Idling...` if there are no derivations left to make.
+`step`: Makes one derivation step. Will print `Idling...` if there are no remaining tasks which might produce further derivations.
+
 `print`: Prints out the contents of the knowledge base
 
-`add <pred>.`: Will add a predicate to the knowledge base the next time `step` is called. Note that the predicate must end in a `.`
+`add <almaformula>.`: Will add a formula to the knowledge base the next time `step` is called. Note that the predicate must end in a `.`, as in the grammar rules.
 
-`del <pred>.`: Immediately deletes a predicate from the knowledge base. Note that the predicate must end in a `.`
+`del <almaformula>.`: Immediately deletes a formula from the knowledge base. Note that the formula must end in a `.`
+
+`bs <literal>.`: Initiates a backward search for the argument literal.
 
 `halt`: Stops ALMA
-#### Syntax
+
+#### Grammar
 ```
-alma         : /^/ <almaformula>* /$/ ;                    
-almaformula  : (<fformula> | <bformula> | <formula>) '.' ; 
-formula      : \"and(\" <formula> ',' <formula> ')'        
-             | \"or(\" <formula> ','  <formula> ')'        
-             | \"if(\" <formula> ',' <formula> ')'         
-             | <literal> ;                                 
-fformula     : \"fif(\" <conjform> ',' \"conclusion(\"     
-               <poslit> ')' ')' ;                          
-bformula     : \"bif(\" <formula> ',' <formula> ')' ;      
-conjform     : \"and(\" <conjform> ',' <conjform> ')'      
-             | <literal> ;                                 
-literal      : <neglit> | <poslit> ;                       
-neglit       : \"not(\" <poslit> ')' ;                     
-poslit       : <predname> '(' <listofterms> ')'            
-             | <predname> ;                                
-listofterms  : <term> (',' <term>)* ;                      
-term         : <funcname> '(' <listofterms> ')'            
-             | <variable> | <constant> ;                   
-predname     : <prologconst> ;                             
-constant     : <prologconst> ;                             
-funcname     : <prologconst> ;                             
-variable     : /[A-Z_][a-zA-Z0-9_]*/ ;                     
-prologconst  : /[a-zA-Z0-9_]*/      ;                      
+alma         : /^/ <almaformula>* /$/         
+almaformula  : (<fformula> | <bformula> | <formula>) '.'
+formula      : \"and(\" <formula> ',' <formula> ')' | \"or(\" <formula> ','  <formula> ')' | \"if(\" <formula> ',' <formula> ')'
+             | <literal>
+fformula     : \"fif(\" <conjform> ',' \"conclusion(\" <poslit> ')' ')'
+bformula     : \"bif(\" <formula> ',' <formula> ')'
+conjform     : \"and(\" <conjform> ',' <conjform> ')' | <literal>
+literal      : <neglit> | <poslit>
+neglit       : \"not(\" <poslit> ')'
+poslit       : <predname> '(' <listofterms> ')' | <predname>
+listofterms  : <term> (',' <term>)*
+term         : <funcname> '(' <listofterms> ')'| <variable> | <constant>
+predname     : <prologconst>
+constant     : <prologconst>
+funcname     : <prologconst>
+variable     : /[A-Z_][a-zA-Z0-9_]*/
+prologconst  : /[a-zA-Z0-9_]*/
 ```
 ## Troubleshooting 
 ```
