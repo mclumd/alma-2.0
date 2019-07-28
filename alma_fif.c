@@ -127,8 +127,7 @@ static clause* fif_conclude(kb *collection, fif_task *task, binding_list *bindin
 
 // Continues attempting to unify from tasks set
 // Task instances for which cannot be further progressed with current KB are added to stopped
-// Completed tasks result in additions to new_clauses
-static void fif_task_unify_loop(kb *collection, tommy_list *tasks, tommy_list *stopped, tommy_array *new_clauses) {
+static void fif_task_unify_loop(kb *collection, tommy_list *tasks, tommy_list *stopped) {
   tommy_node *curr = tommy_list_head(tasks);
   int len = tommy_list_count(tasks);
   // Process original list contents
@@ -147,7 +146,7 @@ static void fif_task_unify_loop(kb *collection, tommy_list *tasks, tommy_list *s
         next_task->premises_done++;
         if (next_task->premises_done == next_task->fif->fif->premise_count) {
           if (!fif_unified_distrusted(collection, next_task))
-            tommy_array_insert(new_clauses, fif_conclude(collection, next_task, next_task->bindings));
+            tommy_array_insert(&collection->new_clauses, fif_conclude(collection, next_task, next_task->bindings));
           free_fif_task(next_task);
         }
         // If incomplete modify current task for results to continue processing
@@ -193,7 +192,7 @@ static void fif_task_unify_loop(kb *collection, tommy_list *tasks, tommy_list *s
                   next_task->premises_done++;
                   next_task->unified_clauses = realloc(next_task->unified_clauses, sizeof(*next_task->unified_clauses)*next_task->num_unified);
                   next_task->unified_clauses[next_task->num_unified-1] = jth->index;
-                  tommy_array_insert(new_clauses, fif_conclude(collection, next_task, copy));
+                  tommy_array_insert(&collection->new_clauses, fif_conclude(collection, next_task, copy));
                   cleanup_bindings(copy);
                   next_task->num_unified--;
                   next_task->premises_done--;
@@ -230,7 +229,7 @@ static void fif_task_unify_loop(kb *collection, tommy_list *tasks, tommy_list *s
 
   // If tasks list is nonempty, have newly unified tasks to recurse on
   if (!tommy_list_empty(tasks))
-    fif_task_unify_loop(collection, tasks, stopped, new_clauses);
+    fif_task_unify_loop(collection, tasks, stopped);
 }
 
 // Process fif tasks
@@ -238,7 +237,7 @@ static void fif_task_unify_loop(kb *collection, tommy_list *tasks, tommy_list *s
 // - Attempt to progress with either proc predicate or unification on to_unify
 // - If progression succeeds, progresses further on next literals as able
 // Above process repeats per task until unification fails or fif task is fully satisfied (and then asserts conclusion)
-static void process_fif_task_mapping(kb *collection, fif_task_mapping *entry, tommy_list *progressed, tommy_array *new_clauses) {
+static void process_fif_task_mapping(kb *collection, fif_task_mapping *entry, tommy_list *to_progress) {
   tommy_node *curr = tommy_list_head(&entry->tasks);
   while (curr) {
     fif_task *f = curr->data;
@@ -269,7 +268,7 @@ static void process_fif_task_mapping(kb *collection, fif_task_mapping *entry, to
                   f->num_unified++;
                   f->unified_clauses = realloc(f->unified_clauses, sizeof(*f->unified_clauses)*f->num_unified);
                   f->unified_clauses[f->num_unified-1] = unify_target->index;
-                  tommy_array_insert(new_clauses, fif_conclude(collection, f, f->bindings));
+                  tommy_array_insert(&collection->new_clauses, fif_conclude(collection, f, f->bindings));
                   cleanup_bindings(f->bindings);
                   f->premises_done--;
                   f->num_unified--;
@@ -289,12 +288,7 @@ static void process_fif_task_mapping(kb *collection, fif_task_mapping *entry, to
                   advanced->to_unify = NULL;
                   advanced->proc_next = (strcmp(fif_access(advanced->fif, advanced->premises_done)->name, "proc") == 0);
 
-                  tommy_list to_progress;
-                  tommy_list_init(&to_progress);
-                  tommy_list_insert_tail(&to_progress, &advanced->node, advanced);
-
-                  // Unification succeeded; progress further on task as able in call
-                  fif_task_unify_loop(collection, &to_progress, progressed, new_clauses);
+                  tommy_list_insert_tail(to_progress, &advanced->node, advanced);
                 }
                 f->bindings = malloc(sizeof(*f->bindings));
                 copy_bindings(f->bindings, copy);
@@ -327,7 +321,7 @@ static void process_fif_task_mapping(kb *collection, fif_task_mapping *entry, to
               }
               else {
                 f->premises_done++;
-                tommy_array_insert(new_clauses, fif_conclude(collection, f, f->bindings));
+                tommy_array_insert(&collection->new_clauses, fif_conclude(collection, f, f->bindings));
                 cleanup_bindings(f->bindings);
                 f->bindings = copy;
                 f->premises_done--;
@@ -347,12 +341,7 @@ static void process_fif_task_mapping(kb *collection, fif_task_mapping *entry, to
               advanced->to_unify = NULL;
               advanced->proc_next = (strcmp(fif_access(advanced->fif, advanced->premises_done)->name, "proc") == 0);
 
-              tommy_list to_progress;
-              tommy_list_init(&to_progress);
-              tommy_list_insert_tail(&to_progress, &advanced->node, advanced);
-
-              // Unification succeeded; progress further on task as able in call
-              fif_task_unify_loop(collection, &to_progress, progressed, new_clauses);
+              tommy_list_insert_tail(to_progress, &advanced->node, advanced);
             }
           }
           else
@@ -364,10 +353,9 @@ static void process_fif_task_mapping(kb *collection, fif_task_mapping *entry, to
 }
 
 // Process fif tasks and place results in new_clauses
-// See helper process_fif_task_mapping for comment
 void process_fif_tasks(kb *collection) {
-  tommy_list progressed;
-  tommy_list_init(&progressed);
+  tommy_list to_progress;
+  tommy_list_init(&to_progress);
 
   // Loop over hashlin contents of collection's fif tasks; based on tommy_hashlin_foreach
   // TODO: may want double indexing if this loops too many times
@@ -378,9 +366,14 @@ void process_fif_tasks(kb *collection) {
 		while (node) {
 			fif_task_mapping *data = node->data;
 			node = node->next;
-			process_fif_task_mapping(collection, data, &progressed, &collection->new_clauses);
+			process_fif_task_mapping(collection, data, &to_progress);
 		}
   }
+
+  tommy_list progressed;
+  tommy_list_init(&progressed);
+  // Progress further on tasks; as far as able
+  fif_task_unify_loop(collection, &to_progress, &progressed);
 
   // Incorporates tasks from progressed list back into task mapping
   tommy_node *curr = tommy_list_head(&progressed);

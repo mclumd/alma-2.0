@@ -108,6 +108,9 @@ void kb_step(kb *collection) {
     clause *c = tommy_array_get(&collection->new_clauses, i);
     clause *dupe = duplicate_check(collection, c);
     if (dupe == NULL) {
+      if (c->tag == FIF)
+        fif_task_map_init(collection, c);
+
       res_tasks_from_clause(collection, c, 1);
       fif_tasks_from_clause(collection, c);
 
@@ -277,6 +280,7 @@ void kb_backsearch(kb *collection, char *string) {
     for (int i = 0; i < formula_count; i++)
       free_alma_tree(formulas+i);
     free(formulas);
+    // Free all after first
     for (int i = 1; i < tommy_array_size(&arr); i++)
       free_clause(tommy_array_get(&arr, i));
     tommy_array_done(&arr);

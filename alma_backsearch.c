@@ -149,7 +149,7 @@ void backsearch_halt(backsearch_task *t) {
     free_clause(tommy_array_get(&t->new_clauses, i));
   tommy_array_done(&t->new_clauses);
   for (tommy_size_t i = 0; i < tommy_array_size(&t->new_clause_bindings); i++)
-    free_clause(tommy_array_get(&t->new_clause_bindings, i));
+    cleanup_bindings(tommy_array_get(&t->new_clause_bindings, i));
   tommy_array_done(&t->new_clause_bindings);
 
   for (tommy_size_t i = 0; i < tommy_array_size(&t->to_resolve); i++)
