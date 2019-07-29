@@ -77,53 +77,54 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *alma, int 
   if (result != NULL) {
 
     for (int i = 0; i < result->num_clauses; i++) {
-      alma_function *lit = (pos ? result->clauses[i]->pos_lits[0] : result->clauses[i]->neg_lits[0]);
+      // Must be a non-distrusted result
+      if (!is_distrusted(alma, result->clauses[i]->index)) {
+        alma_function *lit = (pos ? result->clauses[i]->pos_lits[0] : result->clauses[i]->neg_lits[0]);
 
-      // Create copy as either empty list or copy of arg
-      binding_list *copy = malloc(sizeof(*copy));
-      if (bindings == NULL) {
-        copy->list = NULL;
-        copy->num_bindings = 0;
-      }
-      else
-        copy_bindings(copy, bindings);
+        // Create copy as either empty list or copy of arg
+        binding_list *copy = malloc(sizeof(*copy));
+        if (bindings == NULL) {
+          copy->list = NULL;
+          copy->num_bindings = 0;
+        }
+        else
+          copy_bindings(copy, bindings);
 
-      // Returning first match based at the moment
-      if (pred_unify(search, lit, copy)) {
-        if (kind != run_neg_int) {
-          binding *temp = bindings->list;
-          bindings->list = copy->list;
-          copy->list = temp;
-          int num_temp = bindings->num_bindings;
-          bindings->num_bindings = copy->num_bindings;
-          copy->num_bindings = num_temp;
+        // Returning first match based at the moment
+        if (pred_unify(search, lit, copy)) {
+          if (kind != run_neg_int) {
+            binding *temp = bindings->list;
+            bindings->list = copy->list;
+            copy->list = temp;
+            int num_temp = bindings->num_bindings;
+            bindings->num_bindings = copy->num_bindings;
+            copy->num_bindings = num_temp;
+          }
+          cleanup_bindings(copy);
+
+          if (kind == run_learned) {
+            // If they unify, create term out of learned answer
+            alma_term *time_term = malloc(sizeof(*time_term));
+            time_term->type = FUNCTION;
+            time_term->function = malloc(sizeof(*time_term->function));
+            time_term->function->name = long_to_str(result->clauses[i]->learned);
+            time_term->function->term_count = 0;
+            time_term->function->terms = 0;
+
+            // Insert answer of learned query into binding set
+            bindings->num_bindings++;
+            bindings->list = realloc(bindings->list, sizeof(*bindings->list) * bindings->num_bindings);
+            bindings->list[bindings->num_bindings-1].var = malloc(sizeof(alma_variable));
+            copy_alma_var(arg->terms[1].variable, bindings->list[bindings->num_bindings-1].var);
+            bindings->list[bindings->num_bindings-1].term = time_term;
+          }
+
+          free_term(search_term);
+          free(search_term);
+          return kind != run_neg_int;
         }
         cleanup_bindings(copy);
-
-        if (kind == run_learned) {
-          // If they unify, create term out of learned answer
-          alma_term *time_term = malloc(sizeof(*time_term));
-          time_term->type = FUNCTION;
-          time_term->function = malloc(sizeof(*time_term->function));
-          int len = snprintf(NULL, 0, "%ld", result->clauses[i]->learned);
-          time_term->function->name = malloc(len+1);
-          snprintf(time_term->function->name, len+1, "%ld", result->clauses[i]->learned);
-          time_term->function->term_count = 0;
-          time_term->function->terms = 0;
-
-          // Insert answer of learned query into binding set
-          bindings->num_bindings++;
-          bindings->list = realloc(bindings->list, sizeof(*bindings->list) * bindings->num_bindings);
-          bindings->list[bindings->num_bindings-1].var = malloc(sizeof(alma_variable));
-          copy_alma_var(arg->terms[1].variable, bindings->list[bindings->num_bindings-1].var);
-          bindings->list[bindings->num_bindings-1].term = time_term;
-        }
-
-        free_term(search_term);
-        free(search_term);
-        return kind != run_neg_int;
       }
-      cleanup_bindings(copy);
     }
   }
   free_term(search_term);

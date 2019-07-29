@@ -65,6 +65,12 @@ int main(int argc, char **argv) {
           kb_remove(alma_kb, assertion);
           free(assertion);
         }
+        else if ((pos = strstr(line, "obs ")) != NULL && pos == line) {
+          char *assertion = malloc(len - 4);
+          strncpy(assertion, line+4, len-4);
+          kb_observe(alma_kb, assertion);
+          free(assertion);
+        }
         else if ((pos = strstr(line, "bs ")) != NULL && pos == line) {
           char *assertion = malloc(len - 3);
           strncpy(assertion, line+3, len-3);
