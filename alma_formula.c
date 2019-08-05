@@ -92,15 +92,15 @@ static alma_operator op_from_contents(char *contents) {
 
 // Given an MPC AST pointer, constructs an ALMA tree to a FOL representation of the AST
 static void alma_tree_init(alma_node *alma_tree, mpc_ast_t *ast) {
-  // Match tag containing poslit as function
-  if (strstr(ast->tag, "poslit") != NULL) {
+  // Match tag containing literal as function
+  if (strstr(ast->tag, "literal") != NULL) {
     alma_predicate_init(alma_tree, ast);
   }
   // Match nested pieces of formula/fformula/bformula/conjform rules, recursively operate on
   // Dependent on only formula/fformula/bformula productions containing string formula within an almaformula tree
   else if (strstr(ast->tag, "formula") != NULL || strstr(ast->tag, "conjform") != NULL) {
-    // Case for formula producing just a positive literal
-    if (strstr(ast->children[0]->tag, "poslit") != NULL) {
+    // Case for formula producing just a literal
+    if (strstr(ast->children[0]->tag, "literal") != NULL) {
       alma_predicate_init(alma_tree, ast->children[0]);
     }
     // Otherwise, formula derives to FOL contents

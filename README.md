@@ -33,14 +33,12 @@ cd alma-2.0
 ```
 alma         : /^/ <almaformula>* /$/         
 almaformula  : (<fformula> | <bformula> | <formula>) '.'
-formula      : \"and(\" <formula> ',' <formula> ')' | \"or(\" <formula> ','  <formula> ')' | \"if(\" <formula> ',' <formula> ')'
-             | <literal>
-fformula     : \"fif(\" <conjform> ',' \"conclusion(\" <poslit> ')' ')'
+formula      : \"and(\" <formula> ',' <formula> ')' | \"or(\" <formula> ','  <formula> ')'
+             | \"if(\" <formula> ',' <formula> ')' | \"not(\" <formula> ')' | <literal>
+fformula     : \"fif(\" <conjform> ',' \"conclusion(\" <literal> ')' ')'
 bformula     : \"bif(\" <formula> ',' <formula> ')'
-conjform     : \"and(\" <conjform> ',' <conjform> ')' | <literal>
-literal      : <neglit> | <poslit>
-neglit       : \"not(\" <poslit> ')'
-poslit       : <predname> '(' <listofterms> ')' | <predname>
+conjform     : \"and(\" <conjform> ',' <conjform> ')' | \"not(\" <literal> ')' | <literal>
+literal      : <predname> '(' <listofterms> ')' | <predname>
 listofterms  : <term> (',' <term>)*
 term         : <funcname> '(' <listofterms> ')'| <variable> | <constant>
 predname     : <prologconst>
@@ -49,7 +47,7 @@ funcname     : <prologconst>
 variable     : /[A-Z_][a-zA-Z0-9_]*/
 prologconst  : /[a-zA-Z0-9_]*/
 ```
-## Troubleshooting 
+## Troubleshooting
 ```
 make clean
 make

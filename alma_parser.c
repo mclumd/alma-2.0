@@ -7,8 +7,6 @@ mpc_parser_t* FFormula;
 mpc_parser_t* BFormula;
 mpc_parser_t* Conjform;
 mpc_parser_t* Literal;
-mpc_parser_t* Neglit;
-mpc_parser_t* Poslit;
 mpc_parser_t* Listofterms;
 mpc_parser_t* Term;
 mpc_parser_t* Predname;
@@ -25,8 +23,6 @@ void parse_init(void) {
   BFormula = mpc_new("bformula");
   Conjform = mpc_new("conjform");
   Literal = mpc_new("literal");
-  Neglit = mpc_new("neglit");
-  Poslit = mpc_new("poslit");
   Listofterms = mpc_new("listofterms");
   Term = mpc_new("term");
   Predname = mpc_new("predname");
@@ -43,15 +39,15 @@ void parse_init(void) {
     " formula      : \"and(\" <formula> ',' <formula> ')'        "
     "              | \"or(\" <formula> ','  <formula> ')'        "
     "              | \"if(\" <formula> ',' <formula> ')'         "
+    "              | \"not(\" <formula> ')'                      "
     "              | <literal> ;                                 "
     " fformula     : \"fif(\" <conjform> ',' \"conclusion(\"     "
-    "                <poslit> ')' ')' ;                          "
+    "                <literal> ')' ')' ;                         "
     " bformula     : \"bif(\" <formula> ',' <formula> ')' ;      "
     " conjform     : \"and(\" <conjform> ',' <conjform> ')'      "
+    "              | \"not(\" <literal> ')'                      "
     "              | <literal> ;                                 "
-    " literal      : <neglit> | <poslit> ;                       "
-    " neglit       : \"not(\" <poslit> ')' ;                     "
-    " poslit       : <predname> '(' <listofterms> ')'            "
+    " literal      : <predname> '(' <listofterms> ')'            "
     "              | <predname> ;                                "
     " listofterms  : <term> (',' <term>)* ;                      "
     " term         : <funcname> '(' <listofterms> ')'            "
@@ -61,9 +57,8 @@ void parse_init(void) {
     " funcname     : <prologconst> ;                             "
     " variable     : /[A-Z_][a-zA-Z0-9_]*/ ;                     "
     " prologconst  : /[a-zA-Z0-9_]*/      ;                      ",
-    Alma, Almaformula, Formula, FFormula, BFormula, Conjform, Literal, Neglit,
-    Poslit, Listofterms, Term, Predname, Constant, Funcname, Variable,
-    Prologconst, NULL);
+    Alma, Almaformula, Formula, FFormula, BFormula, Conjform, Literal,
+    Listofterms, Term, Predname, Constant, Funcname, Variable, Prologconst, NULL);
 }
 
 // Attempts to open filename and parse contents according to ALMA language
@@ -100,7 +95,6 @@ int parse_string(char *string, mpc_ast_t **ast) {
 }
 
 void parse_cleanup(void) {
-  mpc_cleanup(16, Alma, Almaformula, Formula, FFormula, BFormula, Conjform,
-    Literal, Neglit, Poslit, Listofterms, Term, Predname, Constant,
-    Funcname, Variable, Prologconst);
+  mpc_cleanup(14, Alma, Almaformula, Formula, FFormula, BFormula, Conjform, Literal,
+    Listofterms, Term, Predname, Constant, Funcname, Variable, Prologconst);
 }
