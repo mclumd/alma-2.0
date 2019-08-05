@@ -76,7 +76,7 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *alma, int 
   free(name);
   if (result != NULL) {
 
-    for (int i = 0; i < result->num_clauses; i++) {
+    for (int i = result->num_clauses-1; i >= 0; i--) {
       // Must be a non-distrusted result
       if (!is_distrusted(alma, result->clauses[i]->index)) {
         alma_function *lit = (pos ? result->clauses[i]->pos_lits[0] : result->clauses[i]->neg_lits[0]);
@@ -109,7 +109,7 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *alma, int 
             time_term->function = malloc(sizeof(*time_term->function));
             time_term->function->name = long_to_str(result->clauses[i]->learned);
             time_term->function->term_count = 0;
-            time_term->function->terms = 0;
+            time_term->function->terms = NULL;
 
             // Insert answer of learned query into binding set
             bindings->num_bindings++;

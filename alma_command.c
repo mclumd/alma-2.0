@@ -287,7 +287,7 @@ void kb_observe(kb *collection, char *string) {
         time_term.function = malloc(sizeof(*time_term.function));
         time_term.function->name = long_to_str(collection->time);
         time_term.function->term_count = 0;
-        time_term.function->terms = 0;
+        time_term.function->terms = NULL;
         lit->terms[lit->term_count-1] = time_term;
         tommy_array_insert(&collection->new_clauses, c);
         clause_print(c);
