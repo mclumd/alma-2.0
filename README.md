@@ -23,6 +23,8 @@ cd alma-2.0
 
 `add <almaformula>.`: Will add a formula to the knowledge base the next time `step` is called. Note that the predicate must end in a `.`, as in the grammar rules.
 
+`obs <literal>.`: Adds a literal with an additional added parameter for the time added.
+
 `del <almaformula>.`: Immediately deletes a formula from the knowledge base. Note that the formula must end in a `.`
 
 `bs <literal>.`: Initiates a backward search for the argument literal.
