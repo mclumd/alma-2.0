@@ -699,6 +699,26 @@ void remove_clause(kb *collection, clause *c) {
               child->parents[j].count--;
               child->parents[j].clauses[k] = child->parents[j].clauses[child->parents[j].count];
               child->parents[j].clauses = realloc(child->parents[j].clauses, sizeof(*child->parents[j].clauses)*child->parents[j].count);
+
+              // After reallocating, check for parent set identical to this one and delete it if one exists
+              for (int m = 0; m < child->parent_set_count; m++) {
+                if (m != j && child->parents[m].clauses != NULL && child->parents[j].count == child->parents[m].count) {
+                  int dupe = 1;
+                  for (int n = 0; n < child->parents[m].count; n++) {
+                    if (child->parents[m].clauses[n]->index != child->parents[j].clauses[n]->index) {
+                      dupe = 0;
+                      break;
+                    }
+                  }
+                  if (dupe) {
+                    new_count--;
+                    child->parents[j].count = 0;
+                    free(child->parents[j].clauses);
+                    child->parents[j].clauses = NULL;
+                    break;
+                  }
+                }
+              }
             }
             break;
           }
@@ -720,6 +740,7 @@ void remove_clause(kb *collection, clause *c) {
         free(child->parents);
         child->parents = NULL;
       }
+      child->parent_set_count = new_count;
     }
   }
 

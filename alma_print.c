@@ -128,34 +128,34 @@ void clause_print(clause *c) {
       printf(" -%c-> ", c->tag == BIF ? 'b' : '-');
       lits_print(c->pos_lits, c->pos_count, "\\/", 0);
     }
-    if (c->parents != NULL || c->children != NULL) {
-      printf(" (");
-      if (c->parents != NULL) {
-        printf("parents: ");
-        for (int i = 0; i < c->parent_set_count; i++) {
-          printf("[");
-          for (int j = 0; j < c->parents[i].count; j++) {
-            printf("%ld", c->parents[i].clauses[j]->index);
-            if (j < c->parents[i].count-1)
-              printf(", ");
-          }
-          printf("]");
-          if (i < c->parent_set_count-1)
+  }
+  if (c->parents != NULL || c->children != NULL) {
+    printf(" (");
+    if (c->parents != NULL) {
+      printf("parents: ");
+      for (int i = 0; i < c->parent_set_count; i++) {
+        printf("[");
+        for (int j = 0; j < c->parents[i].count; j++) {
+          printf("%ld", c->parents[i].clauses[j]->index);
+          if (j < c->parents[i].count-1)
             printf(", ");
         }
-        if (c->children != NULL)
+        printf("]");
+        if (i < c->parent_set_count-1)
           printf(", ");
       }
-      if (c->children != NULL) {
-        printf("children: ");
-        for (int i = 0; i < c->children_count; i++) {
-          printf("%ld",c->children[i]->index);
-          if (i < c->children_count-1)
-            printf(", ");
-        }
-      }
-      printf(")");
+      if (c->children != NULL)
+        printf(", ");
     }
+    if (c->children != NULL) {
+      printf("children: ");
+      for (int i = 0; i < c->children_count; i++) {
+        printf("%ld",c->children[i]->index);
+        if (i < c->children_count-1)
+          printf(", ");
+      }
+    }
+    printf(")");
   }
   //printf(" (L%ld)", c->learned);
 }
