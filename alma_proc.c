@@ -78,7 +78,7 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *alma, int 
 
     for (int i = result->num_clauses-1; i >= 0; i--) {
       // Must be a non-distrusted result
-      if (!is_distrusted(alma, result->clauses[i]->index)) {
+      if (!is_distrusted(alma, result->clauses[i]->index) && result->clauses[i]->pos_count + result->clauses[i]->neg_count == 1) {
         alma_function *lit = (pos ? result->clauses[i]->pos_lits[0] : result->clauses[i]->neg_lits[0]);
 
         // Create copy as either empty list or copy of arg
