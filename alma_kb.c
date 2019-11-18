@@ -182,7 +182,7 @@ void flatten_node(alma_node *node, tommy_array *clauses, int print) {
       c->fif->conclusion = c->pos_lits[c->pos_count-1]; // Conclusion will always be last pos_lit
     }
 
-    // Non-fif clauses can be sorted be literal for ease of resolution
+    // Non-fif clauses can be sorted by literal for ease of resolution
     // Fif clauses must retain original literal order to not affect their evaluation
     if (c->tag != FIF) {
       qsort(c->pos_lits, c->pos_count, sizeof(*c->pos_lits), function_compare);
@@ -377,8 +377,6 @@ static int release_matches(var_matching *matches, int retval) {
 // Equality of variables is that there is a one-to-one correspondence in the sets of variables x and y use,
 // based on each location where a variable maps to another
 // Thus a(X, X) and a(X, Y) are here considered different
-// Naturally, literal ordering has no effect on clauses differing
-// Clauses x and y must have no duplicate literals (ensured by earlier call to TODO on the clauses)
 int clauses_differ(clause *x, clause *y) {
   if (x->pos_count == y->pos_count && x->neg_count == y->neg_count){
     var_matching matches;
@@ -398,13 +396,13 @@ int clauses_differ(clause *x, clause *y) {
     else {
       for (int i = 0; i < x->pos_count; i++) {
         // TODO: account for case in which may have several literals with name
-        // Ignoring duplicate literal case, sorted literal lists allows comparing ith literals of each clause
+        // Ignoring this case, sorted literal lists allows comparing ith literals of each clause
         if (function_compare(x->pos_lits+i, y->pos_lits+i) || functions_differ(x->pos_lits[i], y->pos_lits[i], &matches))
           return release_matches(&matches, 1);
       }
       for (int i = 0; i < x->neg_count; i++) {
         // TODO: account for case in which may have several literals with name
-        // Ignoring duplicate literal case, sorted literal lists allows comparing ith literals of each clause
+        // Ignoring this case, sorted literal lists allows comparing ith literals of each clause
         if (function_compare(x->neg_lits+i, y->neg_lits+i) || functions_differ(x->neg_lits[i], y->neg_lits[i], &matches))
           return release_matches(&matches, 1);
       }
@@ -413,6 +411,48 @@ int clauses_differ(clause *x, clause *y) {
     return release_matches(&matches, 0);
   }
   return 1;
+}
+
+// Checks if x and y are ground literals that are identical
+static int ground_duplicate_literals(alma_function *x, alma_function *y) {
+  if (strcmp(x->name, y->name) == 0 && x->term_count == y->term_count) {
+    for (int i = 0; i < x->term_count; i++)
+      if (x->terms[i].type != y->terms[i].type || x->terms[i].type == VARIABLE || !ground_duplicate_literals(x->terms[i].function, y->terms[i].function))
+        return 0;
+    return 1;
+  }
+  return 0;
+}
+
+static void remove_dupe_literals(int *count, alma_function ***triple) {
+  alma_function **lits = *triple;
+  int deleted = 0;
+  int new_count = *count;
+  for (int i = 0; i < *count-1; i++) {
+    if (ground_duplicate_literals(lits[i], lits[i+1])) {
+      new_count--;
+      deleted = 1;
+      free_function(lits[i]);
+      lits[i] = NULL;
+    }
+  }
+  if (deleted) {
+    // Collect non-null literals at start of set
+    int loc = 1;
+    for (int i = 0; i < *count-1; i++) {
+      if (lits[i] == NULL) {
+        while (loc < *count && lits[loc] == NULL)
+          loc++;
+        if (loc >= *count)
+          break;
+        lits[i] = lits[loc];
+        lits[loc] = NULL;
+        loc++;
+      }
+    }
+    *triple = realloc(lits, sizeof(*lits) * new_count);
+    *count = new_count;
+  }
 }
 
 // If c is found to be a clause duplicate, returns a pointer to that clause; null otherwise
@@ -429,6 +469,13 @@ clause* duplicate_check(kb *collection, clause *c) {
     }
   }
   else {
+    // Check for ground literal duplicates, and alter clause to remove any found
+    // Necessary for dupe checking to work in such cases, even if side effects are wasted for a discarded duplicate
+    qsort(c->pos_lits, c->pos_count, sizeof(*c->pos_lits), function_compare);
+    qsort(c->neg_lits, c->neg_count, sizeof(*c->neg_lits), function_compare);
+    remove_dupe_literals(&c->pos_count, &c->pos_lits);
+    remove_dupe_literals(&c->neg_count, &c->neg_lits);
+
     if (c->pos_count > 0) {
       // If clause has a positive literal, all duplicate candidates must have that same positive literal
       // Arbitrarily pick first positive literal as one to use; may be able to do smarter literal choice later
@@ -461,8 +508,6 @@ clause* duplicate_check(kb *collection, clause *c) {
 
 // Given a new clause, add to the KB and maps
 void add_clause(kb *collection, clause *c) {
-  // TODO: call to duplicate literal filtering (add function and such)
-
   // Add clause to overall clause list and index map
   index_mapping *ientry = malloc(sizeof(*ientry));
   c->index = ientry->key = next_index++;
@@ -726,12 +771,17 @@ void remove_clause(kb *collection, clause *c) {
       }
 
       if (new_count > 0) {
-        int loc = child->parent_set_count-1;
-        // Replace empty parent sets with clauses from end of parents
-        for (int j = child->parent_set_count-2; j >= 0; j--) {
+        // Collect non-null parent sets at start of parents
+        int loc = 1;
+        for (int j = 0; j < child->parent_set_count-1; j++) {
           if (child->parents[j].clauses == NULL) {
-            child->parents[j] = child->parents[loc];
-            loc--;
+            while (loc < child->parent_set_count && child->parents[loc].clauses == NULL)
+              loc++;
+            if (loc >= child->parent_set_count)
+              break;
+            child->parents[j].clauses = child->parents[loc].clauses;
+            child->parents[loc].clauses = NULL;
+            loc++;
           }
         }
         child->parents = realloc(child->parents, sizeof(*child->parents)*new_count);
