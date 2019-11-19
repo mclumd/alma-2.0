@@ -399,8 +399,6 @@ void negation_inwards(alma_node *node) {
 // Does not modify anything contained inside of a NOT FOL node
 void dist_or_over_and(alma_node *node) {
   if (node != NULL && node->type == FOL) {
-    dist_or_over_and(node->fol->arg1);
-    dist_or_over_and(node->fol->arg2);
     if (node->fol->op == OR) {
       if (node->fol->arg1->type == FOL && node->fol->arg1->fol->op == AND) {
         // WLOG, (P /\ Q) \/ R
@@ -452,6 +450,8 @@ void dist_or_over_and(alma_node *node) {
         node->fol->arg2 = arg2_or;
       }
     }
+    dist_or_over_and(node->fol->arg1);
+    dist_or_over_and(node->fol->arg2);
   }
 }
 
