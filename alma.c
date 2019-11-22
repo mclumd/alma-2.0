@@ -10,7 +10,6 @@
 long long variable_id_count = 0;
 
 int main(int argc, char **argv) {
-  setvbuf(stdout, NULL, _IONBF, 0);
   if (argc <= 1) {
     printf("Please run with an input file argument.\n");
     return 0;
@@ -37,10 +36,12 @@ int main(int argc, char **argv) {
 
     while (1) {
       printf("alma: ");
+      fflush(stdout);
 
       if (fgets(line, LINELEN, stdin) != NULL) {
         int len = strlen(line);
         line[len-1] = '\0';
+        //printf("Command '%s' received\n", line);
 
         char *pos;
         if (strcmp(line, "step") == 0) {
@@ -78,7 +79,7 @@ int main(int argc, char **argv) {
           free(assertion);
         }
         else {
-          printf("Command not recognized\n");
+          printf("Command '%s' not recognized\n", line);
         }
       }
     }
