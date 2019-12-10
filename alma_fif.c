@@ -441,6 +441,106 @@ alma_function* fif_access(clause *c, int i) {
     return c->pos_lits[next];
 }
 
+// Used in removing a singleton clause -- remove partial fif tasks involving the clause
+void remove_fif_singleton_tasks(kb *collection, clause *c) {
+  int compare_pos = c->neg_count == 1;
+  char *cname = compare_pos ? c->neg_lits[0]->name : c->pos_lits[0]->name;
+  int cterms = compare_pos ? c->neg_lits[0]->term_count : c->pos_lits[0]->term_count;
+  int count = 1;
+  char **names = malloc(sizeof(*names));
+  int prev_count = 0;
+  char **prev_names = NULL;
+  // Always process mapping for singleton's clause
+  names[0] = compare_pos ? name_with_arity(c->neg_lits[0]->name, c->neg_lits[0]->term_count) : name_with_arity(c->pos_lits[0]->name, c->pos_lits[0]->term_count);
+
+  // Check if fif tasks exist singleton
+  if (tommy_hashlin_search(&collection->fif_tasks, fif_taskm_compare, names[0], tommy_hash_u64(0, names[0], strlen(names[0]))) != NULL) {
+    // Check all fif clauses for containing premise matching c
+    tommy_size_t bucket_max = collection->fif_map.low_max + collection->fif_map.split;
+    for (tommy_size_t pos = 0; pos < bucket_max; ++pos) {
+      tommy_hashlin_node *node = *tommy_hashlin_pos(&collection->fif_map, pos);
+
+      while (node) {
+        fif_mapping *data = node->data;
+        node = node->next;
+
+        for (int i = 0; i < data->num_clauses; i++) {
+          for (int j = 0; j < data->clauses[i]->fif->premise_count; j++) {
+            alma_function *premise = fif_access(data->clauses[i], j);
+
+            // For each match, collect premises after singleton's location
+            if (strcmp(premise->name, cname) == 0 && premise->term_count == cterms) {
+              if (j > 0) {
+                prev_count++;
+                prev_names = realloc(prev_names, sizeof(*prev_names) * prev_count);
+                alma_function *pf = fif_access(data->clauses[i], j-1);
+                prev_names[prev_count-1] = name_with_arity(pf->name, pf->term_count);
+              }
+              names = realloc(names, sizeof(*names) * (count + data->clauses[i]->fif->premise_count - j- 1));
+              for (int k = j+1; k < data->clauses[i]->fif->premise_count; k++) {
+                premise = fif_access(data->clauses[i], k);
+                names[count] = name_with_arity(premise->name, premise->term_count);
+                count++;
+              }
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    for (int i = 0; i < count; i++) {
+      fif_task_mapping *tm = tommy_hashlin_search(&collection->fif_tasks, fif_taskm_compare, names[i], tommy_hash_u64(0, names[i], strlen(names[i])));
+      if (tm != NULL) {
+        tommy_node *curr = tommy_list_head(&tm->tasks);
+        while (curr) {
+          fif_task *currdata = curr->data;
+          curr = curr->next;
+
+          for (int j = 0; j < currdata->num_to_unify; j++) {
+            if (currdata->to_unify[j] == c) {
+              currdata->num_to_unify--;
+              currdata->to_unify[j] = currdata->to_unify[currdata->num_to_unify];
+              currdata->to_unify = realloc(currdata->to_unify, sizeof(*currdata->to_unify)*currdata->num_to_unify);
+              break;
+            }
+          }
+        }
+      }
+
+      free(names[i]);
+    }
+    free(names);
+
+    // fif_task_mappings have tasks deleted if they have unified with c
+    for (int i = 0; i < prev_count; i++) {
+      fif_task_mapping *tm = tommy_hashlin_search(&collection->fif_tasks, fif_taskm_compare, prev_names[i], tommy_hash_u64(0, prev_names[i], strlen(prev_names[i])));
+      if (tm != NULL) {
+        tommy_node *curr = tommy_list_head(&tm->tasks);
+        while (curr) {
+          fif_task *currdata = curr->data;
+          curr = curr->next;
+
+          for (int j = 0; j < currdata->num_unified; j++) {
+            if (currdata->unified_clauses[j] == c->index) {
+              tommy_list_remove_existing(&tm->tasks, &currdata->node);
+              free_fif_task(currdata);
+            }
+          }
+        }
+      }
+
+      free(prev_names[i]);
+    }
+  free(prev_names);
+  }
+  else {
+    // Doesn't appear in fif tasks, no need to check
+    free(names[0]);
+    free(names);
+  }
+}
+
 // Compare function to be used by tommy_hashlin_search for fif_mapping
 // compares string arg to conclude_name of fif_mapping
 int fifm_compare(const void *arg, const void*obj) {

@@ -267,6 +267,10 @@ void kb_remove(kb *collection, char *string) {
   delete_formula(collection, string, 1);
 }
 
+void kb_update(kb *collection, char *string) {
+  update_formula(collection, string);
+}
+
 void kb_observe(kb *collection, char *string) {
   // Parse string into clauses
   alma_node *formulas;

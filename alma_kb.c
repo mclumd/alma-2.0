@@ -617,104 +617,8 @@ void remove_clause(kb *collection, clause *c) {
     remove_res_tasks(collection, c);
 
     // May be used in fif tasks if it's a singleton clause
-    if (c->pos_count + c->neg_count == 1) {
-      int compare_pos = c->neg_count == 1;
-      char *cname = compare_pos ? c->neg_lits[0]->name : c->pos_lits[0]->name;
-      int cterms = compare_pos ? c->neg_lits[0]->term_count : c->pos_lits[0]->term_count;
-      int count = 1;
-      char **names = malloc(sizeof(*names));
-      int prev_count = 0;
-      char **prev_names = NULL;
-      // Always process mapping for singleton's clause
-      names[0] = compare_pos ? name_with_arity(c->neg_lits[0]->name, c->neg_lits[0]->term_count) : name_with_arity(c->pos_lits[0]->name, c->pos_lits[0]->term_count);
-
-      // Check if fif tasks exist singleton
-      if (tommy_hashlin_search(&collection->fif_tasks, fif_taskm_compare, names[0], tommy_hash_u64(0, names[0], strlen(names[0]))) != NULL) {
-        // Check all fif clauses for containing premise matching c
-        tommy_size_t bucket_max = collection->fif_map.low_max + collection->fif_map.split;
-        for (tommy_size_t pos = 0; pos < bucket_max; ++pos) {
-          tommy_hashlin_node *node = *tommy_hashlin_pos(&collection->fif_map, pos);
-
-          while (node) {
-            fif_mapping *data = node->data;
-            node = node->next;
-
-            for (int i = 0; i < data->num_clauses; i++) {
-              for (int j = 0; j < data->clauses[i]->fif->premise_count; j++) {
-                alma_function *premise = fif_access(data->clauses[i], j);
-
-                // For each match, collect premises after singleton's location
-                if (strcmp(premise->name, cname) == 0 && premise->term_count == cterms) {
-                  if (j > 0) {
-                    prev_count++;
-                    prev_names = realloc(prev_names, sizeof(*prev_names) * prev_count);
-                    alma_function *pf = fif_access(data->clauses[i], j-1);
-                    prev_names[prev_count-1] = name_with_arity(pf->name, pf->term_count);
-                  }
-                  names = realloc(names, sizeof(*names) * (count + data->clauses[i]->fif->premise_count - j- 1));
-                  for (int k = j+1; k < data->clauses[i]->fif->premise_count; k++) {
-                    premise = fif_access(data->clauses[i], k);
-                    names[count] = name_with_arity(premise->name, premise->term_count);
-                    count++;
-                  }
-                  break;
-                }
-              }
-            }
-          }
-        }
-
-        for (int i = 0; i < count; i++) {
-          fif_task_mapping *tm = tommy_hashlin_search(&collection->fif_tasks, fif_taskm_compare, names[i], tommy_hash_u64(0, names[i], strlen(names[i])));
-          if (tm != NULL) {
-            tommy_node *curr = tommy_list_head(&tm->tasks);
-            while (curr) {
-              fif_task *currdata = curr->data;
-              curr = curr->next;
-
-              for (int j = 0; j < currdata->num_to_unify; j++) {
-                if (currdata->to_unify[j] == c) {
-                  currdata->num_to_unify--;
-                  currdata->to_unify[j] = currdata->to_unify[currdata->num_to_unify];
-                  currdata->to_unify = realloc(currdata->to_unify, sizeof(*currdata->to_unify)*currdata->num_to_unify);
-                  break;
-                }
-              }
-            }
-          }
-
-          free(names[i]);
-        }
-        free(names);
-
-        // fif_task_mappings have tasks deleted if they have unified with c
-        for (int i = 0; i < prev_count; i++) {
-          fif_task_mapping *tm = tommy_hashlin_search(&collection->fif_tasks, fif_taskm_compare, prev_names[i], tommy_hash_u64(0, prev_names[i], strlen(prev_names[i])));
-          if (tm != NULL) {
-            tommy_node *curr = tommy_list_head(&tm->tasks);
-            while (curr) {
-              fif_task *currdata = curr->data;
-              curr = curr->next;
-
-              for (int j = 0; j < currdata->num_unified; j++) {
-                if (currdata->unified_clauses[j] == c->index) {
-                  tommy_list_remove_existing(&tm->tasks, &currdata->node);
-                  free_fif_task(currdata);
-                }
-              }
-            }
-          }
-
-          free(prev_names[i]);
-        }
-      free(prev_names);
-      }
-      else {
-        // Doesn't appear in fif tasks, no need to check
-        free(names[0]);
-        free(names);
-      }
-    }
+    if (c->pos_count + c->neg_count == 1)
+      remove_fif_singleton_tasks(collection, c);
   }
 
   index_mapping *result = tommy_hashlin_search(&collection->index_map, im_compare, &c->index, tommy_hash_u64(0, &c->index, sizeof(c->index)));
@@ -907,6 +811,90 @@ int delete_formula(kb *collection, char *string, int print) {
   return 0;
 }
 
+int update_formula(kb *collection, char *string) {
+  alma_node *formulas;
+  int formula_count;
+  if (formulas_from_source(string, 0, &formula_count, &formulas)) {
+    // Must supply two formula arguments to update
+    if (formula_count != 2) {
+      for (int i = 0; i < formula_count; i++)
+        free_alma_tree(formulas+i);
+      free(formulas);
+      printf("Incorrect number of arguments to update\n");
+      return 0;
+    }
+
+    // Convert formulas to clause array
+    tommy_array clauses;
+    tommy_array_init(&clauses);
+    for (int i = 0; i < formula_count; i++) {
+      flatten_node(formulas+i, &clauses, 0);
+      free_alma_tree(formulas+i);
+    }
+    free(formulas);
+
+    int update_fail = 0;
+    clause *target = tommy_array_get(&clauses, 0);
+    clause *update = tommy_array_get(&clauses, 1);
+    tommy_array_done(&clauses);
+    clause *t_dupe;
+    clause *u_dupe;
+    if (target->tag == FIF || update->tag == FIF) {
+      printf("Cannot update with fif clause\n");
+      update_fail = 1;
+    }
+    else if ((t_dupe = duplicate_check(collection, target)) == NULL) {
+      printf("Clause to update not present\n");
+      update_fail = 1;
+    }
+    else if ((u_dupe = duplicate_check(collection, update)) != NULL) {
+      printf("New version of clause already present\n");
+      update_fail = 1;
+    }
+
+    free_clause(target);
+    if (update_fail) {
+      free_clause(update);
+      return 0;
+    }
+    else {
+      // Clear out res and fif tasks with old version of clause
+      for (int i = 0; i < t_dupe->pos_count; i++)
+        map_remove_clause(&collection->pos_map, &collection->pos_list, t_dupe->pos_lits[i], t_dupe);
+      for (int i = 0; i < t_dupe->neg_count; i++)
+        map_remove_clause(&collection->neg_map, &collection->neg_list, t_dupe->neg_lits[i], t_dupe);
+      remove_res_tasks(collection, t_dupe);
+      if (t_dupe->pos_count + t_dupe->neg_count == 1)
+        remove_fif_singleton_tasks(collection, t_dupe);
+
+      // Swap clause contents from update
+      int count_temp = t_dupe->pos_count;
+      t_dupe->pos_count = update->pos_count;
+      update->pos_count = count_temp;
+      alma_function **lits_temp = t_dupe->pos_lits;
+      t_dupe->pos_lits = update->pos_lits;
+      update->pos_lits = lits_temp;
+      count_temp = t_dupe->neg_count;
+      t_dupe->neg_count = update->neg_count;
+      update->neg_count = count_temp;
+      lits_temp = t_dupe->neg_lits;
+      t_dupe->neg_lits = update->neg_lits;
+      update->neg_lits = lits_temp;
+
+      // Generate new tasks with updated clause
+      res_tasks_from_clause(collection, t_dupe, 1);
+      fif_tasks_from_clause(collection, t_dupe);
+      for (int j = 0; j < t_dupe->pos_count; j++)
+        map_add_clause(&collection->pos_map, &collection->pos_list, t_dupe->pos_lits[j], t_dupe);
+      for (int j = 0; j < t_dupe->neg_count; j++)
+        map_add_clause(&collection->neg_map, &collection->neg_list, t_dupe->neg_lits[j], t_dupe);
+
+      free_clause(update);
+      return 1;
+    }
+  }
+  return 0;
+}
 
 // Resolve helper
 static void lits_copy(int count, alma_function **lits, alma_function **cmp, binding_list *mgu, alma_function **res_lits, int *res_count) {

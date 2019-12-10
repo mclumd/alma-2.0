@@ -101,6 +101,7 @@ void make_res_tasks(kb *collection, clause *c, int count, alma_function **c_lits
 void res_tasks_from_clause(kb *collection, clause *c, int process_negatives);
 int assert_formula(kb *collection, char *string, int print);
 int delete_formula(kb *collection, char *string, int print);
+int update_formula(kb *collection, char *string);
 void resolve(res_task *t, binding_list *mgu, clause *result);
 
 // Functions used in alma_command
