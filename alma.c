@@ -70,6 +70,7 @@ int main(int argc, char **argv) {
           char *assertion = malloc(len - 7);
           strncpy(assertion, line+7, len-7);
           kb_update(alma_kb, assertion);
+          free(assertion);
         }
         else if ((pos = strstr(line, "obs ")) != NULL && pos == line) {
           char *assertion = malloc(len - 4);

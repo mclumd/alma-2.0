@@ -27,6 +27,8 @@ cd alma-2.0
 
 `del <almaformula>.`: Immediately deletes a formula from the knowledge base. Note that the formula must end in a `.`
 
+`update <almaformula>. <almaformula>.`: Replaces an existing formula with another. First formula must already be present, second cannot be present. Neither is allowed to be a fif formula.
+
 `bs <literal>.`: Initiates a backward search for the argument literal.
 
 `halt`: Stops ALMA

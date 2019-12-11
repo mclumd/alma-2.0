@@ -852,8 +852,8 @@ int update_formula(kb *collection, char *string) {
       update_fail = 1;
     }
 
-    free_clause(target);
     if (update_fail) {
+      free_clause(target);
       free_clause(update);
       return 0;
     }
@@ -866,6 +866,12 @@ int update_formula(kb *collection, char *string) {
       remove_res_tasks(collection, t_dupe);
       if (t_dupe->pos_count + t_dupe->neg_count == 1)
         remove_fif_singleton_tasks(collection, t_dupe);
+
+      clause_print(target);
+      printf(" updated to ");
+      clause_print(update);
+      printf("\n");
+      free_clause(target);
 
       // Swap clause contents from update
       int count_temp = t_dupe->pos_count;
