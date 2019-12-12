@@ -844,7 +844,9 @@ int update_formula(kb *collection, char *string) {
       update_fail = 1;
     }
     else if ((t_dupe = duplicate_check(collection, target)) == NULL) {
-      printf("Clause to update not present\n");
+      printf("Clause ");
+      clause_print(target);
+      printf(" to update not present\n");
       update_fail = 1;
     }
     else if ((u_dupe = duplicate_check(collection, update)) != NULL) {

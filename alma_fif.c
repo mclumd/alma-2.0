@@ -497,12 +497,25 @@ void remove_fif_singleton_tasks(kb *collection, clause *c) {
           fif_task *currdata = curr->data;
           curr = curr->next;
 
-          for (int j = 0; j < currdata->num_to_unify; j++) {
-            if (currdata->to_unify[j] == c) {
-              currdata->num_to_unify--;
-              currdata->to_unify[j] = currdata->to_unify[currdata->num_to_unify];
-              currdata->to_unify = realloc(currdata->to_unify, sizeof(*currdata->to_unify)*currdata->num_to_unify);
-              break;
+          // Remove to_unify list entries of current clause, which is first in names array
+          if (i == 0) {
+            for (int j = 0; j < currdata->num_to_unify; j++) {
+              if (currdata->to_unify[j] == c) {
+                currdata->num_to_unify--;
+                currdata->to_unify[j] = currdata->to_unify[currdata->num_to_unify];
+                currdata->to_unify = realloc(currdata->to_unify, sizeof(*currdata->to_unify)*currdata->num_to_unify);
+                break;
+              }
+            }
+          }
+          // Otherwise, delete partial fif tasks that have unfied with current clause
+          else {
+            for (int j = 0; j < currdata->num_unified; j++) {
+              if (currdata->unified_clauses[j] == c->index) {
+                tommy_list_remove_existing(&tm->tasks, &currdata->node);
+                free_fif_task(currdata);
+                break;
+              }
             }
           }
         }
