@@ -171,7 +171,7 @@ void kb_step(kb *collection) {
   collection->idling = idling_check(collection);
 
   if (collection->idling)
-    printf("Idling...\n");
+    tee("Idling...\n");
 
   tommy_array_done(&collection->new_clauses);
   tommy_array_init(&collection->new_clauses);
@@ -181,33 +181,33 @@ void kb_print(kb *collection) {
   tommy_node *i = tommy_list_head(&collection->clauses);
   while (i) {
     index_mapping *data = i->data;
-    printf("%ld: ", data->key);
+    tee("%ld: ", data->key);
     clause_print(data->value);
-    printf("\n");
+    tee("\n");
     i = i->next;
   }
 
   i = tommy_list_head(&collection->backsearch_tasks);
   if (i) {
-    printf("Back searches:\n");
+    tee("Back searches:\n");
     for (int count = 0; i != NULL; i = i->next, count++) {
-      printf("%d\n", count);
+      tee("%d\n", count);
       backsearch_task *t = i->data;
       for (tommy_size_t j = 0; j < tommy_array_size(&t->clauses); j++) {
         clause *c = tommy_array_get(&t->clauses, j);
-        printf("%ld: ", c->index);
+        tee("%ld: ", c->index);
         clause_print(c);
         binding_mapping *m = tommy_hashlin_search(&t->clause_bindings, bm_compare, &c->index, tommy_hash_u64(0, &c->index, sizeof(c->index)));
         if (m != NULL) {
-          printf(" (bindings: ");
+          tee(" (bindings: ");
           print_bindings(m->bindings);
-          printf(")");
+          tee(")");
         }
-        printf("\n");
+        tee("\n");
       }
     }
   }
-  printf("\n");
+  tee("\n");
 }
 
 void kb_halt(kb *collection) {
@@ -257,6 +257,8 @@ void kb_halt(kb *collection) {
   free(collection);
 
   parse_cleanup();
+
+  fclose(almalog);
 }
 
 void kb_assert(kb *collection, char *string) {
@@ -295,11 +297,11 @@ void kb_observe(kb *collection, char *string) {
         lit->terms[lit->term_count-1] = time_term;
         tommy_array_insert(&collection->new_clauses, c);
         clause_print(c);
-        printf(" observed\n");
+        tee(" observed\n");
       }
       else {
         clause_print(c);
-        printf(" has too many literals\n");
+        tee(" has too many literals\n");
         free_clause(c);
       }
     }
@@ -323,15 +325,15 @@ void kb_backsearch(kb *collection, char *string) {
     tommy_array_done(&arr);
     if (c != NULL) {
       if (c->pos_count + c->neg_count > 1) {
-        printf("query clause has too many literals\n");
+        tee("query clause has too many literals\n");
         free_clause(c);
       }
       else {
         collection->idling = 0;
         backsearch_from_clause(collection, c);
-        printf("Backsearch initiated for ");
+        tee("Backsearch initiated for ");
         clause_print(c);
-        printf("\n");
+        tee("\n");
       }
     }
   }

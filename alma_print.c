@@ -6,21 +6,21 @@ static void alma_function_print(alma_function *func);
 
 static void alma_term_print(alma_term *term) {
   if (term->type == VARIABLE)
-    printf("%s%lld", term->variable->name, term->variable->id);
+    tee("%s%lld", term->variable->name, term->variable->id);
   else
     alma_function_print(term->function);
 }
 
 static void alma_function_print(alma_function *func) {
-  printf("%s", func->name);
+  tee("%s", func->name);
   if (func->term_count > 0) {
-    printf("(");
+    tee("(");
     for (int i = 0; i < func->term_count; i++) {
       if (i > 0)
-        printf(", ");
+        tee(", ");
       alma_term_print(func->terms + i);
     }
-    printf(")");
+    tee(")");
   }
 }
 
@@ -53,10 +53,10 @@ static void alma_fol_print_rec(alma_node *node, int indent) {
         case NONE:
           tag = "NONE"; break;
       }
-      printf("%sFOL: %s, tag: %s\n", spacing, op, tag);
+      tee("%sFOL: %s, tag: %s\n", spacing, op, tag);
     }
     else {
-      printf("%sFOL: %s\n", spacing, op);
+      tee("%sFOL: %s\n", spacing, op);
     }
 
     alma_fol_print_rec(node->fol->arg1, indent+1);
@@ -65,9 +65,9 @@ static void alma_fol_print_rec(alma_node *node, int indent) {
     }
   }
   else {
-    printf("%sPREDICATE: ", spacing);
+    tee("%sPREDICATE: ", spacing);
     alma_function_print(node->predicate);
-    printf("\n");
+    tee("\n");
   }
   free(spacing);
 }
@@ -79,12 +79,12 @@ void alma_fol_print(alma_node *node) {
 static void lits_print(alma_function **lits, int count, char *delimiter, int negate) {
   for (int i = 0; i < count; i++) {
     if (negate)
-      printf("not(");
+      tee("not(");
     alma_function_print(lits[i]);
     if (negate)
-      printf(")");
+      tee(")");
     if (i < count-1)
-      printf(" %s ", delimiter);
+      tee(" %s ", delimiter);
   }
 }
 
@@ -97,15 +97,15 @@ void clause_print(clause *c) {
         alma_function_print(f);
       }
       else {
-        printf("not(");
+        tee("not(");
         alma_function_print(f);
-        printf(")");
+        tee(")");
       }
       if (i < c->fif->premise_count-1)
-        printf(" /\\");
-      printf(" ");
+        tee(" /\\");
+      tee(" ");
     }
-    printf("-f-> ");
+    tee("-f-> ");
     alma_function_print(c->fif->conclusion);
   }
   // Non-fif case
@@ -113,58 +113,68 @@ void clause_print(clause *c) {
     if (c->pos_count == 0) {
       if (c->tag == BIF) {
         lits_print(c->neg_lits, c->neg_count, "/\\", 0);
-        printf(" -b-> F");
+        tee(" -b-> F");
       }
       else
         lits_print(c->neg_lits, c->neg_count, "\\/", 1);
     }
     else if (c->neg_count == 0) {
       if (c->tag == BIF)
-        printf("T -b-> ");
+        tee("T -b-> ");
       lits_print(c->pos_lits, c->pos_count, "\\/", 0);
     }
     else {
       lits_print(c->neg_lits, c->neg_count, "/\\", 0);
-      printf(" -%c-> ", c->tag == BIF ? 'b' : '-');
+      tee(" -%c-> ", c->tag == BIF ? 'b' : '-');
       lits_print(c->pos_lits, c->pos_count, "\\/", 0);
     }
   }
   if (c->parents != NULL || c->children != NULL) {
-    printf(" (");
+    tee(" (");
     if (c->parents != NULL) {
-      printf("parents: ");
+      tee("parents: ");
       for (int i = 0; i < c->parent_set_count; i++) {
-        printf("[");
+        tee("[");
         for (int j = 0; j < c->parents[i].count; j++) {
-          printf("%ld", c->parents[i].clauses[j]->index);
+          tee("%ld", c->parents[i].clauses[j]->index);
           if (j < c->parents[i].count-1)
-            printf(", ");
+            tee(", ");
         }
-        printf("]");
+        tee("]");
         if (i < c->parent_set_count-1)
-          printf(", ");
+          tee(", ");
       }
       if (c->children != NULL)
-        printf(", ");
+        tee(", ");
     }
     if (c->children != NULL) {
-      printf("children: ");
+      tee("children: ");
       for (int i = 0; i < c->children_count; i++) {
-        printf("%ld",c->children[i]->index);
+        tee("%ld",c->children[i]->index);
         if (i < c->children_count-1)
-          printf(", ");
+          tee(", ");
       }
     }
-    printf(")");
+    tee(")");
   }
-  //printf(" (L%ld)", c->learned);
+  //tee(" (L%ld)", c->learned);
 }
 
 void print_bindings(binding_list *theta) {
   for (int i = 0; i < theta->num_bindings; i++) {
-    printf("%s%lld/", theta->list[i].var->name, theta->list[i].var->id);
+    tee("%s%lld/", theta->list[i].var->name, theta->list[i].var->id);
     alma_term_print(theta->list[i].term);
     if (i < theta->num_bindings-1)
-      printf(", ");
+      tee(", ");
   }
+}
+
+void tee(char const *content, ...) {
+  va_list ap;
+  va_start(ap, content);
+  vprintf(content, ap);
+  va_end(ap);
+  va_start(ap, content);
+  vfprintf(almalog, content, ap);
+  va_end(ap);
 }

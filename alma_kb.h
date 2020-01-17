@@ -5,6 +5,8 @@
 #include "alma_formula.h"
 #include "alma_unify.h"
 
+extern FILE *almalog;
+
 // TODO: Further consider style of using **, esp. for pos_lits/neg_lits in clause
 
 struct parent_set;

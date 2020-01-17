@@ -191,7 +191,7 @@ void flatten_node(alma_node *node, tommy_array *clauses, int print) {
 
     if (print) {
       clause_print(c);
-      printf(" added\n");
+      tee(" added\n");
     }
     tommy_array_insert(clauses, c);
   }
@@ -798,7 +798,7 @@ int delete_formula(kb *collection, char *string, int print) {
       if (c != NULL) {
         if (print) {
           clause_print(c);
-          printf(" removed\n");
+          tee(" removed\n");
         }
         remove_clause(collection, c);
       }
@@ -820,7 +820,7 @@ int update_formula(kb *collection, char *string) {
       for (int i = 0; i < formula_count; i++)
         free_alma_tree(formulas+i);
       free(formulas);
-      printf("Incorrect number of arguments to update\n");
+      tee("Incorrect number of arguments to update\n");
       return 0;
     }
 
@@ -840,17 +840,17 @@ int update_formula(kb *collection, char *string) {
     clause *t_dupe;
     clause *u_dupe;
     if (target->tag == FIF || update->tag == FIF) {
-      printf("Cannot update with fif clause\n");
+      tee("Cannot update with fif clause\n");
       update_fail = 1;
     }
     else if ((t_dupe = duplicate_check(collection, target)) == NULL) {
-      printf("Clause ");
+      tee("Clause ");
       clause_print(target);
-      printf(" to update not present\n");
+      tee(" to update not present\n");
       update_fail = 1;
     }
     else if ((u_dupe = duplicate_check(collection, update)) != NULL) {
-      printf("New version of clause already present\n");
+      tee("New version of clause already present\n");
       update_fail = 1;
     }
 
@@ -870,9 +870,9 @@ int update_formula(kb *collection, char *string) {
         remove_fif_singleton_tasks(collection, t_dupe);
 
       clause_print(target);
-      printf(" updated to ");
+      tee(" updated to ");
       clause_print(update);
-      printf("\n");
+      tee("\n");
       free_clause(target);
 
       // Swap clause contents from update

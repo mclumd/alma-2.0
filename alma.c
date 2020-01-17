@@ -1,17 +1,21 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include "alma_command.h"
 #include "alma_kb.h"
+#include "alma_print.h"
 
 #define LINELEN 1000
 
 // Initialize global variable (declared in alma_formula header) to count up variable IDs
 long long variable_id_count = 0;
 
+FILE *almalog = NULL;
+
 int main(int argc, char **argv) {
   if (argc <= 1) {
-    printf("Please run with an input file argument.\n");
+    tee("Please run with an input file argument.\n");
     return 0;
   }
 
@@ -19,9 +23,23 @@ int main(int argc, char **argv) {
   if (argc > 2 && strcmp(argv[2], "run") == 0)
     run = 1;
 
+  time_t rawtime;
+  time(&rawtime);
+  char *time = ctime(&rawtime);
+  int timelen = strlen(time);
+  for (int i = 0; i < timelen; i++)
+    if (time[i] == ' ')
+      time[i] = '-';
+  char *logname = malloc(5 + timelen + 9);
+  strcpy(logname, "alma-");
+  strcpy(logname+5, time);
+  strcpy(logname+5+timelen, "-log.txt");
+
+  almalog = fopen(logname,"w");
+  free(logname);
+
   kb *alma_kb;
   kb_init(&alma_kb, argv[1]);
-
   kb_print(alma_kb);
 
   if (run) {
@@ -35,13 +53,13 @@ int main(int argc, char **argv) {
     char line[LINELEN];
 
     while (1) {
-      printf("alma: ");
+      tee("alma: ");
       fflush(stdout);
 
       if (fgets(line, LINELEN, stdin) != NULL) {
         int len = strlen(line);
         line[len-1] = '\0';
-        //printf("Command '%s' received\n", line);
+        //tee("Command '%s' received\n", line);
 
         char *pos;
         if (strcmp(line, "step") == 0) {
@@ -85,7 +103,7 @@ int main(int argc, char **argv) {
           free(assertion);
         }
         else {
-          printf("Command '%s' not recognized\n", line);
+          tee("Command '%s' not recognized\n", line);
         }
       }
     }
