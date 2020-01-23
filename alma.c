@@ -3,6 +3,7 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <getopt.h>
 #include "alma_command.h"
 #include "alma_kb.h"
 #include "alma_print.h"
