@@ -8,7 +8,7 @@
 #include "alma_print.h"
 
 // Caller will need to free collection with kb_halt
-void kb_init(kb **collection, char *file) {
+void kb_init(kb **collection, char *file, char *agent) {
   // Allocate and initialize
   *collection = malloc(sizeof(**collection));
   kb *collec = *collection;
@@ -31,7 +31,6 @@ void kb_init(kb **collection, char *file) {
   tommy_hashlin_init(&collec->distrusted);
 
   parse_init();
-  assert_formula(collec, "now(1).", 0);
 
   // Given a file argument, obtain other initial clauses from
   if (file != NULL) {
@@ -48,6 +47,17 @@ void kb_init(kb **collection, char *file) {
       exit(0);
     }
   }
+  if (agent != NULL) {
+    int namelen = strlen(agent);
+    char *sentence = malloc(10 + namelen + 3);
+    strcpy(sentence, "agentname(");
+    strcpy(sentence + 10, agent);
+    strcpy(sentence + 10 + namelen, ").");
+    assert_formula(collec, sentence, 0);
+    free(sentence);
+  }
+  assert_formula(collec, "now(1).", 0);
+
 
   // Insert starting clauses
   for (tommy_size_t i = 0; i < tommy_array_size(&collec->new_clauses); i++) {

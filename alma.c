@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 #include "alma_command.h"
 #include "alma_kb.h"
 #include "alma_print.h"
@@ -14,32 +15,64 @@ long long variable_id_count = 0;
 FILE *almalog = NULL;
 
 int main(int argc, char **argv) {
-  if (argc <= 1) {
-    tee("Please run with an input file argument.\n");
+  int run = 0;
+  char *file = NULL;
+  char *agent = NULL;
+
+  //int index;
+  int c;
+  while ((c = getopt (argc, argv, "rf:a:")) != -1)
+    switch (c) {
+      case 'r':
+        run = 1;
+        break;
+      case 'f':
+        file = optarg;
+        break;
+      case 'a':
+        agent = optarg;
+        break;
+      case '?':
+        if (optopt == 'f')
+          printf("Option -%c requires an ALMA file argument.\n", optopt);
+        else if (optopt == 'a')
+          printf("Option -%c requires an agent name argument.\n", optopt);
+        else if (isprint (optopt))
+          printf("Unknown option `-%c'.\n", optopt);
+        else
+          printf("Unknown option character `\\x%x'.\n", optopt);
+        return 1;
+      default:
+        return 0;
+    }
+
+  if (file == NULL) {
+    printf("Please run with an ALMA file argument.\n");
     return 0;
   }
-
-  int run = 0;
-  if (argc > 2 && strcmp(argv[2], "run") == 0)
-    run = 1;
 
   time_t rawtime;
   time(&rawtime);
   char *time = ctime(&rawtime);
-  int timelen = strlen(time);
+  int timelen = strlen(time)-1;
   for (int i = 0; i < timelen; i++)
     if (time[i] == ' ')
       time[i] = '-';
-  char *logname = malloc(5 + timelen + 9);
-  strcpy(logname, "alma-");
-  strcpy(logname+5, time);
+  int agentlen = agent != NULL ? strlen(agent) : 0;
+  char *logname = malloc(4 + agentlen + 1 + timelen + 9);
+  strcpy(logname, "alma");
+  if (agent != NULL)
+    strcpy(logname+4, agent);
+  logname[4+agentlen] = '-';
+  strncpy(logname+5+agentlen, time, 24);
   strcpy(logname+5+timelen, "-log.txt");
+  //printf("log file will be %s\n", logname);
 
-  almalog = fopen(logname,"w");
+  almalog = fopen(logname, "w");
   free(logname);
 
   kb *alma_kb;
-  kb_init(&alma_kb, argv[1]);
+  kb_init(&alma_kb, file, agent);
   kb_print(alma_kb);
 
   if (run) {

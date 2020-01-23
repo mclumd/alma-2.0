@@ -10,12 +10,16 @@ make
 
 ## Usage
 ```
-cd alma-2.0
-./alma.x \path\to\pl\file
-# Examples:
-./alma.x demo/fc-test.pl
-./alma.x demo/cycle.pl run
+./alma.x [-r] [-f file] [-a agent]
 ```
+
+required arguments:  
+  `-f file`   provides an input file for beginning ALMA KB
+
+optional arguments:  
+  `-r`        runs ALMA automatically until halting when it first idles  
+  `-a agent`  provides the agent name to identify this ALMA instance
+
 #### Commands
 `step`: Makes one derivation step. Will print `Idling...` if there are no remaining tasks which might produce further derivations.
 

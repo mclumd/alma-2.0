@@ -3,7 +3,7 @@
 
 #include "alma_kb.h"
 
-void kb_init(kb **collection, char *file);
+void kb_init(kb **collection, char *file, char *agent);
 void kb_step(kb *collection);
 void kb_print(kb *collection);
 void kb_halt(kb *collection);
