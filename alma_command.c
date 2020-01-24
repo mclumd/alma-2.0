@@ -16,6 +16,8 @@ void kb_init(kb **collection, char *file, char *agent) {
   collec->time = 1;
   collec->prev_str = NULL;
   collec->now_str = NULL;
+  collec->wallnow = NULL;
+  collec->wallprev = NULL;
   collec->idling = 0;
   tommy_array_init(&collec->new_clauses);
   tommy_list_init(&collec->clauses);
@@ -57,7 +59,8 @@ void kb_init(kb **collection, char *file, char *agent) {
     free(sentence);
   }
   assert_formula(collec, "now(1).", 0);
-
+  collec->wallprev = walltime();
+  assert_formula(collec, collec->wallprev, 0);
 
   // Insert starting clauses
   for (tommy_size_t i = 0; i < tommy_array_size(&collec->new_clauses); i++) {
@@ -89,7 +92,7 @@ void kb_init(kb **collection, char *file, char *agent) {
 // First of these is true when no new clauses (source of res tasks) exist
 // To_unify values are all removed in current implementation each step from exhaustive fif
 static int idling_check(kb *collection) {
-  if (tommy_array_size(&collection->new_clauses) <= 1) {
+  if (tommy_array_size(&collection->new_clauses) <= 2) {
     tommy_node *i = tommy_list_head(&collection->backsearch_tasks);
     while (i) {
       backsearch_task *bt = i->data;
@@ -111,6 +114,8 @@ void kb_step(kb *collection) {
 
   collection->now_str = now(collection->time);
   assert_formula(collection, collection->now_str, 0);
+  collection->wallnow = walltime();
+  assert_formula(collection, collection->wallnow, 0);
 
   fif_to_front(&collection->new_clauses);
   // Insert new clauses derived that are not duplicates
@@ -177,6 +182,9 @@ void kb_step(kb *collection) {
   else
     delete_formula(collection, "now(1).", 0);
   collection->prev_str = collection->now_str;
+  delete_formula(collection, collection->wallprev, 0);
+  free(collection->wallprev);
+  collection->wallprev = collection->wallnow;
 
   collection->idling = idling_check(collection);
 

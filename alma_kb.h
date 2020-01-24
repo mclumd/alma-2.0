@@ -36,6 +36,8 @@ typedef struct kb {
   long time;
   char *now_str; // String representation of now(time).
   char *prev_str; // String representation of now(time-1).
+  char *wallnow;
+  char *wallprev;
 
   int idling; // Boolean for idle KB state, from lack of tasks to advance
   tommy_array new_clauses; // Clauses to be permanently added when next step
@@ -108,6 +110,7 @@ void resolve(res_task *t, binding_list *mgu, clause *result);
 
 // Functions used in alma_command
 char* now(long t);
+char* walltime();
 void free_clause(clause *c);
 void set_variable_ids(clause *c, int id_from_name, binding_list *bs_bindings);
 void flatten_node(alma_node *node, tommy_array *clauses, int print);

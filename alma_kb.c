@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/time.h>
 #include "alma_kb.h"
 #include "alma_backsearch.h"
 #include "alma_fif.h"
@@ -951,6 +952,19 @@ char* now(long t) {
   strcpy(str, "now(");
   snprintf(str+4, len+1, "%ld", t);
   strcpy(str+4+len, ").");
+  return str;
+}
+
+char* walltime() {
+  struct timeval tval;
+  gettimeofday(&tval, NULL);
+  int sec_len = snprintf(NULL, 0, "%ld", (long int)tval.tv_sec);
+  char *str = malloc(8 + sec_len + 10 + 1);
+  strcpy(str, "wallnow(");
+  snprintf(str+8, sec_len+1, "%ld", (long int)tval.tv_sec);
+  strcpy(str+8+sec_len, ", ");
+  snprintf(str+8+sec_len+2, 6+1, "%06ld", (long int)tval.tv_usec);
+  strcpy(str+8+sec_len+8, ").");
   return str;
 }
 
