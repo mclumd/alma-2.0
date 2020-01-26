@@ -1,6 +1,7 @@
 #include "alma_parser.h"
 
 mpc_parser_t* Alma;
+mpc_parser_t* Almacomment;
 mpc_parser_t* Almaformula;
 mpc_parser_t* Formula;
 mpc_parser_t* FFormula;
@@ -17,6 +18,7 @@ mpc_parser_t* Prologconst;
 
 void parse_init(void) {
   Alma  = mpc_new("alma");
+  Almacomment = mpc_new("almacomment");
   Almaformula  = mpc_new("almaformula");
   Formula = mpc_new("formula");
   FFormula = mpc_new("fformula");
@@ -34,7 +36,8 @@ void parse_init(void) {
   // TODO: Add to, allowing Prolog comments to be ignored, and other more general features
   mpca_lang(MPCA_LANG_DEFAULT,
     "                                                            "
-    " alma         : /^/ <almaformula>* /$/ ;                    "
+    " alma         : /^/ (<almaformula> | <almacomment>)* /$/ ;  "
+    " almacomment  : /%[^\n]*\n/ ;                               "
     " almaformula  : (<fformula> | <bformula> | <formula>) '.' ; "
     " formula      : \"and(\" <formula> ',' <formula> ')'        "
     "              | \"or(\" <formula> ','  <formula> ')'        "
@@ -57,7 +60,7 @@ void parse_init(void) {
     " funcname     : <prologconst> ;                             "
     " variable     : /[A-Z_][a-zA-Z0-9_]*/ ;                     "
     " prologconst  : /[a-zA-Z0-9_]*/      ;                      ",
-    Alma, Almaformula, Formula, FFormula, BFormula, Conjform, Literal,
+    Alma, Almacomment, Almaformula, Formula, FFormula, BFormula, Conjform, Literal,
     Listofterms, Term, Predname, Constant, Funcname, Variable, Prologconst, NULL);
 }
 
@@ -95,6 +98,6 @@ int parse_string(char *string, mpc_ast_t **ast) {
 }
 
 void parse_cleanup(void) {
-  mpc_cleanup(14, Alma, Almaformula, Formula, FFormula, BFormula, Conjform, Literal,
+  mpc_cleanup(15, Alma, Almacomment, Almaformula, Formula, FFormula, BFormula, Conjform, Literal,
     Listofterms, Term, Predname, Constant, Funcname, Variable, Prologconst);
 }

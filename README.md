@@ -39,7 +39,8 @@ optional arguments:
 
 #### Grammar
 ```
-alma         : /^/ <almaformula>* /$/         
+alma         : /^/ (<almaformula> | <almacomment>)* /$/         
+almacomment  : /%[^\n]*\n/
 almaformula  : (<fformula> | <bformula> | <formula>) '.'
 formula      : \"and(\" <formula> ',' <formula> ')' | \"or(\" <formula> ','  <formula> ')'
              | \"if(\" <formula> ',' <formula> ')' | \"not(\" <formula> ')' | <literal>
