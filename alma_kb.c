@@ -676,7 +676,7 @@ void remove_clause(kb *collection, clause *c) {
         }
       }
 
-      if (new_count > 0) {
+      if (new_count > 0 && new_count != child->parent_set_count) {
         // Collect non-null parent sets at start of parents
         int loc = 1;
         for (int j = 0; j < child->parent_set_count-1; j++) {
@@ -686,13 +686,15 @@ void remove_clause(kb *collection, clause *c) {
             if (loc >= child->parent_set_count)
               break;
             child->parents[j].clauses = child->parents[loc].clauses;
+            child->parents[j].count = child->parents[loc].count;
             child->parents[loc].clauses = NULL;
+            //child->parents[loc].count = 0;
             loc++;
           }
         }
         child->parents = realloc(child->parents, sizeof(*child->parents)*new_count);
       }
-      else {
+      if (new_count == 0 && child->parents != NULL) {
         free(child->parents);
         child->parents = NULL;
       }
