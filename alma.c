@@ -17,15 +17,19 @@ FILE *almalog = NULL;
 
 int main(int argc, char **argv) {
   int run = 0;
+  int verbose = 0;
   char *file = NULL;
   char *agent = NULL;
 
   //int index;
   int c;
-  while ((c = getopt (argc, argv, "rf:a:")) != -1)
+  while ((c = getopt (argc, argv, "rvf:a:")) != -1)
     switch (c) {
       case 'r':
         run = 1;
+        break;
+      case 'v':
+        verbose = 1;
         break;
       case 'f':
         file = optarg;
@@ -67,13 +71,12 @@ int main(int argc, char **argv) {
   logname[4+agentlen] = '-';
   strncpy(logname+5+agentlen, time, 24);
   strcpy(logname+5+timelen, "-log.txt");
-  //printf("log file will be %s\n", logname);
 
   almalog = fopen(logname, "w");
   free(logname);
 
   kb *alma_kb;
-  kb_init(&alma_kb, file, agent);
+  kb_init(&alma_kb, file, agent, verbose);
   kb_print(alma_kb);
 
   if (run) {
@@ -137,7 +140,7 @@ int main(int argc, char **argv) {
           free(assertion);
         }
         else {
-          tee("Command '%s' not recognized\n", line);
+          tee("-a: Command '%s' not recognized\n", line);
         }
       }
     }

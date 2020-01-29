@@ -8,10 +8,12 @@
 #include "alma_print.h"
 
 // Caller will need to free collection with kb_halt
-void kb_init(kb **collection, char *file, char *agent) {
+void kb_init(kb **collection, char *file, char *agent, int verbose) {
   // Allocate and initialize
   *collection = malloc(sizeof(**collection));
   kb *collec = *collection;
+
+  collec->verbose = verbose;
 
   collec->time = 1;
   collec->prev_str = NULL;
@@ -161,6 +163,12 @@ void kb_step(kb *collection) {
       }
     }
     else {
+      if (collection->verbose) {
+        tee("-a: Duplicate clause ");
+        clause_print(c);
+        tee(" merged into %ld\n", dupe->index);
+      }
+
       if (c->parents != NULL)
         transfer_parent(collection, dupe, c, 1);
 
@@ -189,7 +197,7 @@ void kb_step(kb *collection) {
   collection->idling = idling_check(collection);
 
   if (collection->idling)
-    tee("Idling...\n");
+    tee("-a: Idling...\n");
 
   tommy_array_done(&collection->new_clauses);
   tommy_array_init(&collection->new_clauses);
@@ -315,6 +323,7 @@ void kb_observe(kb *collection, char *string) {
         time_term.function->terms = NULL;
         lit->terms[lit->term_count-1] = time_term;
         tommy_array_insert(&collection->new_clauses, c);
+        tee("-a: ");
         clause_print(c);
         tee(" observed\n");
       }
@@ -344,13 +353,13 @@ void kb_backsearch(kb *collection, char *string) {
     tommy_array_done(&arr);
     if (c != NULL) {
       if (c->pos_count + c->neg_count > 1) {
-        tee("query clause has too many literals\n");
+        tee("-a: query clause has too many literals\n");
         free_clause(c);
       }
       else {
         collection->idling = 0;
         backsearch_from_clause(collection, c);
-        tee("Backsearch initiated for ");
+        tee("-a: Backsearch initiated for ");
         clause_print(c);
         tee("\n");
       }

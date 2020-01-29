@@ -33,6 +33,8 @@ typedef struct parent_set {
 } parent_set;
 
 typedef struct kb {
+  int verbose; // Boolean flag for printing extra output
+
   long time;
   char *now_str; // String representation of now(time).
   char *prev_str; // String representation of now(time-1).
