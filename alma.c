@@ -81,7 +81,7 @@ int main(int argc, char **argv) {
 
   if (run) {
     while (!alma_kb->idling) {
-      kb_step(alma_kb);
+      kb_step(alma_kb, 0);
       kb_print(alma_kb);
     }
     kb_halt(alma_kb);
@@ -100,8 +100,11 @@ int main(int argc, char **argv) {
 
         char *pos;
         if (strcmp(line, "step") == 0) {
-          kb_step(alma_kb);
+          kb_step(alma_kb, 0);
         }
+	else if (strcmp(line, "step_single") == 0) {
+	  kb_step(alma_kb, 1);
+	}
         else if (strcmp(line, "print") == 0) {
           kb_print(alma_kb);
         }

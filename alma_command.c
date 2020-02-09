@@ -107,10 +107,15 @@ static int idling_check(kb *collection) {
   return 0;
 }
 
-void kb_step(kb *collection) {
+// Step through the KB.  If singleton=1, only process the highest priority resolution task.
+void kb_step(kb *collection, int singleton) {
   collection->time++;
 
-  process_res_tasks(collection, &collection->res_tasks, &collection->new_clauses, NULL);
+  if (!singleton) {
+    process_res_tasks(collection, &collection->res_tasks, &collection->new_clauses, NULL);
+  } else{
+    process_single_res_task(collection, &collection->res_tasks, &collection->new_clauses, NULL);
+  }
   process_fif_tasks(collection);
   process_backsearch_tasks(collection);
 

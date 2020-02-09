@@ -102,6 +102,7 @@ void add_clause(kb *collection, clause *curr);
 void remove_clause(kb *collection, clause *c);
 struct backsearch_task;
 void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr, struct backsearch_task *bs);
+void process_single_res_task(kb *collection, tommy_array *tasks, tommy_array *new_arr, struct backsearch_task *bs);
 void make_single_task(kb *collection, clause *c, alma_function *c_lit, clause *other, tommy_array *tasks, int use_bif, int pos);
 void make_res_tasks(kb *collection, clause *c, int count, alma_function **c_lits, tommy_hashlin *map, tommy_array *tasks, int use_bif, int pos);
 void res_tasks_from_clause(kb *collection, clause *c, int process_negatives);
@@ -127,5 +128,4 @@ void distrust_recursive(kb *collection, clause *c, char *time);
 int im_compare(const void *arg, const void *obj);
 int pm_compare(const void *arg, const void *obj);
 char* name_with_arity(char *name, int arity);
-
 #endif

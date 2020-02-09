@@ -1098,10 +1098,9 @@ static binding_list* parent_binding_prepare(backsearch_task *bs, long parent_ind
   else
     return NULL;
 }
-
 // Process resolution tasks from argument and place results in new_arr
-void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr, backsearch_task *bs) {
-  for (tommy_size_t i = 0; i < tommy_array_size(tasks); i++) {
+void process_var_num_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr, backsearch_task *bs, int num_to_process) {
+  for (tommy_size_t i = 0; i < num_to_process; i++) {
     res_task *current_task = tommy_array_get(tasks, i);
     if (current_task != NULL) {
       // Does not do resolution with a distrusted clause
@@ -1253,4 +1252,12 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
   }
   tommy_array_done(tasks);
   tommy_array_init(tasks);
+}
+
+
+void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr, backsearch_task *bs) {
+  process_var_num_res_tasks(collection, tasks, new_arr, bs, tommy_array_size(tasks));
+}
+void process_single_res_task(kb *collection, tommy_array *tasks, tommy_array *new_arr, backsearch_task *bs) {
+  process_var_num_res_tasks(collection, tasks, new_arr, bs, 1);
 }

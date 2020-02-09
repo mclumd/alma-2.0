@@ -4,7 +4,7 @@
 #include "alma_kb.h"
 
 void kb_init(kb **collection, char *file, char *agent, int verbose);
-void kb_step(kb *collection);
+void kb_step(kb *collection, int singleton);
 void kb_print(kb *collection);
 void kb_halt(kb *collection);
 void kb_assert(kb *collection, char *string);
