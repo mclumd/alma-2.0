@@ -30,6 +30,7 @@ void kb_init(kb **collection, char *file, char *agent, int verbose) {
   tommy_list_init(&collec->neg_list);
   tommy_hashlin_init(&collec->fif_map);
   tommy_array_init(&collec->res_tasks);
+  collec->res_tasks_idx = 0;
   tommy_hashlin_init(&collec->fif_tasks);
   tommy_list_init(&collec->backsearch_tasks);
   tommy_hashlin_init(&collec->distrusted);

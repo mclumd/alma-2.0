@@ -101,11 +101,9 @@ int main(int argc, char **argv) {
         char *pos;
         if (strcmp(line, "step") == 0) {
           kb_step(alma_kb, 0);
-        }
-	else if (strcmp(line, "step_single") == 0) {
-	  kb_step(alma_kb, 1);
-	}
-        else if (strcmp(line, "print") == 0) {
+        } else if (strcmp(line, "astep") == 0) {
+	        kb_step(alma_kb, 1);
+	    } else if (strcmp(line, "print") == 0) {
           kb_print(alma_kb);
         }
         else if (strcmp(line, "halt") == 0) {
