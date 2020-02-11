@@ -26,7 +26,6 @@ int proc_bound_check(alma_function *proc, binding_list *bindings) {
   return 0;
 }
 
-// Stub currently returns the first match, even if KB and unification give multiple options
 static int introspect(alma_function *arg, binding_list *bindings, kb *alma, int kind) {
   // Create copy and substitute based on bindings available
   alma_term *search_term = malloc(sizeof(*search_term));
