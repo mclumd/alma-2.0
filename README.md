@@ -1,5 +1,5 @@
 # ALMA 2.0
-Beginning steps toward a new version of ALMA
+C-based Active Logic MAchine
 
 ## Getting Started
 ```
