@@ -70,7 +70,7 @@ int main(int argc, char **argv) {
     strcpy(logname+4, agent);
   logname[4+agentlen] = '-';
   strncpy(logname+5+agentlen, time, 24);
-  strcpy(logname+5+timelen, "-log.txt");
+  strcpy(logname+5+agentlen+timelen, "-log.txt");
 
   almalog = fopen(logname, "w");
   free(logname);
