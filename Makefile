@@ -5,8 +5,8 @@ TOMMY = tommyds/tommyds/
 
 all: alma.x
 
-alma.x: alma.o tommyarray.o tommyhashlin.o tommyhash.o tommylist.o mpc.o alma_parser.o alma_formula.o alma_kb.o alma_unify.o alma_command.o alma_print.o alma_proc.o alma_fif.o alma_backsearch.o
-	$(CC) alma.o tommyarray.o tommyhashlin.o tommyhash.o tommylist.o mpc.o alma_parser.o alma_formula.o alma_kb.o alma_unify.o alma_command.o alma_print.o alma_proc.o alma_fif.o alma_backsearch.o -o alma.x
+alma.x: alma.o tommyarray.o tommyhashlin.o tommyhash.o tommylist.o mpc.o alma_parser.o alma_formula.o alma_kb.o alma_unify.o alma_command.o alma_print.o alma_proc.o alma_fif.o alma_backsearch.o res_task_heap.o
+	$(CC) alma.o tommyarray.o tommyhashlin.o tommyhash.o tommylist.o mpc.o alma_parser.o alma_formula.o alma_kb.o alma_unify.o alma_command.o alma_print.o alma_proc.o alma_fif.o alma_backsearch.o res_task_heap.o -o alma.x
 
 alma.o: alma.c alma_command.h alma_kb.h alma_print.h
 	$(CC) $(CFLAGS) -c alma.c
@@ -55,6 +55,13 @@ alma_fif.o: alma_fif.c alma_kb.h alma_formula.h alma_proc.h alma_fif.h tommy.h
 
 alma_backsearch.o: alma_backsearch.c alma_kb.h alma_formula.h alma_backsearch.h tommy.h
 	$(CC) $(CFLAGS) -c alma_backsearch.c
+
+res_task_heap.o:  res_task_heap.c res_task_heap.h alma_kb.h 
+	$(CC) $(CFLAGS) -c res_task_heap.c
+
+res_task_heap.c:  res_task_heap.g alma_kb.h 
+	$(CC) -std=c99 -E -P -DHEADER - < "res_task_heap.g" > "res_task_heap.h"
+	$(CC) -std=c99 -E -P -DSOURCE -DHEADER_NAME=res_task_heap.h - < "res_task_heap.g" > "res_task_heap.c"
 
 clean:
 	rm -f *.x *.o
