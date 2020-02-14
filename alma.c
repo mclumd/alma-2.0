@@ -61,7 +61,7 @@ int main(int argc, char **argv) {
   char *time = ctime(&rawtime);
   int timelen = strlen(time)-1;
   for (int i = 0; i < timelen; i++)
-    if (time[i] == ' ')
+    if (time[i] == ' ' || time[i] == ':')
       time[i] = '-';
   int agentlen = agent != NULL ? strlen(agent) : 0;
   char *logname = malloc(4 + agentlen + 1 + timelen + 9);
