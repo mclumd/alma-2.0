@@ -74,9 +74,8 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *alma, int 
   predname_mapping *result = tommy_hashlin_search(map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
   free(name);
   if (result != NULL) {
-
     for (int i = result->num_clauses-1; i >= 0; i--) {
-      // Must be a non-distrusted result
+      // Must be a non-distrusted singleton result
       if (!is_distrusted(alma, result->clauses[i]->index) && result->clauses[i]->pos_count + result->clauses[i]->neg_count == 1) {
         alma_function *lit = (pos ? result->clauses[i]->pos_lits[0] : result->clauses[i]->neg_lits[0]);
 
@@ -91,14 +90,8 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *alma, int 
 
         // Returning first match based at the moment
         if (pred_unify(search, lit, copy)) {
-          if (kind != run_neg_int) {
-            binding *temp = bindings->list;
-            bindings->list = copy->list;
-            copy->list = temp;
-            int num_temp = bindings->num_bindings;
-            bindings->num_bindings = copy->num_bindings;
-            copy->num_bindings = num_temp;
-          }
+          if (kind != run_neg_int)
+            swap_bindings(bindings, copy);
           cleanup_bindings(copy);
 
           if (kind == run_learned) {
@@ -131,6 +124,134 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *alma, int 
   return kind == run_neg_int;
 }
 
+// ancestor(A, B) returns true if a A appears as an ancestor in any derivation of B
+static int ancestor(alma_term *ancestor, alma_term *descendant, binding_list *bindings, kb *alma) {
+  // Create copies and substitute based on bindings available
+  alma_term *ancestor_copy = malloc(sizeof(*ancestor_copy));
+  copy_alma_term(ancestor, ancestor_copy);
+  subst(bindings, ancestor_copy);
+
+  alma_term *descendant_copy = malloc(sizeof(*descendant_copy));
+  copy_alma_term(descendant, descendant_copy);
+  subst(bindings, descendant_copy);
+
+  int has_ancestor = 0;
+  if (ancestor_copy->type == FUNCTION && descendant_copy->type == FUNCTION) {
+    alma_function *ancestor_f = ancestor_copy->function;
+    alma_function *descendant_f = descendant_copy->function;
+
+    a_pos = 1;
+    a_map = &alma->pos_map;
+    // Extract from not, if present
+    if (strcmp(ancestor_f->name, "not") == 0) {
+      a_pos = 0;
+      a_map = &alma->neg_map;
+      if (ancestor_f->term_count != 1)
+        goto ancestor_ret;
+
+      alma_term *temp = ancestor_copy;
+      ancestor_copy = ancestor_f->terms;
+      free(temp->function->name);
+      free(temp->function);
+      free(temp);
+      if (ancestor_copy->type != FUNCTION)
+        goto ancestor_ret;
+
+      ancestor_f = ancestor_copy->function;
+    }
+
+    d_pos = 1;
+    d_map = &alma->pos_map;
+    if (strcmp(descendant_f->name, "not") == 0) {
+      d_pos = 0;
+      d_map = &alma->neg_map;
+      if (descendant_f->term_count != 1)
+        goto ancestor_ret;
+
+      alma_term *temp = descendant_copy;
+      descendant_copy = descendant_f->terms;
+      free(temp->function->name);
+      free(temp->function);
+      free(temp);
+      if (descendant_copy->type != FUNCTION)
+        goto ancestor_ret;
+
+      descendant_f = descendant_copy->function;
+    }
+
+    // Frontier of parents to expand
+    tommy_list queue;
+    tommy_list_init(&queue);
+
+    // Locate clause unifying with descendant
+    // Note: for now, will just use first unifying case for ancestor search
+    // If necessary, can make more general at later point, by trying all possibilities
+    char *name = name_with_arity(descendant_f->name, descendant_f->term_count);
+    predname_mapping *result = tommy_hashlin_search(d_map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
+    free(name);
+    if (result != NULL) {
+      for (int i = result->num_clauses-1; i >= 0; i--) {
+        if (result->clauses[i]->pos_count + result->clauses[i]->neg_count == 1) {
+          alma_function *lit = (d_pos ? result->clauses[i]->pos_lits[0] : result->clauses[i]->neg_lits[0]);
+          // Create copy as either empty list or copy of arg
+          binding_list *copy = malloc(sizeof(*copy));
+          if (bindings == NULL) {
+            copy->list = NULL;
+            copy->num_bindings = 0;
+          }
+          else
+            copy_bindings(copy, bindings);
+
+          if (pred_unify(descendant_f, lit, copy)) {
+            // Starting item for queue
+            tommy_list_insert_tail(&queue, result->clauses[0]);
+
+            // TODO: manage new bindings gained from, if any
+
+            break;
+          }
+          cleanup_bindings(copy);
+        }
+      }
+    }
+
+    // Checked items to avoid cycles
+    tommy_array checked;
+    tommy_array_init(&checked);
+
+    // Continue processing queue in breadth-first manner
+    tommy_node *curr = tommy_list_head(&queue);
+    while (curr) {
+      clause *c = curr->data;
+
+      int present = 0;
+      for (int i = 0; i < tommy_array_size(&checked); i++)
+        if (tommy_array_get(&checked, i) == c->index) {
+          present = 1;
+          break;
+        }
+      if (!present) {
+        tommy_array_insert(&checked, c->index);
+
+        // TODO
+        // if singleton, try unifying
+        // if unify and succeed -- cleanup and return
+        // always queue parents otherwise
+      }
+
+      curr = curr->next;
+    }
+    // TODO: search failed; cleanup structures
+  }
+
+  ancestor_ret:
+  free_term(ancestor_copy);
+  free(ancestor_copy);
+  free_term(descendant_copy);
+  free(descendant_copy);
+  return has_ancestor;
+}
+
 // If proc is a valid procedure, runs and returns truth value
 int proc_run(alma_function *proc, binding_list *bindings, kb *alma) {
   alma_function *func = proc->terms[0].function;
@@ -145,9 +266,13 @@ int proc_run(alma_function *proc, binding_list *bindings, kb *alma) {
       return introspect(func, bindings, alma, run_pos_int);
   }
   else if (strcmp(proc->terms[0].function->name, "learned") == 0) {
-    // Must match (given bindings) the schema learned(literal(...), Var) OR learned(not(literal(...)), Var)
+    // Must match (given bindings) the schema learned(literal(...), Var) OR learned(not(literal(...)), Var) and Var unbound
     if (func->term_count == 2 && func->terms[1].type == VARIABLE && (bindings == NULL || !bindings_contain(bindings, func->terms[1].variable)))
       return introspect(func, bindings, alma, run_learned);
+  }
+  else if (strcmp(proc->terms[0].function->name, "ancestor") == 0) {
+    if (func->term_count == 2)
+      return ancestor(func->terms+0, func->terms+1, bindings, alma);
   }
   return 0;
 }
