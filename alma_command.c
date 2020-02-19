@@ -239,6 +239,8 @@ void kb_print(kb *collection) {
 void kb_halt(kb *collection) {
   // now_str and prev_str alias at this point, only free one
   free(collection->now_str);
+  if (collection->wallnow == NULL)
+    free(collection->wallprev);
   free(collection->wallnow);
 
   for (tommy_size_t i = 0; i < tommy_array_size(&collection->new_clauses); i++)

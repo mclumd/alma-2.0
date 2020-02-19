@@ -151,3 +151,12 @@ void copy_bindings(binding_list *dest, binding_list *src) {
   else
     dest->list = NULL;
 }
+
+void swap_bindings(binding_list *a, binding_list *b) {
+  binding *temp = a->list;
+  a->list = b->list;
+  b->list = temp;
+  int num_temp = a->num_bindings;
+  a->num_bindings = b->num_bindings;
+  b->num_bindings = num_temp;
+}

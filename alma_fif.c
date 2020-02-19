@@ -393,12 +393,14 @@ void process_fif_tasks(kb *collection) {
 // Reorders clause array to begin with fifs; for correctness of task generation
 void fif_to_front(tommy_array *clauses) {
   tommy_size_t loc = 0;
-  for (tommy_size_t i = 1; i < tommy_array_size(clauses); i++) {
+  for (tommy_size_t i = 0; i < tommy_array_size(clauses); i++) {
     clause *c = tommy_array_get(clauses, i);
     if (c->tag == FIF) {
-      clause *tmp = tommy_array_get(clauses, loc);
-      tommy_array_set(clauses, loc, c);
-      tommy_array_set(clauses, i, tmp);
+      if (loc != i) {
+        clause *tmp = tommy_array_get(clauses, loc);
+        tommy_array_set(clauses, loc, c);
+        tommy_array_set(clauses, i, tmp);
+      }
       loc++;
     }
   }
