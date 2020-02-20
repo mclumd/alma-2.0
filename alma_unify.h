@@ -21,5 +21,6 @@ int pred_unify(alma_function *x, alma_function *y, binding_list *theta);
 void print_bindings(binding_list *theta);
 void cleanup_bindings(binding_list *theta);
 void copy_bindings(binding_list *dest, binding_list *src);
+void swap_bindings(binding_list *a, binding_list *b);
 
 #endif
