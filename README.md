@@ -54,7 +54,7 @@ predname     : <prologconst>
 constant     : <prologconst>
 funcname     : <prologconst>
 variable     : /[A-Z_][a-zA-Z0-9_]*/
-prologconst  : /[a-zA-Z0-9_]*/
+prologconst  : /[a-z0-9][a-zA-Z0-9_]*/
 ```
 ## Troubleshooting
 ```
