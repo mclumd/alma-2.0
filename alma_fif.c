@@ -314,8 +314,8 @@ static void process_fif_task_mapping(kb *collection, fif_task_mapping *entry, to
           f->to_unify = NULL;
           f->num_to_unify = 0;
           f->proc_next = (strcmp(fif_access(f->fif, f->premises_done)->name, "proc") == 0);
-          cleanup_bindings(copy);
         }
+        cleanup_bindings(copy);
       }
       else {
         alma_function *proc = fif_access(f->fif, f->premises_done);
@@ -357,6 +357,8 @@ static void process_fif_task_mapping(kb *collection, fif_task_mapping *entry, to
           else
             cleanup_bindings(copy);
         }
+        else
+          cleanup_bindings(copy);
       }
     }
   }
