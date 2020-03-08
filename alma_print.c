@@ -103,6 +103,8 @@ void clause_print(clause *c) {
       tee(" ");
     }
     tee("-f-> ");
+    if (c->fif->neg_conc)
+      tee("~");
     alma_function_print(c->fif->conclusion);
   }
   // Non-fif case

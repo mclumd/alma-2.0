@@ -44,7 +44,8 @@ almacomment  : /%[^\n]*\n/
 almaformula  : (<fformula> | <bformula> | <formula>) '.'
 formula      : \"and(\" <formula> ',' <formula> ')' | \"or(\" <formula> ','  <formula> ')'
              | \"if(\" <formula> ',' <formula> ')' | \"not(\" <formula> ')' | <literal>
-fformula     : \"fif(\" <conjform> ',' \"conclusion(\" <literal> ')' ')'
+fformula     : \"fif(\" <conjform> ',' \"conclusion(\" <fformconc> ')' ')'
+fformconc    : \"not(\" <literal> ')' | <literal>  
 bformula     : \"bif(\" <formula> ',' <formula> ')'
 conjform     : \"and(\" <conjform> ',' <conjform> ')' | \"not(\" <literal> ')' | <literal>
 literal      : <predname> '(' <listofterms> ')' | <predname>

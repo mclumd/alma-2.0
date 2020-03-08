@@ -180,7 +180,13 @@ void flatten_node(alma_node *node, tommy_array *clauses, int print) {
       c->fif->premise_count = c->pos_count + c->neg_count - 1;
       c->fif->ordering = malloc(sizeof(*c->fif->ordering) * c->fif->premise_count);
       init_ordering(c->fif, node);
-      c->fif->conclusion = c->pos_lits[c->pos_count-1]; // Conclusion will always be last pos_lit
+      if (node->fol->arg2->type == FOL)
+        c->fif->neg_conc = 1;
+      // Conclusion will always be last lit
+      if (c->fif->neg_conc)
+        c->fif->conclusion = c->neg_lits[c->neg_count-1];
+      else
+        c->fif->conclusion = c->pos_lits[c->pos_count-1];
     }
 
     // Non-fif clauses can be sorted by literal for ease of resolution
