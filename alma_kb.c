@@ -224,6 +224,37 @@ void free_clause(clause *c) {
   free(c);
 }
 
+// Space for copy must be allocated before call
+// Does not copy parents/children/index/learned
+void copy_clause_structure(clause *original, clause *copy) {
+  copy->pos_count = original->pos_count;
+  copy->neg_count = original->neg_count;
+  copy->pos_lits = malloc(sizeof(*copy->pos_lits)*copy->pos_count);
+  for (int i = 0; i < copy->pos_count; i++) {
+    copy->pos_lits[i] = malloc(sizeof(*copy->pos_lits[i]));
+    copy_alma_function(original->pos_lits[i], copy->pos_lits[i]);
+  }
+  copy->neg_lits = malloc(sizeof(*copy->neg_lits)*copy->neg_count);
+  for (int i = 0; i < copy->neg_count; i++) {
+    copy->neg_lits[i] = malloc(sizeof(*copy->neg_lits[i]));
+    copy_alma_function(original->neg_lits[i], copy->neg_lits[i]);
+  }
+  copy->parent_set_count = copy->children_count = 0;
+  copy->parents = NULL;
+  copy->children = NULL;
+  copy->tag = original->tag;
+  if (copy->tag == FIF) {
+    copy->fif = malloc(sizeof(*copy->fif));
+    copy->fif->premise_count = original->fif->premise_count;
+    copy->fif->ordering = malloc(sizeof(*copy->fif->ordering)*copy->fif->premise_count);
+    memcpy(copy->fif->ordering, original->fif->ordering, sizeof(*copy->fif->ordering)*copy->fif->premise_count);
+    copy->fif->conclusion = original->fif->neg_conc ? copy->neg_lits[copy->neg_count-1] : copy->pos_lits[copy->pos_count-1];
+    copy->fif->neg_conc = original->fif->neg_conc;
+  }
+  else
+    copy->fif = NULL;
+}
+
 // Flattens trees into set of clauses (tommy_array must be initialized prior)
 // trees argument freed here
 void nodes_to_clauses(alma_node *trees, int num_trees, tommy_array *clauses, int print) {
@@ -1175,7 +1206,7 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
             }
           }
 
-          // An empty resolution result is not a valid clause to add to KB
+          // A resolution result must be empty to be a valid clause to add to KB
           if (res_result->pos_count > 0 || res_result->neg_count > 0) {
             // Initialize parents of result
             res_result->parent_set_count = 1;

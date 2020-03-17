@@ -124,25 +124,61 @@ void kb_step(kb *collection) {
   for (tommy_size_t i = 0; i < tommy_array_size(&collection->new_clauses); i++) {
     clause *c = tommy_array_get(&collection->new_clauses, i);
     clause *dupe = duplicate_check(collection, c);
-    if (dupe == NULL) {
+    int reinstate = c->pos_count == 1 && c->neg_count == 0 && strcmp(c->pos_lits[0]->name, "reinstate") == 0 && c->pos_lits[0]->term_count == 1;
+    if (dupe == NULL || reinstate) {
       if (c->tag == FIF)
         fif_task_map_init(collection, c);
 
-      res_tasks_from_clause(collection, c, 1);
-      fif_tasks_from_clause(collection, c);
+      if (reinstate) {
+         alma_term *arg = c->pos_lits[0]->terms;
+         if (arg->type == FUNCTION && arg->function->term_count == 0) {
+           char *index_str = arg->function->name;
+           int digits = 1;
+           for (int j = 0; j < strlen(index_str); j++) {
+             if (!isdigit(index_str[j])) {
+               digits = 0;
+               break;
+             }
+           }
+           if (digits) {
+             long index = atol(index_str);
+             index_mapping *result = tommy_hashlin_search(&collection->index_map, im_compare, &index, tommy_hash_u64(0, &index, sizeof(index)));
+             if (result != NULL && is_distrusted(collection, index)) {
+               clause *to_reinstate = result->value;
+               clause *reinstatement = malloc(sizeof(*reinstatement));
+               copy_clause_structure(to_reinstate, reinstatement);
+               reinstatement->parent_set_count = to_reinstate->parent_set_count;
+               if (reinstatement->parent_set_count > 0) {
+                 reinstatement->parents = malloc(sizeof(*reinstatement->parents)*reinstatement->parent_set_count);
+                 for (int j = 0; j < reinstatement->parent_set_count; j++) {
+                   reinstatement->parents[j].count = to_reinstate->parents[j].count;
+                   reinstatement->parents[j].clauses = malloc(sizeof(*reinstatement->parents[j].clauses)*to_reinstate->parents[j].count);
+                   for (int k = 0; k < reinstatement->parents[j].count; k++)
+                     reinstatement->parents[j].clauses[k] = to_reinstate->parents[j].clauses[k];
+                 }
+               }
+               tommy_array_insert(&collection->new_clauses, reinstatement);
+             }
+           }
+         }
+      }
+      else {
+        res_tasks_from_clause(collection, c, 1);
+        fif_tasks_from_clause(collection, c);
 
-      // Get tasks between new KB clauses and all bs clauses
-      tommy_node *curr = tommy_list_head(&collection->backsearch_tasks);
-      while (curr) {
-        backsearch_task *t = curr->data;
-        for (int j = 0; j < tommy_array_size(&t->clauses); j++) {
-          clause *bt_c = tommy_array_get(&t->clauses, j);
-          for (int k = 0; k < bt_c->pos_count; k++)
-            make_single_task(collection, bt_c, bt_c->pos_lits[k], c, &t->to_resolve, 1, 0);
-          for (int k = 0; k < bt_c->neg_count; k++)
-            make_single_task(collection, bt_c, bt_c->neg_lits[k], c, &t->to_resolve, 1, 1);
+        // Get tasks between new KB clauses and all bs clauses
+        tommy_node *curr = tommy_list_head(&collection->backsearch_tasks);
+        while (curr) {
+          backsearch_task *t = curr->data;
+          for (int j = 0; j < tommy_array_size(&t->clauses); j++) {
+            clause *bt_c = tommy_array_get(&t->clauses, j);
+            for (int k = 0; k < bt_c->pos_count; k++)
+              make_single_task(collection, bt_c, bt_c->pos_lits[k], c, &t->to_resolve, 1, 0);
+            for (int k = 0; k < bt_c->neg_count; k++)
+              make_single_task(collection, bt_c, bt_c->neg_lits[k], c, &t->to_resolve, 1, 1);
+          }
+          curr = curr->next;
         }
-        curr = curr->next;
       }
 
       add_clause(collection, c);

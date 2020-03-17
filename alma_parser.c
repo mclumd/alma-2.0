@@ -35,7 +35,6 @@ void parse_init(void) {
   Variable = mpc_new("variable");
   Prologconst = mpc_new("prologconst");
 
-  // TODO: Add to, allowing Prolog comments to be ignored, and other more general features
   mpca_lang(MPCA_LANG_DEFAULT,
     "                                                            "
     " alma         : /^/ (<almaformula> | <almacomment>)* /$/ ;  "
