@@ -5,6 +5,7 @@ mpc_parser_t* Almacomment;
 mpc_parser_t* Almaformula;
 mpc_parser_t* Formula;
 mpc_parser_t* FFormula;
+mpc_parser_t* FFormConc;
 mpc_parser_t* BFormula;
 mpc_parser_t* Conjform;
 mpc_parser_t* Literal;
@@ -22,6 +23,7 @@ void parse_init(void) {
   Almaformula  = mpc_new("almaformula");
   Formula = mpc_new("formula");
   FFormula = mpc_new("fformula");
+  FFormConc = mpc_new("fformconc");
   BFormula = mpc_new("bformula");
   Conjform = mpc_new("conjform");
   Literal = mpc_new("literal");
@@ -45,7 +47,8 @@ void parse_init(void) {
     "              | \"not(\" <formula> ')'                      "
     "              | <literal> ;                                 "
     " fformula     : \"fif(\" <conjform> ',' \"conclusion(\"     "
-    "                <literal> ')' ')' ;                         "
+    "                <fformconc> ')' ')' ;                       "
+    " fformconc    : \"not(\" <literal> ')' | <literal> ;        "
     " bformula     : \"bif(\" <formula> ',' <formula> ')' ;      "
     " conjform     : \"and(\" <conjform> ',' <conjform> ')'      "
     "              | \"not(\" <literal> ')'                      "
@@ -59,9 +62,9 @@ void parse_init(void) {
     " constant     : <prologconst> ;                             "
     " funcname     : <prologconst> ;                             "
     " variable     : /[A-Z_][a-zA-Z0-9_]*/ ;                     "
-    " prologconst  : /[a-z0-9][a-zA-Z0-9_]*/ ;                      ",
-    Alma, Almacomment, Almaformula, Formula, FFormula, BFormula, Conjform, Literal,
-    Listofterms, Term, Predname, Constant, Funcname, Variable, Prologconst, NULL);
+    " prologconst  : /[a-z0-9][a-zA-Z0-9_]*/ ;                   ",
+    Alma, Almacomment, Almaformula, Formula, FFormula, FFormConc, BFormula, Conjform,
+    Literal, Listofterms, Term, Predname, Constant, Funcname, Variable, Prologconst, NULL);
 }
 
 // Attempts to open filename and parse contents according to ALMA language
@@ -98,6 +101,6 @@ int parse_string(char *string, mpc_ast_t **ast) {
 }
 
 void parse_cleanup(void) {
-  mpc_cleanup(15, Alma, Almacomment, Almaformula, Formula, FFormula, BFormula, Conjform, Literal,
-    Listofterms, Term, Predname, Constant, Funcname, Variable, Prologconst);
+  mpc_cleanup(16, Alma, Almacomment, Almaformula, Formula, FFormula, FFormConc, BFormula,
+    Conjform, Literal, Listofterms, Term, Predname, Constant, Funcname, Variable, Prologconst);
 }

@@ -44,7 +44,8 @@ almacomment  : /%[^\n]*\n/
 almaformula  : (<fformula> | <bformula> | <formula>) '.'
 formula      : \"and(\" <formula> ',' <formula> ')' | \"or(\" <formula> ','  <formula> ')'
              | \"if(\" <formula> ',' <formula> ')' | \"not(\" <formula> ')' | <literal>
-fformula     : \"fif(\" <conjform> ',' \"conclusion(\" <literal> ')' ')'
+fformula     : \"fif(\" <conjform> ',' \"conclusion(\" <fformconc> ')' ')'
+fformconc    : \"not(\" <literal> ')' | <literal>  
 bformula     : \"bif(\" <formula> ',' <formula> ')'
 conjform     : \"and(\" <conjform> ',' <conjform> ')' | \"not(\" <literal> ')' | <literal>
 literal      : <predname> '(' <listofterms> ')' | <predname>
@@ -54,7 +55,7 @@ predname     : <prologconst>
 constant     : <prologconst>
 funcname     : <prologconst>
 variable     : /[A-Z_][a-zA-Z0-9_]*/
-prologconst  : /[a-zA-Z0-9_]*/
+prologconst  : /[a-z0-9][a-zA-Z0-9_]*/
 ```
 ## Troubleshooting
 ```

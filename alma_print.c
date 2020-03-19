@@ -79,10 +79,8 @@ void alma_fol_print(alma_node *node) {
 static void lits_print(alma_function **lits, int count, char *delimiter, int negate) {
   for (int i = 0; i < count; i++) {
     if (negate)
-      tee("not(");
+      tee("~");
     alma_function_print(lits[i]);
-    if (negate)
-      tee(")");
     if (i < count-1)
       tee(" %s ", delimiter);
   }
@@ -97,15 +95,16 @@ void clause_print(clause *c) {
         alma_function_print(f);
       }
       else {
-        tee("not(");
+        tee("~");
         alma_function_print(f);
-        tee(")");
       }
       if (i < c->fif->premise_count-1)
         tee(" /\\");
       tee(" ");
     }
     tee("-f-> ");
+    if (c->fif->neg_conc)
+      tee("~");
     alma_function_print(c->fif->conclusion);
   }
   // Non-fif case

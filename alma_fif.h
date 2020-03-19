@@ -9,6 +9,7 @@ typedef struct fif_info {
   int premise_count;
   int *ordering; // Records the interleaving order of positive and negative literals
   alma_function *conclusion; // Pointer to track conclusion of fif
+  int neg_conc; /// Boolean indicating whether conclusion predicate is negated
 } fif_info;
 
 // Used to map set of fif clauses

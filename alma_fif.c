@@ -93,17 +93,27 @@ static int fif_unified_distrusted(kb *collection, fif_task *task) {
 // Called when each premise of a fif is satisfied
 static clause* fif_conclude(kb *collection, fif_task *task, binding_list *bindings) {
   clause *conclusion = malloc(sizeof(*conclusion));
-  conclusion->pos_count = 1;
-  conclusion->neg_count = 0;
-  conclusion->pos_lits = malloc(sizeof(*conclusion->pos_lits));
-  conclusion->neg_lits = NULL;
 
   // Using task's overall bindings, obtain proper conclusion predicate
   alma_function *conc_func = malloc(sizeof(*conc_func));
   copy_alma_function(task->fif->fif->conclusion, conc_func);
   for (int k = 0; k < conc_func->term_count; k++)
     subst(bindings, conc_func->terms+k);
-  conclusion->pos_lits[0] = conc_func;
+
+  if (task->fif->fif->neg_conc) {
+    conclusion->pos_count = 0;
+    conclusion->pos_lits = NULL;
+    conclusion->neg_count = 1;
+    conclusion->neg_lits = malloc(sizeof(*conclusion->pos_lits));
+    conclusion->neg_lits[0] = conc_func;
+  }
+  else {
+    conclusion->pos_count = 1;
+    conclusion->pos_lits = malloc(sizeof(*conclusion->pos_lits));
+    conclusion->pos_lits[0] = conc_func;
+    conclusion->neg_count = 0;
+    conclusion->neg_lits = NULL;
+  }
 
   conclusion->parent_set_count = 1;
   conclusion->parents = malloc(sizeof(*conclusion->parents));
@@ -304,8 +314,8 @@ static void process_fif_task_mapping(kb *collection, fif_task_mapping *entry, to
           f->to_unify = NULL;
           f->num_to_unify = 0;
           f->proc_next = (strcmp(fif_access(f->fif, f->premises_done)->name, "proc") == 0);
-          cleanup_bindings(copy);
         }
+        cleanup_bindings(copy);
       }
       else {
         alma_function *proc = fif_access(f->fif, f->premises_done);
@@ -347,6 +357,8 @@ static void process_fif_task_mapping(kb *collection, fif_task_mapping *entry, to
           else
             cleanup_bindings(copy);
         }
+        else
+          cleanup_bindings(copy);
       }
     }
   }
