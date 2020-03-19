@@ -547,6 +547,7 @@ void add_clause(kb *collection, clause *c) {
 }
 
 // Remove res tasks using clause
+/*
 static void remove_res_tasks(kb *collection, clause *c) {
   for (tommy_size_t i = 0; i < tommy_array_size(&collection->res_tasks); i++) {
     res_task *current_task = tommy_array_get(&collection->res_tasks, i);
@@ -556,6 +557,16 @@ static void remove_res_tasks(kb *collection, clause *c) {
       free(current_task);
     }
   }
+  } */
+
+static void remove_res_tasks(kb *collection, clause *c) {
+  res_task_pri dummy_task;
+  dummy_task.priority = -1;
+  dummy_task.res_task = malloc(sizeof(res_task));
+  dummy_task.res_task->x = c;
+
+  while ( res_task_heap_delete(&collection->res_tasks, dummy_task) ) res_task_heap_delete(&collection->res_tasks, dummy_task);
+  free(dummy_task.res_task);
 }
 
 // Removes c from children list of p
@@ -720,7 +731,7 @@ int is_distrusted(kb *collection, long index) {
   return tommy_hashlin_search(&collection->distrusted, dm_compare, &index, tommy_hash_u64(0, &index, sizeof(index))) != NULL;
 }
 
-void make_single_task(kb *collection, clause *c, alma_function *c_lit, clause *other, tommy_array *tasks, int use_bif, int pos) {
+void make_single_task(kb *collection, clause *c, alma_function *c_lit, clause *other, res_task_heap *tasks, int use_bif, int pos) {
   if (c != other && (other->tag != BIF || use_bif)) {
     alma_function *other_lit = literal_by_name(other, c_lit->name, pos);
     if (other_lit != NULL) {
@@ -737,14 +748,50 @@ void make_single_task(kb *collection, clause *c, alma_function *c_lit, clause *o
         t->y = c;
         t->neg = c_lit;
       }
-
-      tommy_array_insert(tasks, t);
+      res_task_pri rtask;
+      rtask.res_task = t;
+      // Set the priority.  For now, let's do this in a binary way:  if one of the terms in either c_lit or other_lit
+      // is "location", "canDo" or "empty" then prioirty is 0; otherwise it will be 1.
+      rtask.priority = 1;
+      for (int i=0; i < t->pos->term_count; i++) {
+	if (strcmp(t->pos->terms[i].variable->name, "location") == 0)
+		   rtask.priority = 0;
+	if (strcmp(t->pos->terms[i], "canDo") == 0)
+		   rtask.priority = 0;
+	if (strcmp(t->pos->terms[i], "empty") == 0)
+		   rtask.priority = 0;
+      }
+      for (int i=0; i < t->pos.term_count; i++) {
+	if (strcmp(t->neg->terms[i], "location") == 0)
+		   rtask.priority = 0;
+	if (strcmp(t->neg->terms[i], "canDo") == 0)
+		   rtask.priority = 0;
+	if (strcmp(t->neg->terms[i], "empty") == 0)
+		   rtask.priority = 0;
+      }
+	
+      res_task_heap_push(tasks, rtask);
+      //tommy_array_insert(tasks, t);
     }
   }
 }
 
 // Helper of res_tasks_from_clause
-void make_res_tasks(kb *collection, clause *c, int count, alma_function **c_lits, tommy_hashlin *map, tommy_array *tasks, int use_bif, int pos) {
+/* void make_res_tasks(kb *collection, clause *c, int count, alma_function **c_lits, tommy_hashlin *map, tommy_array *tasks, int use_bif, int pos) {
+  for (int i = 0; i < count; i++) {
+    char *name = name_with_arity(c_lits[i]->name, c_lits[i]->term_count);
+    predname_mapping *result = tommy_hashlin_search(map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
+
+    // New tasks are from Cartesian product of result's clauses with clauses' ith
+    if (result != NULL)
+      for (int j = 0; j < result->num_clauses; j++)
+        make_single_task(collection, c, c_lits[i], result->clauses[j], tasks, use_bif, pos);
+
+    free(name);
+  }
+  } */
+
+void make_res_tasks(kb *collection, clause *c, int count, alma_function **c_lits, tommy_hashlin *map, res_task_heap *tasks, int use_bif, int pos) {
   for (int i = 0; i < count; i++) {
     char *name = name_with_arity(c_lits[i]->name, c_lits[i]->term_count);
     predname_mapping *result = tommy_hashlin_search(map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
@@ -1099,9 +1146,13 @@ static binding_list* parent_binding_prepare(backsearch_task *bs, long parent_ind
     return NULL;
 }
 // Process resolution tasks from argument and place results in new_arr
-void process_var_num_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr, backsearch_task *bs, int num_to_process) {
-  for (tommy_size_t i = collection->res_tasks_idx; i < collection->res_tasks_idx + num_to_process; i++) {
-    res_task *current_task = tommy_array_get(tasks, i);
+void process_var_num_res_tasks(kb *collection, res_task_heap *tasks, tommy_array *new_arr, backsearch_task *bs, int num_to_process) {
+  //for (tommy_size_t i = collection->res_tasks_idx; i < collection->res_tasks_idx + num_to_process; i++) {
+    //res_task *current_task = tommy_array_get(tasks, i);
+  for (int i =0; i < num_to_process; i++) {
+    res_task_pri c;
+    c = res_task_heap_pop(tasks);
+    res_task *current_task = c.res_task;
     if (current_task != NULL) {
       // Does not do resolution with a distrusted clause
       if (!is_distrusted(collection, current_task->x->index) && !is_distrusted(collection,  current_task->y->index)) {
@@ -1250,21 +1301,24 @@ void process_var_num_res_tasks(kb *collection, tommy_array *tasks, tommy_array *
       free(current_task);
     }
   }
+  /*
   collection->res_tasks_idx += num_to_process;
   if (collection->res_tasks_idx == tommy_array_size(tasks) ) {
       tee("Resetting res_tasks_idx.\n");
       tommy_array_done(tasks);
       tommy_array_init(tasks);
       collection->res_tasks_idx = 0;
-  }
+      } */
 }
 
 
-void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr, backsearch_task *bs) {
-  process_var_num_res_tasks(collection, tasks, new_arr, bs, tommy_array_size(tasks) - collection->res_tasks_idx);
+//void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr, backsearch_task *bs) {
+void process_res_tasks(kb *collection, res_task_heap *tasks, tommy_array *new_arr, backsearch_task *bs) {
+  process_var_num_res_tasks(collection, tasks, new_arr, bs, tasks->count);
 }
-void process_single_res_task(kb *collection, tommy_array *tasks, tommy_array *new_arr, backsearch_task *bs) {
-  if (tommy_array_size(tasks) > 0) {
+//void process_single_res_task(kb *collection, tommy_array *tasks, tommy_array *new_arr, backsearch_task *bs) {
+void process_single_res_task(kb *collection, res_task_heap *tasks, tommy_array *new_arr, backsearch_task *bs) {
+  if (tasks->count > 0) {
     process_var_num_res_tasks(collection, tasks, new_arr, bs, 1);
   } else {
     process_var_num_res_tasks(collection, tasks, new_arr, bs, 0);

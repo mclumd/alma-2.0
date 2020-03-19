@@ -29,7 +29,8 @@ void kb_init(kb **collection, char *file, char *agent, int verbose) {
   tommy_hashlin_init(&collec->neg_map);
   tommy_list_init(&collec->neg_list);
   tommy_hashlin_init(&collec->fif_map);
-  tommy_array_init(&collec->res_tasks);
+  //tommy_array_init(&collec->res_tasks);
+  res_task_heap_init(&(collec->res_tasks));
   collec->res_tasks_idx = 0;
   tommy_hashlin_init(&collec->fif_tasks);
   tommy_list_init(&collec->backsearch_tasks);
@@ -99,7 +100,8 @@ static int idling_check(kb *collection) {
     tommy_node *i = tommy_list_head(&collection->backsearch_tasks);
     while (i) {
       backsearch_task *bt = i->data;
-      if (tommy_array_size(&bt->to_resolve) > 0)
+      //if (tommy_array_size(&bt->to_resolve) > 0)
+      if (  (bt->to_resolve.count) > 0)
         return 0;
       i = i->next;
     }
@@ -108,7 +110,7 @@ static int idling_check(kb *collection) {
   return 0;
 }
 
-// Step through the KB.  If singleton=1, only process the highest priority resolution task.
+// Step through the KB.  If singleton==1, only process the highest priority resolution task.
 void kb_step(kb *collection, int singleton) {
   collection->time++;
 
@@ -272,9 +274,11 @@ void kb_halt(kb *collection) {
   tommy_hashlin_done(&collection->fif_map);
 
   // Res task pointers are aliases to those freed from collection->clauses, so only free overall task here
-  for (tommy_size_t i = 0; i < tommy_array_size(&collection->res_tasks); i++)
+
+  // TODO:  Modify this for res_tasks as a heap.  
+  /*for (tommy_size_t i = 0; i < tommy_array_size(&collection->res_tasks); i++)
     free(tommy_array_get(&collection->res_tasks, i));
-  tommy_array_done(&collection->res_tasks);
+  tommy_array_done(&collection->res_tasks);*/
 
   tommy_hashlin_foreach(&collection->fif_tasks, free_fif_task_mapping);
   tommy_hashlin_done(&collection->fif_tasks);

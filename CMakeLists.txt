@@ -25,4 +25,5 @@ add_executable(alma.x
         alma_parser.c
         alma_print.c
         alma_proc.c
-        alma_unify.c)
+        alma_unify.c
+	res_task_heap.c)

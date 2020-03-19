@@ -25,7 +25,8 @@ typedef struct backsearch_task {
   tommy_array new_clauses;
   tommy_array new_clause_bindings;
 
-  tommy_array to_resolve;
+  //tommy_array to_resolve;
+  res_task_heap to_resolve;
   tommy_node node;
 } backsearch_task;
 

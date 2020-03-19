@@ -16,7 +16,7 @@
  * You should have received a copy of the GNU General Public License
  * along with Conquest of Levidon.  If not, see <http://www.gnu.org/licenses/>.
  *
- * Modified by jdbrody@gmail.com for use as a resolution task priority queue in alma
+ * Modified by jdbrody@gmail.com for use as a resolution task priority queue in alma.  Also adding delete method.
  */
 
 // The arguments with which the macro functions are called are guaranteed to produce no side effects.
@@ -54,7 +54,7 @@
 #define GUARD0 #ifndef RES_TASK_HEAP_H
 #define GUARD1 #define RES_TASK_HEAP_H
 #define GUARD2 #endif
-# define INCLUDE0 #include "alma_kb.h"
+# define INCLUDE0 #include "resolution.h"
 GUARD0
 GUARD1
 INCLUDE0
@@ -66,17 +66,21 @@ typedef struct res_task_pri {
 
 #define heap_type res_task_pri
 
-struct heap_name
+
+
+typedef struct heap_name
 {
   heap_type *data; // Array with the elements.
   size_t count; // Number of elements actually in the heap.
   int max_size;   
-};
-STATIC void NAME(_init)(struct heap_name heap);
+} heap_name;
+STATIC void NAME(_init)(struct heap_name *heap);
 STATIC void NAME(_push)(struct heap_name *heap, heap_type value);
-STATIC void NAME(_pop)(struct heap_name *heap);
+STATIC heap_type NAME(_pop)(struct heap_name *heap);
 STATIC void NAME(_emerge)(struct heap_name *heap, size_t index);
 STATIC void NAME(_heapify)(struct heap_name *heap);
+STATIC int NAME(_delete)(struct heap_name *heap, heap_type value);
+STATIC void NAME(_destroy)(struct heap_name *heap);
 GUARD2
 #endif
 
@@ -94,18 +98,15 @@ INCLUDE1
 #endif
 
 #define heap_type res_task_pri
-STATIC void NAME(_init)(struct heap_name heap) {
+STATIC void NAME(_init)(struct heap_name *heap) {
   /* For now, just use regular calloc for the data.  Eventually make this a tommy array. */
-  heap.max_size = 200;
-  heap.data = calloc(sizeof(res_task_pri), heap.max_size);
-  for (int i=0; i < heap.max_size; i++) {
-    heap.data[i].res_task = NULL;
-    heap.data[i].priority = -1;
+  heap->max_size = 200;
+  heap->data = calloc(sizeof(res_task_pri), heap->max_size);
+  for (int i=0; i < heap->max_size; i++) {
+    heap->data[i].res_task = NULL;
+    heap->data[i].priority = -1;
   }
-  heap.count = 0;
-}
-
-STATIC void NAME(_destroy)(struct heap_name *heap) {
+  heap->count = 0;
 }
 
 // Push element to the heap.
@@ -126,10 +127,11 @@ STATIC void NAME(_push)(struct heap_name *heap, heap_type value)
 }
 
 // Removes the biggest element from the heap.
-STATIC void NAME(_pop)(struct heap_name *heap)
+STATIC heap_type NAME(_pop)(struct heap_name *heap)
 {
 	size_t index, swap, other;
-
+    heap_type result;
+    result = heap->data[0];
 	// Remove the biggest element.
 	heap_type temp = heap->data[--heap->count];
 
@@ -150,6 +152,7 @@ STATIC void NAME(_pop)(struct heap_name *heap)
 	}
 	heap->data[index] = temp;
 	heap_update(heap, index);
+	return result;
 }
 
 // Move an element closer to the front of the heap.
@@ -209,6 +212,34 @@ STATIC void NAME(_heapify)(struct heap_name *heap)
 	}
 }
 
+// This somewhat counterintuitive definiton derives from the way remove_res_tasks needs it.
+// TODO:  Make this more robust and intuitive.  This will probably require definiing a host of
+// recursive equality functions, starting with clause equality.
+int res_task_eq(res_task a, res_task b) {
+  return a.x == b.x || a.y == b.x;
+}
+
+int res_task_pri_eq( res_task_pri a, res_task_pri b) {
+  return res_task_eq(*(a.res_task), *(b.res_task));
+}
+
+
+// Deletes an element.  Returns 1 if value is found and 0 otherwise.
+// The search for the element is based on res_task equality
+STATIC int NAME(_delete)(struct heap_name *heap, heap_type value) {
+  for ( int i=0; i < heap->count; i++) if (  res_task_pri_eq(heap->data[i], value)) {
+	heap->data[i].priority = -1;
+	NAME(_heapify)(heap);
+	NAME(_pop)(heap);
+	return 1;
+      }
+  return 0;
+}
+
+STATIC void NAME(_destroy)(struct heap_name *heap) {
+  for (int i = 0; i < heap->count; i++) free(heap->data[i].res_task);
+  free(heap);
+}
 #endif /* !defined(HEADER) */
 
 #undef STATIC

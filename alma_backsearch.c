@@ -57,7 +57,8 @@ void backsearch_from_clause(kb *collection, clause *c) {
   bt->target_vars = negated_bindings;
   tommy_array_insert(&bt->new_clause_bindings, negated_bindings);
 
-  tommy_array_init(&bt->to_resolve);
+  //tommy_array_init(&bt->to_resolve);
+  res_task_heap_init(&bt->to_resolve);
   tommy_list_insert_tail(&collection->backsearch_tasks, &bt->node, bt);
 }
 
@@ -152,10 +153,12 @@ void backsearch_halt(backsearch_task *t) {
     cleanup_bindings(tommy_array_get(&t->new_clause_bindings, i));
   tommy_array_done(&t->new_clause_bindings);
 
+  /*
   for (tommy_size_t i = 0; i < tommy_array_size(&t->to_resolve); i++)
     free(tommy_array_get(&t->to_resolve, i));
-  tommy_array_done(&t->to_resolve);
-
+    tommy_array_done(&t->to_resolve); */
+  res_task_heap_destroy(&t->to_resolve);
+  
   free(t);
 }
 
