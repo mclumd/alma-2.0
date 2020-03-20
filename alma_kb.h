@@ -19,6 +19,8 @@ struct fif_info;
 
 typedef struct kb {
   int verbose; // Boolean flag for printing extra output
+  int diff_prior;  // Boolean flag for using differential priorities
+  int (*calc_priority)(struct kb*, res_task *);
 
   long time;
   char *now_str; // String representation of now(time).

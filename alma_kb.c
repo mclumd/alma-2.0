@@ -755,25 +755,8 @@ void make_single_task(kb *collection, clause *c, alma_function *c_lit, clause *o
       }
       res_task_pri rtask;
       rtask.res_task = t;
-      // Set the priority.  For now, let's do this in a binary way:  if one of the terms in either c_lit or other_lit
-      // is "location", "canDo" or "empty" then prioirty is 0; otherwise it will be 1.
-      rtask.priority = 1;
-      for (int i=0; i < t->pos->term_count; i++) {
-	if (strcmp(t->pos->terms[i].variable->name, "location") == 0)
-		   rtask.priority = 0;
-	if (strcmp(t->pos->terms[i], "canDo") == 0)
-		   rtask.priority = 0;
-	if (strcmp(t->pos->terms[i], "empty") == 0)
-		   rtask.priority = 0;
-      }
-      for (int i=0; i < t->pos.term_count; i++) {
-	if (strcmp(t->neg->terms[i], "location") == 0)
-		   rtask.priority = 0;
-	if (strcmp(t->neg->terms[i], "canDo") == 0)
-		   rtask.priority = 0;
-	if (strcmp(t->neg->terms[i], "empty") == 0)
-		   rtask.priority = 0;
-      }
+
+      rtask.priority = collection->calc_priority(collection, t);
 	
       res_task_heap_push(tasks, rtask);
       //tommy_array_insert(tasks, t);

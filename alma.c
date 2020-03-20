@@ -15,44 +15,66 @@ long long variable_id_count = 0;
 
 FILE *almalog = NULL;
 
+void print_usage() {
+  fprintf(stderr, "Usage: alma.x [options]\n"
+	  "Options:\n"
+	  "  -P               Assign different priorities for resolution of tasks with astep (default is False)\n"
+	  "  -r               Run continuosly (default is False)\n"
+	  "  -v               Verbose mode (default is False)\n"
+	  "  -f <filename>    Initial input file (required)\n"
+	  "  -a <name>        Agent name\n"
+	  "  -h               Print this help message\n\n");
+  return;
+}
+
+
+  
 int main(int argc, char **argv) {
   int run = 0;
   int verbose = 0;
+  int differential_priorities = 0;
   char *file = NULL;
   char *agent = NULL;
 
   //int index;
   int c;
-  while ((c = getopt (argc, argv, "rvf:a:")) != -1)
+  while ((c = getopt (argc, argv, "Pprvf:a:h")) != -1)
     switch (c) {
-      case 'r':
-        run = 1;
-        break;
-      case 'v':
-        verbose = 1;
-        break;
-      case 'f':
-        file = optarg;
-        break;
-      case 'a':
-        agent = optarg;
-        break;
-      case '?':
-        if (optopt == 'f')
-          printf("Option -%c requires an ALMA file argument.\n", optopt);
-        else if (optopt == 'a')
-          printf("Option -%c requires an agent name argument.\n", optopt);
-        else if (isprint (optopt))
-          printf("Unknown option `-%c'.\n", optopt);
-        else
-          printf("Unknown option character `\\x%x'.\n", optopt);
-        return 1;
-      default:
-        return 0;
+    case 'P':
+      differential_priorities = 1;
+      break;
+    case 'h':
+      print_usage();
+      break;
+    case 'r':
+      run = 1;
+      break;
+    case 'v':
+      verbose = 1;
+      break;
+    case 'f':
+      file = optarg;
+      break;
+    case 'a':
+      agent = optarg;
+      break;
+    case '?':
+      if (optopt == 'f')
+	printf("Option -%c requires an ALMA file argument.\n", optopt);
+      else if (optopt == 'a')
+	printf("Option -%c requires an agent name argument.\n", optopt);
+      else if (isprint (optopt))
+	printf("Unknown option `-%c'.\n", optopt);
+      else
+	printf("Unknown option character `\\x%x'.\n", optopt);
+      return 1;
+    default:
+      return 0;
     }
-
+  
   if (file == NULL) {
-    printf("Please run with an ALMA file argument.\n");
+    printf("Please run with an ALMA file argument.\n\n");
+    print_usage();
     return 0;
   }
 
@@ -76,7 +98,7 @@ int main(int argc, char **argv) {
   free(logname);
 
   kb *alma_kb;
-  kb_init(&alma_kb, file, agent, verbose);
+  kb_init(&alma_kb, file, agent, verbose, differential_priorities);
   kb_print(alma_kb);
 
   if (run) {

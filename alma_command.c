@@ -6,14 +6,17 @@
 #include "alma_fif.h"
 #include "alma_parser.h"
 #include "alma_print.h"
+#include "compute_priority.h"
 
 // Caller will need to free collection with kb_halt
-void kb_init(kb **collection, char *file, char *agent, int verbose) {
+void kb_init(kb **collection, char *file, char *agent, int verbose, int differential_priorities) {
   // Allocate and initialize
   *collection = malloc(sizeof(**collection));
   kb *collec = *collection;
 
   collec->verbose = verbose;
+  collec->diff_prior = differential_priorities;
+  collec->calc_priority = differential_priorities ? (compute_priority) : (zero_priority);
 
   collec->time = 1;
   collec->prev_str = NULL;
