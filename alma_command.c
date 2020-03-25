@@ -270,6 +270,7 @@ void kb_print(kb *collection) {
     }
   }
   tee("\n");
+  fflush(almalog);
 }
 
 void kb_halt(kb *collection) {
