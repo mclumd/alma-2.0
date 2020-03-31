@@ -58,7 +58,7 @@ void backsearch_from_clause(kb *collection, clause *c) {
   tommy_array_insert(&bt->new_clause_bindings, negated_bindings);
 
   //tommy_array_init(&bt->to_resolve);
-  res_task_heap_init(&bt->to_resolve);
+  res_task_heap_init(&bt->to_resolve, collection->res_heap_size);
   tommy_list_insert_tail(&collection->backsearch_tasks, &bt->node, bt);
 }
 

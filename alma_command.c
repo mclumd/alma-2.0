@@ -6,10 +6,11 @@
 #include "alma_fif.h"
 #include "alma_parser.h"
 #include "alma_print.h"
+#include "res_task_heap.h"
 #include "compute_priority.h"
 
 // Caller will need to free collection with kb_halt
-void kb_init(kb **collection, char *file, char *agent, int verbose, int differential_priorities) {
+void kb_init(kb **collection, char *file, char *agent, int verbose, int differential_priorities, int res_heap_size) {
   // Allocate and initialize
   *collection = malloc(sizeof(**collection));
   kb *collec = *collection;
@@ -24,6 +25,7 @@ void kb_init(kb **collection, char *file, char *agent, int verbose, int differen
   collec->wallnow = NULL;
   collec->wallprev = NULL;
   collec->idling = 0;
+  collec->res_heap_size = res_heap_size;
   tommy_array_init(&collec->new_clauses);
   tommy_list_init(&collec->clauses);
   tommy_hashlin_init(&collec->index_map);
@@ -33,8 +35,8 @@ void kb_init(kb **collection, char *file, char *agent, int verbose, int differen
   tommy_list_init(&collec->neg_list);
   tommy_hashlin_init(&collec->fif_map);
   //tommy_array_init(&collec->res_tasks);
-  res_task_heap_init(&(collec->res_tasks));
-  collec->res_tasks_idx = 0;
+  res_task_heap_init(&(collec->res_tasks), res_heap_size);
+  //collec->res_tasks_idx = 0;
   tommy_hashlin_init(&collec->fif_tasks);
   tommy_list_init(&collec->backsearch_tasks);
   tommy_hashlin_init(&collec->distrusted);
@@ -245,6 +247,24 @@ void kb_print(kb *collection) {
     }
   }
   tee("\n");
+  res_task_heap *res_tasks = &collection->res_tasks;
+  res_task_pri tp;
+  res_task *t;
+  int j = 0;
+  if (res_tasks->count > 0) {
+    tee("---------------------------------------\n");
+    tee("Resolution tasks.\n");
+    tee("Heap count: %d\n\n", res_tasks->count);
+    tee("Pri\t\tx\t\ty\t\tPos\t\tNeg\n");
+    for (j=0; j< res_tasks->count; j++) {
+      tp = res_task_heap_item(res_tasks, j);
+      tee("%d\t\t", tp.priority);
+      t = tp.res_task;
+      res_task_print(t);
+      tee("\n");
+    }
+  tee("\n");
+  }
 }
 
 void kb_halt(kb *collection) {

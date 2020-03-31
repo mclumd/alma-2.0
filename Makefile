@@ -57,11 +57,12 @@ alma_backsearch.o: alma_backsearch.c alma_kb.h alma_formula.h alma_backsearch.h 
 	$(CC) $(CFLAGS) -c alma_backsearch.c
 
 res_task_heap.o:  res_task_heap.c res_task_heap.h alma_kb.h 
-	$(CC) $(CFLAGS) -c res_task_heap.c
+	$(CC) $(CFLAGS) -c res_task_heap.c index_heap.c
 
-res_task_heap.c:  res_task_heap.g alma_kb.h 
-	$(CC) -std=c99 -E -P -DHEADER - < "res_task_heap.g" > "res_task_heap.h"
-	$(CC) -std=c99 -E -P -DSOURCE -DHEADER_NAME=res_task_heap.h - < "res_task_heap.g" > "res_task_heap.c"
+res_task_heap.c:  res_task_heap.g alma_kb.h index_heap.h
+	$(CC) -std=c99 -E -P -DUSE_DUAL_HEAP -DHEADER -Dheap_type=res_task_pri  -Dheap_name=res_task_heap - < "res_task_heap.g" > "res_task_heap.h"
+	$(CC) -std=c99 -E -P -DUSE_DUAL_HEAP -DSOURCE -Dheap_type=res_task_pri -Dheap_name=res_task_heap -DHEADER_NAME=res_task_heap.h - < "res_task_heap.g" > "res_task_heap.c"
+	$(CC) -std=c99 -E -P -Dheap_name=index_heap -DSOURCE -Dheap_type=index_heap  -DHEADER_NAME=index_heap.h -  < "res_task_heap.g" > "index_heap.c"
 
 clean:
 	rm -f *.x *.o

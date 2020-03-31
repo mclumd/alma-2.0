@@ -1,8 +1,9 @@
 # cmake_minimum_required(VERSION <specify CMake version here>)
-project(alma_2_0 C)
+project(alma_2_0 C CXX)
 cmake_minimum_required(VERSION 3.9)
 
 set(CMAKE_C_STANDARD 11)
+set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_BUILD_TYPE DEBUG)
 
 include_directories(.)
@@ -26,5 +27,7 @@ add_executable(alma.x
         alma_print.c
         alma_proc.c
         alma_unify.c
-	res_task_heap.c
-	compute_priority.c)
+		res_task_heap.c
+		priority_function.cpp
+		compute_priority.c
+		)

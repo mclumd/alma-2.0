@@ -2,7 +2,7 @@
 #define alma_command_h
 
 #include "alma_kb.h"
-void kb_init(kb **collection, char *file, char *agent, int verbose, int differential_priorities);
+void kb_init(kb **collection, char *file, char *agent, int verbose, int differential_priorities, int res_heap_size);
 void kb_step(kb *collection, int singleton);
 void kb_print(kb *collection);
 void kb_halt(kb *collection);

@@ -44,7 +44,7 @@ typedef struct kb {
 
   //tommy_array res_tasks; // Stores tasks for resolution (non-tagged clauses) in next step
   res_task_heap res_tasks;
-  int res_tasks_idx;   // Index of the next res_task that needs processing.
+  int res_heap_size;   
 
   // If grow to have many fifs, having pos and neg versions may help
   tommy_hashlin fif_tasks; // Stores tasks for fif rules

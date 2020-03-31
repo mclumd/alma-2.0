@@ -736,6 +736,15 @@ int is_distrusted(kb *collection, long index) {
   return tommy_hashlin_search(&collection->distrusted, dm_compare, &index, tommy_hash_u64(0, &index, sizeof(index))) != NULL;
 }
 
+// Do some very simple checks to avoid adding resolution tasks that
+// will clearly fail resolution.  A full check of this is done during
+// resolution processing; res_tasks is really a list of *potential*
+// resolutions.
+
+// TODO:  Write this if necessary.
+int obviously_wont_unify(res_task *t) {
+  return 0;
+}
 void make_single_task(kb *collection, clause *c, alma_function *c_lit, clause *other, res_task_heap *tasks, int use_bif, int pos) {
   if (c != other && (other->tag != BIF || use_bif)) {
     alma_function *other_lit = literal_by_name(other, c_lit->name, pos);
@@ -753,13 +762,15 @@ void make_single_task(kb *collection, clause *c, alma_function *c_lit, clause *o
         t->y = c;
         t->neg = c_lit;
       }
-      res_task_pri rtask;
-      rtask.res_task = t;
-
-      rtask.priority = collection->calc_priority(collection, t);
-	
-      res_task_heap_push(tasks, rtask);
-      //tommy_array_insert(tasks, t);
+      if (!obviously_wont_unify(t)) {
+	  res_task_pri rtask;
+	  rtask.res_task = t;
+	  
+	  rtask.priority = collection->calc_priority(collection, t);
+	  
+	  res_task_heap_push(tasks, rtask);
+	  //tommy_array_insert(tasks, t);
+	}
     }
   }
 }

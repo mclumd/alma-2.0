@@ -1,8 +1,19 @@
 #include "alma_print.h"
 #include "alma_formula.h"
 #include "alma_fif.h"
-
 static void alma_function_print(alma_function *func);
+
+void res_task_print(res_task *t) {
+  clause_print(t->x);
+  tee("\t");
+  clause_print(t->y);
+  tee("\t");
+  alma_function_print(t->pos);
+  tee("\t");
+  alma_function_print(t->neg);
+}
+
+
 
 static void alma_term_print(alma_term *term) {
   if (term->type == VARIABLE)

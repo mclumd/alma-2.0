@@ -19,6 +19,7 @@ void print_usage() {
   fprintf(stderr, "Usage: alma.x [options]\n"
 	  "Options:\n"
 	  "  -P               Assign different priorities for resolution of tasks with astep (default is False)\n"
+	  "  -H <size>        Max size for resolution heap (default 10000)"
 	  "  -r               Run continuosly (default is False)\n"
 	  "  -v               Verbose mode (default is False)\n"
 	  "  -f <filename>    Initial input file (required)\n"
@@ -33,15 +34,19 @@ int main(int argc, char **argv) {
   int run = 0;
   int verbose = 0;
   int differential_priorities = 0;
+  int res_heap_size = 10000;
   char *file = NULL;
   char *agent = NULL;
 
   //int index;
   int c;
-  while ((c = getopt (argc, argv, "Pprvf:a:h")) != -1)
+  while ((c = getopt (argc, argv, "PH:rvf:a:h")) != -1)
     switch (c) {
     case 'P':
       differential_priorities = 1;
+      break;
+    case 'H':
+      res_heap_size = atoi(optarg);
       break;
     case 'h':
       print_usage();
@@ -98,7 +103,7 @@ int main(int argc, char **argv) {
   free(logname);
 
   kb *alma_kb;
-  kb_init(&alma_kb, file, agent, verbose, differential_priorities);
+  kb_init(&alma_kb, file, agent, verbose, differential_priorities, res_heap_size);
   kb_print(alma_kb);
 
   if (run) {

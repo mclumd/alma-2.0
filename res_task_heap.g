@@ -16,13 +16,17 @@
  * You should have received a copy of the GNU General Public License
  * along with Conquest of Levidon.  If not, see <http://www.gnu.org/licenses/>.
  *
- * Modified by jdbrody@gmail.com for use as a resolution task priority queue in alma.  Also adding delete method.
+ * Modified by jdbrody@gmail.com for use as a resolution task priority
+ * queue in alma.  Also adding delete method.  Since we want this to
+ * facilitate a queue that can replace the least-important task, we
+ * also want to keep a dual heap which keeps track of the indices of
+ * elements as a max-heap.
  */
 
 // The arguments with which the macro functions are called are guaranteed to produce no side effects.
 
 //#include "alma_kb.h"
-#define heap_name res_task_heap
+//#define heap_name res_task_heap
 
 
 
@@ -54,28 +58,31 @@
 #define GUARD0 #ifndef RES_TASK_HEAP_H
 #define GUARD1 #define RES_TASK_HEAP_H
 #define GUARD2 #endif
-# define INCLUDE0 #include "resolution.h"
+#define INCLUDE0 #include "resolution.h"
 GUARD0
 GUARD1
 INCLUDE0
 
-typedef struct res_task_pri {
-    res_task *res_task;
-    int priority;
-} res_task_pri;
-
-#define heap_type res_task_pri
-
+#ifdef USE_DUAL_HEAP
+#include "index_heap.h"
+#endif
 
 
 typedef struct heap_name
 {
   heap_type *data; // Array with the elements.
   size_t count; // Number of elements actually in the heap.
-  int max_size;   
+  int max_size;
+#ifdef USE_DUAL_HEAP
+  int max_idx; // Index of maximal element
+  int max_val; // Max priority
+  int min_val; // Not necessary, but easier
+  index_heap *max_heap;   // Keep a heap of indices
+#endif
 } heap_name;
-STATIC void NAME(_init)(struct heap_name *heap);
-STATIC void NAME(_push)(struct heap_name *heap, heap_type value);
+STATIC void NAME(_init)(struct heap_name *heap, int size);
+STATIC heap_type NAME(_item)(struct heap_name *heap, int idx);
+STATIC int NAME(_push)(struct heap_name *heap, heap_type value);
 STATIC heap_type NAME(_pop)(struct heap_name *heap);
 STATIC void NAME(_emerge)(struct heap_name *heap, size_t index);
 STATIC void NAME(_heapify)(struct heap_name *heap);
@@ -98,32 +105,78 @@ INCLUDE1
 #endif
 
 #define heap_type res_task_pri
-STATIC void NAME(_init)(struct heap_name *heap) {
+STATIC void NAME(_init)(struct heap_name *heap, int size) {
   /* For now, just use regular calloc for the data.  Eventually make this a tommy array. */
-  heap->max_size = 200;
+  heap->max_size = size;
   heap->data = calloc(sizeof(res_task_pri), heap->max_size);
   for (int i=0; i < heap->max_size; i++) {
     heap->data[i].res_task = NULL;
     heap->data[i].priority = -1;
   }
   heap->count = 0;
+#ifdef USE_DUAL_HEAP
+  heap->max_idx = 0;
+  heap->max_val = -1;
+  heap->min_val = INT_MAX;
+  index_heap_init(heap->max_heap, size);   // Keep a heap of indices
+#endif
+}
+
+STATIC heap_type NAME(_item)(struct heap_name *heap, int idx) {
+    return heap->data[idx];
 }
 
 // Push element to the heap.
-STATIC void NAME(_push)(struct heap_name *heap, heap_type value)
-{
-	size_t index, parent;
+STATIC int NAME(_push)(struct heap_name *heap, heap_type value) {
+  size_t index, parent;
+  if (heap->count >= heap->max_size) {
+#ifdef USE_DUAL_HEAP
+    /* If we're using a dual heap, we'll replace the maximum valued
+       item with the new value and swim.  Otherwise we simply don't
+       allow pushes to full heaps.  */
+    
+    if (value.priority < heap->max_val) {
 
-	// Find out where to put the element and put it.
-	for(index = heap->count++; index; index = parent)
-	{
-		parent = (index - 1) / 2;
-		if (heap_above(heap->data[parent], value)) break;
-		heap->data[index] = heap->data[parent];
-		heap_update(heap, index);
-	}
-	heap->data[index] = value;
-	heap_update(heap, index);
+      
+      /* We want to get rid of the largest element and add this
+	 one.  By definition, the largest element has no
+	 children, so we want to "swim" from this node.  Since
+	 this was a heap, any heap violations will be localized and swimming will produce a valid min-heap.
+	 
+	 This code is taken from the swim code at:  https://algs4.cs.princeton.edu/24pq/
+      */
+      size_t k;
+      index_heap_el I;
+      I = index_heap_pop(heap->max_heap);
+      k = I.index;
+
+      heap_type temp;
+      heap->data[k] = value;
+      while (k > 1 && heap_above(heap->data[size_t(k/2)], heap->data[k])) {
+	// exch(k, k/2);
+	temp = heap->data[size_t(k/2)];
+	heap->data[size_t(k/2)] = heap->data[k];
+	heap->data[k] = temp;
+	k = size_t(k/2);
+      }
+      /* Push k onto the index heap. */
+      I.index = k;
+      I.prioirty = value.priority;
+      index_heap_push(heap->max_heap, I);
+    }
+#endif
+  } else {
+    // Find out where to put the element and put it in.
+    for(index = heap->count++; index; index = parent) {
+      parent = (index - 1) / 2;
+      if (heap_above(h    eap->data[parent], value)) break;
+      heap->data[index] =     heap->data[parent];
+      heap_update(heap, index);   
+    }
+    heap->data[index] = value;
+    heap_update(heap, index);
+  }
+  return 0;
 }
 
 // Removes the biggest element from the heap.
