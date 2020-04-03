@@ -3,12 +3,15 @@
 #include "alma_fif.h"
 
 static void alma_function_print(alma_function *func);
+static void alma_quote_print(alma_quote *quote);
 
 static void alma_term_print(alma_term *term) {
   if (term->type == VARIABLE)
     tee("%s%lld", term->variable->name, term->variable->id);
-  else
+  else if (term->type == FUNCTION)
     alma_function_print(term->function);
+  else
+    alma_quote_print(term->quote);
 }
 
 static void alma_function_print(alma_function *func) {
@@ -24,56 +27,46 @@ static void alma_function_print(alma_function *func) {
   }
 }
 
-static void alma_fol_print_rec(alma_node *node, int indent) {
-  char *spacing = malloc(indent*2 + 1);
-  if (indent > 0)
-    memset(spacing, ' ', indent*2);
-  spacing[indent*2] = '\0';
+static void alma_quote_print(alma_quote *quote) {
+  tee("\"");
+  if (quote->type == RAW)
+    alma_fol_print(quote->raw_sentence);
+  else
+    clause_print(quote->clause_quote);
+  tee("\"");
+}
 
+void alma_fol_print(alma_node *node) {
   if (node->type == FOL) {
     char *op;
     switch (node->fol->op) {
       case NOT:
-        op = "NOT"; break;
+        op = "~"; break;
       case OR:
-        op = "OR"; break;
+        op = "\\/"; break;
       case AND:
-        op = "AND"; break;
+        op = "/\\"; break;
       case IF:
-        op = "IF"; break;
+        if (node->fol->tag == FIF)
+          op = "-f->";
+        else if (node->fol->tag == BIF)
+          op = "-b->";
+        else
+          op = "--->";
+        break;
     }
 
-    if (node->fol->tag != NONE) {
-      char *tag = "";
-      switch (node->fol->tag) {
-        case FIF:
-          tag = "FIF"; break;
-        case BIF:
-          tag = "BIF"; break;
-        case NONE:
-          tag = "NONE"; break;
-      }
-      tee("%sFOL: %s, tag: %s\n", spacing, op, tag);
-    }
-    else {
-      tee("%sFOL: %s\n", spacing, op);
-    }
+    if (node->fol->op == NOT)
+      tee("%s", op);
+    alma_fol_print(node->fol->arg1);
 
-    alma_fol_print_rec(node->fol->arg1, indent+1);
     if (node->fol->arg2 != NULL) {
-      alma_fol_print_rec(node->fol->arg2, indent+1);
+      tee(" %s ", op);
+      alma_fol_print(node->fol->arg2);
     }
   }
-  else {
-    tee("%sPREDICATE: ", spacing);
+  else
     alma_function_print(node->predicate);
-    tee("\n");
-  }
-  free(spacing);
-}
-
-void alma_fol_print(alma_node *node) {
-  alma_fol_print_rec(node, 0);
 }
 
 static void lits_print(alma_function **lits, int count, char *delimiter, int negate) {

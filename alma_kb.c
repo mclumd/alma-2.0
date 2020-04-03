@@ -58,9 +58,13 @@ static void find_variable_names(tommy_array *list, alma_term *term, int id_from_
       tommy_array_insert(list, id);
     }
   }
-  else
+  else if (term->type == FUNCTION) {
     for (int i = 0; i < term->function->term_count; i++)
       find_variable_names(list, term->function->terms+i, id_from_name);
+  }
+  else {
+    // TODO quote case
+  }
 }
 
 static void set_variable_names(tommy_array *list, alma_term *term, int id_from_name) {
@@ -74,9 +78,13 @@ static void set_variable_names(tommy_array *list, alma_term *term, int id_from_n
         term->variable->id = variable_id_count + i;
     }
   }
-  else
+  else if (term->type == FUNCTION) {
     for (int i = 0; i < term->function->term_count; i++)
       set_variable_names(list, term->function->terms+i, id_from_name);
+  }
+  else {
+    // TODO quote case
+  }
 }
 
 // Given a clause, assign the ID fields of each variable
@@ -392,8 +400,13 @@ static int functions_differ(alma_function *x, alma_function *y, var_matching *ma
           matches->y = realloc(matches->y, sizeof(*matches->y) * matches->count);
           matches->y[matches->count -1] = yval;
         }
-        else if (functions_differ(x->terms[i].function, y->terms[i].function, matches))
+        else if (x->terms[i].type == FUNCTION) {
+          if (functions_differ(x->terms[i].function, y->terms[i].function, matches))
             return 1;
+        }
+        else {
+
+        }
       }
       else
         return 1;
@@ -455,7 +468,8 @@ int clauses_differ(clause *x, clause *y) {
 static int ground_duplicate_literals(alma_function *x, alma_function *y) {
   if (strcmp(x->name, y->name) == 0 && x->term_count == y->term_count) {
     for (int i = 0; i < x->term_count; i++)
-      if (x->terms[i].type != y->terms[i].type || x->terms[i].type == VARIABLE || !ground_duplicate_literals(x->terms[i].function, y->terms[i].function))
+      if (x->terms[i].type != y->terms[i].type || x->terms[i].type == VARIABLE
+          || x->terms[i].type == QUOTE || !ground_duplicate_literals(x->terms[i].function, y->terms[i].function))
         return 0;
     return 1;
   }

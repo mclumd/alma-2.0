@@ -79,8 +79,8 @@ int parse_file(char *filename, mpc_ast_t **ast) {
 
   if (result) {
     *ast = r.output;
-    mpc_ast_print(*ast);
-    exit(0);
+    //mpc_ast_print(*ast);
+    //exit(0);
     return 1;
   }
   else {
