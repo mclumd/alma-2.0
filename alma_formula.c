@@ -20,6 +20,7 @@ void alma_fol_init(alma_node *node, alma_operator op, alma_node *arg1, alma_node
 
 // Recursively constructs ALMA FOL term representation of AST argument into term pointer
 void alma_term_init(alma_term *term, mpc_ast_t *ast) {
+  // Variable
   if (strstr(ast->tag, "variable") != NULL) {
     term->type = VARIABLE;
     term->variable = malloc(sizeof(*term->variable));
@@ -27,10 +28,17 @@ void alma_term_init(alma_term *term, mpc_ast_t *ast) {
     term->variable->id = 0;
     strcpy(term->variable->name, ast->contents);
   }
-  else {
+  // Function
+  else if (strstr(ast->tag, "constant") != NULL || strstr(ast->children[0]->tag, "funcname") != NULL) {
     term->type = FUNCTION;
     term->function = malloc(sizeof(*term->function));
     alma_function_init(term->function, ast);
+  }
+  // Quote
+  else {
+    term->type = QUOTE;
+    term->quote = malloc(sizeof(*term->quote));
+    alma_quote_init(term->quote, ast);
   }
 }
 
@@ -66,6 +74,14 @@ void alma_function_init(alma_function *func, mpc_ast_t *ast) {
       }
     }
   }
+}
+
+static void alma_tree_init(alma_node *alma_tree, mpc_ast_t *ast);
+// Recursively constructs ALMA FOL function representation of AST argument into ALMA quote pointer
+void alma_quote_init(alma_quote *quote, mpc_ast_t *ast) {
+  quote->type = RAW;
+  quote->raw_sentence = malloc(sizeof(*quote->raw_sentence));
+  alma_tree_init(quote->raw_sentence, ast->children[2]);
 }
 
 // Constructs ALMA FOL representation of a predicate:
@@ -192,16 +208,6 @@ void free_function(alma_function *func) {
   free(func);
 }
 
-// Does not free alloc for term pointer itself, due to how terms are allocated in alma_function
-void free_term(alma_term *term) {
-  if (term->type == VARIABLE) {
-    free(term->variable->name);
-    free(term->variable);
-  }
-  else
-    free_function(term->function);
-}
-
 // If freeself is false, does NOT free the top-level alma_node
 static void free_node(alma_node *node, int freeself) {
   if (node == NULL)
@@ -220,6 +226,31 @@ static void free_node(alma_node *node, int freeself) {
     free(node);
 }
 
+void free_quote(alma_quote *quote) {
+  if (quote == NULL)
+    return;
+
+  if (quote->type == RAW) {
+    free_node(quote->raw_sentence, 1);
+  }
+  else {
+    // TODO
+  }
+  free(quote);
+}
+
+// Does not free alloc for term pointer itself, due to how terms are allocated in alma_function
+void free_term(alma_term *term) {
+  if (term->type == VARIABLE) {
+    free(term->variable->name);
+    free(term->variable);
+  }
+  else if (term->type == FUNCTION)
+    free_function(term->function);
+  else
+    free_quote(term->quote);
+}
+
 // Frees an alma_node EXCEPT for top-level
 // If the entire node should be freed, call free_node with freeself true instead!
 void free_alma_tree(alma_node *node) {
@@ -234,19 +265,6 @@ void copy_alma_var(alma_variable *original, alma_variable *copy) {
 }
 
 // Space for copy must be allocated before call
-void copy_alma_term(alma_term *original, alma_term *copy) {
-  copy->type = original->type;
-  if (original->type == VARIABLE) {
-    copy->variable = malloc(sizeof(*copy->variable));
-    copy_alma_var(original->variable, copy->variable);
-  }
-  else {
-    copy->function = malloc(sizeof(*copy->function));
-    copy_alma_function(original->function, copy->function);
-  }
-}
-
-// Space for copy must be allocated before call
 void copy_alma_function(alma_function *original, alma_function *copy) {
   copy->name = malloc(strlen(original->name)+1);
   strcpy(copy->name, original->name);
@@ -258,6 +276,32 @@ void copy_alma_function(alma_function *original, alma_function *copy) {
     for (int i = 0; i < copy->term_count; i++) {
       copy_alma_term(original->terms+i, copy->terms+i);
     }
+  }
+}
+
+void copy_alma_quote(alma_quote *original, alma_quote *copy) {
+  copy->type = original->type;
+  if (copy->type == RAW)
+    copy_alma_tree(original->raw_sentence, copy->raw_sentence);
+  else {
+    // TODO
+  }
+}
+
+// Space for copy must be allocated before call
+void copy_alma_term(alma_term *original, alma_term *copy) {
+  copy->type = original->type;
+  if (original->type == VARIABLE) {
+    copy->variable = malloc(sizeof(*copy->variable));
+    copy_alma_var(original->variable, copy->variable);
+  }
+  else if (original->type == FUNCTION) {
+    copy->function = malloc(sizeof(*copy->function));
+    copy_alma_function(original->function, copy->function);
+  }
+  else {
+    copy->quote = malloc(sizeof(*copy->quote));
+    copy_alma_quote(original->quote, copy->quote);
   }
 }
 
