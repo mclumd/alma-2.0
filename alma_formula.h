@@ -1,8 +1,6 @@
 #ifndef alma_formula_h
 #define alma_formula_h
 
-#include "mpc/mpc.h"
-
 extern long long variable_id_count;
 
 typedef enum node_type {FOL, PREDICATE} node_type;
@@ -51,31 +49,24 @@ typedef struct alma_term {
 
 typedef struct alma_variable {
   char *name;
-  long long id; // Not initialized until the variable in which it appears is converted into a clause
+  long long id; // Zero until the formula it's in converts to a clause
 } alma_variable;
 
+typedef enum quote_type {SENTENCE, CLAUSE} quote_type;
 struct clause;
-
-typedef enum quote_type {RAW, CLAUSE} quote_type;
 
 typedef struct alma_quote {
   quote_type type;
   union {
-    alma_node *raw_sentence;
+    alma_node *sentence;
     struct clause *clause_quote;
   };
 } alma_quote;
 
-// TODO: Determine which of this file's functions should have static linkage
-
-void alma_fol_init(alma_node *node, alma_operator op, alma_node *arg1, alma_node *arg2, if_tag tag);
-void alma_term_init(alma_term *term, mpc_ast_t *ast);
-void alma_function_init(alma_function *func, mpc_ast_t *ast);
-void alma_predicate_init(alma_node *node, mpc_ast_t *ast);
-void alma_quote_init(alma_quote *quote, mpc_ast_t *ast);
-
 int formulas_from_source(char *source, int file_src, int *formula_count, alma_node **formulas);
-void generate_alma_trees(mpc_ast_t *ast, alma_node **alma_trees, int *size);
+void make_cnf(alma_node *node);
+void quote_convert_func(alma_function *func);
+
 void free_function(alma_function *func);
 void free_quote(alma_quote *quote);
 void free_term(alma_term *term);
@@ -85,11 +76,5 @@ void copy_alma_var(alma_variable *original, alma_variable *copy);
 void copy_alma_function(alma_function *original, alma_function *copy);
 void copy_alma_quote(alma_quote *original, alma_quote *copy);
 void copy_alma_term(alma_term *original, alma_term *copy);
-void copy_alma_tree(alma_node *original, alma_node *copy);
-
-void eliminate_conditionals(alma_node *node);
-void negation_inwards(alma_node *node);
-void dist_or_over_and(alma_node *node);
-void make_cnf(alma_node *node);
 
 #endif

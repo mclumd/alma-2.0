@@ -4,22 +4,17 @@
 #include "alma_formula.h"
 #include "alma_print.h"
 #include "alma_parser.h"
+#include "alma_kb.h"
+#include "mpc/mpc.h"
 
 // TODO: Longer term, check for error codes of library functions used
 // TODO: Functions to return error instead of void
 
-// Constructs ALMA FOL operator (i.e. AND/OR/NOT/IF) from arguments
-void alma_fol_init(alma_node *node, alma_operator op, alma_node *arg1, alma_node *arg2, if_tag tag) {
-  node->type = FOL;
-  node->fol = malloc(sizeof(*node->fol));
-  node->fol->op = op;
-  node->fol->arg1 = arg1;
-  node->fol->arg2 = arg2;
-  node->fol->tag = tag;
-}
+static void alma_quote_init(alma_quote *quote, mpc_ast_t *ast);
+static void alma_function_init(alma_function *func, mpc_ast_t *ast);
 
 // Recursively constructs ALMA FOL term representation of AST argument into term pointer
-void alma_term_init(alma_term *term, mpc_ast_t *ast) {
+static void alma_term_init(alma_term *term, mpc_ast_t *ast) {
   // Variable
   if (strstr(ast->tag, "variable") != NULL) {
     term->type = VARIABLE;
@@ -43,7 +38,7 @@ void alma_term_init(alma_term *term, mpc_ast_t *ast) {
 }
 
 // Recursively constructs ALMA FOL function representation of AST argument into ALMA function pointer
-void alma_function_init(alma_function *func, mpc_ast_t *ast) {
+static void alma_function_init(alma_function *func, mpc_ast_t *ast) {
   // Case for function containing no terms
   if (ast->children_num == 0) {
     func->name = malloc(strlen(ast->contents)+1);
@@ -77,16 +72,17 @@ void alma_function_init(alma_function *func, mpc_ast_t *ast) {
 }
 
 static void alma_tree_init(alma_node *alma_tree, mpc_ast_t *ast);
+
 // Recursively constructs ALMA FOL function representation of AST argument into ALMA quote pointer
-void alma_quote_init(alma_quote *quote, mpc_ast_t *ast) {
-  quote->type = RAW;
-  quote->raw_sentence = malloc(sizeof(*quote->raw_sentence));
-  alma_tree_init(quote->raw_sentence, ast->children[2]);
+static void alma_quote_init(alma_quote *quote, mpc_ast_t *ast) {
+  quote->type = SENTENCE;
+  quote->sentence = malloc(sizeof(*quote->sentence));
+  alma_tree_init(quote->sentence, ast->children[2]);
 }
 
 // Constructs ALMA FOL representation of a predicate:
 // an ALMA node whose union is used to hold an ALMA function that describes the predicate
-void alma_predicate_init(alma_node *node, mpc_ast_t *ast) {
+static void alma_predicate_init(alma_node *node, mpc_ast_t *ast) {
   node->type = PREDICATE;
   node->predicate = malloc(sizeof(*node->predicate));
   alma_function_init(node->predicate, ast);
@@ -95,7 +91,6 @@ void alma_predicate_init(alma_node *node, mpc_ast_t *ast) {
 
 // Contents should contain one of not/or/and/if
 static alma_operator op_from_contents(char *contents) {
-  // TODO Probably should use something better than default NOT
   alma_operator result = NOT;
   if (strstr(contents, "or") != NULL)
     result = OR;
@@ -155,7 +150,7 @@ static void alma_tree_init(alma_node *alma_tree, mpc_ast_t *ast) {
 
 // Top-level, given an AST for entire ALMA file parse
 // alma_trees must be freed by caller
-void generate_alma_trees(mpc_ast_t *ast, alma_node **alma_trees, int *size) {
+static void generate_alma_trees(mpc_ast_t *ast, alma_node **alma_trees, int *size) {
   // Expects almaformula production to be children of top level of AST
   // If the grammar changes such that top-level rule doesn't lead to almaformula,
   // this will have to be changed
@@ -230,12 +225,10 @@ void free_quote(alma_quote *quote) {
   if (quote == NULL)
     return;
 
-  if (quote->type == RAW) {
-    free_node(quote->raw_sentence, 1);
-  }
-  else {
-    // TODO
-  }
+  if (quote->type == SENTENCE)
+    free_node(quote->sentence, 1);
+  else
+    free_clause(quote->clause_quote);
   free(quote);
 }
 
@@ -279,12 +272,17 @@ void copy_alma_function(alma_function *original, alma_function *copy) {
   }
 }
 
+static void copy_alma_tree(alma_node *original, alma_node *copy);
+
 void copy_alma_quote(alma_quote *original, alma_quote *copy) {
   copy->type = original->type;
-  if (copy->type == RAW)
-    copy_alma_tree(original->raw_sentence, copy->raw_sentence);
+  if (copy->type == SENTENCE) {
+    copy->sentence = malloc(sizeof(*copy->sentence));
+    copy_alma_tree(original->sentence, copy->sentence);
+  }
   else {
-    // TODO
+    copy->clause_quote = malloc(sizeof(*copy->clause_quote));
+    copy_clause_structure(original->clause_quote, copy->clause_quote);
   }
 }
 
@@ -309,14 +307,11 @@ void copy_alma_term(alma_term *original, alma_term *copy) {
 // If original is null and space is allocated for copy, probably will have memory issues
 // So may make sense to just crash on null dereference instead of checking that
 // TODO: Error return for failure?
-void copy_alma_tree(alma_node *original, alma_node *copy) {
+static void copy_alma_tree(alma_node *original, alma_node *copy) {
   copy->type = original->type;
   // FOL case
   if (original->type == FOL) {
-    if (original->fol == NULL) {
-      copy->fol = NULL;
-    }
-    else {
+    if (original->fol != NULL) {
       copy->fol = malloc(sizeof(*copy->fol));
       copy->fol->op = original->fol->op;
 
@@ -324,35 +319,95 @@ void copy_alma_tree(alma_node *original, alma_node *copy) {
         copy->fol->arg1 = malloc(sizeof(*copy->fol->arg1));
         copy_alma_tree(original->fol->arg1, copy->fol->arg1);
       }
-      else {
+      else
         copy->fol->arg1 = NULL;
-      }
 
       if (original->fol->arg2 != NULL) {
         copy->fol->arg2 = malloc(sizeof(*copy->fol->arg2));
         copy_alma_tree(original->fol->arg2, copy->fol->arg2);
       }
-      else {
+      else
         copy->fol->arg2 = NULL;
-      }
 
       copy->fol->tag = original->fol->tag;
     }
+    else
+      copy->fol = NULL;
   }
   // Function case
   else {
-    if (original->predicate == NULL) {
-      copy->predicate = NULL;
-    }
-    else {
+    if (original->predicate != NULL) {
       copy->predicate = malloc(sizeof(*copy->predicate));
       copy_alma_function(original->predicate, copy->predicate);
+    }
+    else
+      copy->predicate = NULL;
+  }
+}
+
+// Recursively converts all quote alma_nodes to clauses within alma_node
+// Currently does so only if each quoted expression equivalent to single CNF clause
+static void quote_convert(alma_node *node) {
+  if (node->type == FOL) {
+    quote_convert(node->fol->arg1);
+    if (node->fol->arg2 != NULL)
+      quote_convert(node->fol->arg2);
+  }
+  else {
+    quote_convert_func(node->predicate);
+  }
+}
+
+void quote_convert_func(alma_function *func) {
+  for (int i = 0; i < func->term_count; i++) {
+    if ((func->terms+i)->type == FUNCTION)
+      quote_convert_func((func->terms+i)->function);
+    else if ((func->terms+i)->type == QUOTE) {
+      alma_quote *quote = (func->terms+i)->quote;
+
+      if (quote->type == SENTENCE) {
+        quote_convert(quote->sentence);
+
+        alma_node *copy = malloc(sizeof(*copy));
+        copy_alma_tree(quote->sentence, copy);
+        make_cnf(copy);
+
+        if (copy->type == FOL && copy->fol->op == AND)
+          free_alma_tree(copy);
+        else {
+          free_alma_tree(quote->sentence);
+          quote->type = CLAUSE;
+
+          clause *c = malloc(sizeof(*c));
+          c->pos_count = c->neg_count = 0;
+          c->pos_lits = c->neg_lits = NULL;
+          c->parent_set_count = c->children_count = 0;
+          c->parents = NULL;
+          c->children = NULL;
+          c->tag = NONE;
+          c->fif = NULL;
+          make_clause(copy, c);
+          // TODO: when have quasiquotation, set variable IDs; complicated as need context
+          free_alma_tree(copy);
+          quote->clause_quote = c;
+        }
+      }
     }
   }
 }
 
+// Constructs ALMA FOL operator (i.e. AND/OR/NOT/IF) from arguments
+static void alma_fol_init(alma_node *node, alma_operator op, alma_node *arg1, alma_node *arg2, if_tag tag) {
+  node->type = FOL;
+  node->fol = malloc(sizeof(*node->fol));
+  node->fol->op = op;
+  node->fol->arg1 = arg1;
+  node->fol->arg2 = arg2;
+  node->fol->tag = tag;
+}
+
 // Recursively replaces all occurrences of IF(A,B) in node to OR(NOT(A),B)
-void eliminate_conditionals(alma_node *node) {
+static void eliminate_conditionals(alma_node *node) {
   if (node != NULL && node->type == FOL) {
     if (node->fol->op == IF) {
       alma_node *new_negation = malloc(sizeof(*new_negation));
@@ -372,7 +427,7 @@ void eliminate_conditionals(alma_node *node) {
 // Recursively moves FOL negation inward by applying De Morgan's rules
 // Doesn't handle IF case; must call after eliminate_conditionals
 // If a FOL operator of IF is encountered, returns immediately
-void negation_inwards(alma_node *node) {
+static void negation_inwards(alma_node *node) {
   if (node != NULL && node->type == FOL) {
     if (node->fol->op == NOT) {
       alma_node *notarg = node->fol->arg1;
@@ -426,7 +481,7 @@ void negation_inwards(alma_node *node) {
 // Recursively does distribution of OR over AND so that node becomes conjunction of disjuncts
 // If argument is in negation normal form, converts to CNF from there
 // Does not modify anything contained inside of a NOT FOL node
-void dist_or_over_and(alma_node *node) {
+static void dist_or_over_and(alma_node *node) {
   if (node != NULL && node->type == FOL) {
     if (node->fol->op == OR) {
       if (node->fol->arg1->type == FOL && node->fol->arg1->fol->op == AND) {

@@ -1,3 +1,4 @@
+#include <stdarg.h>
 #include "alma_print.h"
 #include "alma_formula.h"
 #include "alma_fif.h"
@@ -29,8 +30,8 @@ static void alma_function_print(alma_function *func) {
 
 static void alma_quote_print(alma_quote *quote) {
   tee("\"");
-  if (quote->type == RAW)
-    alma_fol_print(quote->raw_sentence);
+  if (quote->type == SENTENCE)
+    alma_fol_print(quote->sentence);
   else
     clause_print(quote->clause_quote);
   tee("\"");

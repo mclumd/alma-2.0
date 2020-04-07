@@ -1,6 +1,7 @@
 #ifndef alma_kb_h
 #define alma_kb_h
 
+#include <stdio.h>
 #include "tommy.h"
 #include "alma_formula.h"
 #include "alma_unify.h"
@@ -96,6 +97,7 @@ typedef struct res_task {
   alma_function *neg; // Negative literal from y
 } res_task;
 
+void make_clause(alma_node *node, clause *c);
 int clauses_differ(clause *x, clause *y);
 clause* duplicate_check(kb *collection, clause *c);
 void add_clause(kb *collection, clause *curr);

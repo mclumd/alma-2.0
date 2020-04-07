@@ -4,6 +4,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <getopt.h>
+#include <ctype.h>
 #include "alma_command.h"
 #include "alma_kb.h"
 #include "alma_print.h"
@@ -21,7 +22,6 @@ int main(int argc, char **argv) {
   char *file = NULL;
   char *agent = NULL;
 
-  //int index;
   int c;
   while ((c = getopt (argc, argv, "rvf:a:")) != -1)
     switch (c) {

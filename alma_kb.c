@@ -10,7 +10,7 @@
 
 static long next_index;
 
-static void make_clause(alma_node *node, clause *c) {
+void make_clause(alma_node *node, clause *c) {
   // Note: predicate null assignment necessary for freeing of notes without losing predicates
   if (node != NULL) {
     if (node->type == FOL) {
@@ -19,6 +19,7 @@ static void make_clause(alma_node *node, clause *c) {
         c->neg_count++;
         c->neg_lits = realloc(c->neg_lits, sizeof(*c->neg_lits) * c->neg_count);
         c->neg_lits[c->neg_count-1] = node->fol->arg1->predicate;
+        quote_convert_func(c->neg_lits[c->neg_count-1]);
         node->fol->arg1->predicate = NULL;
       }
       // Case of node is OR
@@ -34,6 +35,7 @@ static void make_clause(alma_node *node, clause *c) {
       c->pos_count++;
       c->pos_lits = realloc(c->pos_lits, sizeof(*c->pos_lits) * c->pos_count);
       c->pos_lits[c->pos_count-1] = node->predicate;
+      quote_convert_func(c->pos_lits[c->pos_count-1]);
       node->predicate = NULL;
     }
   }
@@ -379,8 +381,18 @@ typedef struct var_matching {
 } var_matching;
 
 // Returns 0 if functions are equal while respecting x and y matchings based on matches arg; otherwise returns 1
-// (Further detail in clauses_differ)
-static int functions_differ(alma_function *x, alma_function *y, var_matching *matches) {
+// Pairs of variables quasiquoted to escape quotation must
+static int quotes_differ(alma_quote *x, alma_quote *y, var_matching *matches, int quote_level) {
+  if (x->type == y->type) {
+    // TODO for quote
+    return 1;
+  }
+  return 1;
+}
+
+// Returns 0 if functions are equal while respecting x and y matchings based on matches arg; otherwise returns 1
+// Further detail in clauses_differ
+static int functions_differ(alma_function *x, alma_function *y, var_matching *matches, int quote_level) {
   if (x->term_count == y->term_count && strcmp(x->name, y->name) == 0) {
     for (int i = 0; i < x->term_count; i++) {
       if (x->terms[i].type == y->terms[i].type) {
@@ -401,11 +413,12 @@ static int functions_differ(alma_function *x, alma_function *y, var_matching *ma
           matches->y[matches->count -1] = yval;
         }
         else if (x->terms[i].type == FUNCTION) {
-          if (functions_differ(x->terms[i].function, y->terms[i].function, matches))
+          if (functions_differ(x->terms[i].function, y->terms[i].function, matches, quote_level))
             return 1;
         }
         else {
-
+          if (quotes_differ(x->terms[i].quote, y->terms[i].quote, matches, quote_level+1))
+            return 1;
         }
       }
       else
@@ -438,23 +451,23 @@ int clauses_differ(clause *x, clause *y) {
       for (int i = 0; i < x->fif->premise_count; i++) {
         alma_function *xf = fif_access(x, i);
         alma_function *yf = fif_access(y, i);
-        if (function_compare(&xf, &yf) || functions_differ(xf, yf, &matches))
+        if (function_compare(&xf, &yf) || functions_differ(xf, yf, &matches, 0))
           return release_matches(&matches, 1);
       }
-      if (function_compare(&x->fif->conclusion, &y->fif->conclusion) || functions_differ(x->fif->conclusion, y->fif->conclusion, &matches))
+      if (function_compare(&x->fif->conclusion, &y->fif->conclusion) || functions_differ(x->fif->conclusion, y->fif->conclusion, &matches, 0))
         return release_matches(&matches, 1);
     }
     else {
       for (int i = 0; i < x->pos_count; i++) {
         // TODO: account for case in which may have several literals with name
         // Ignoring this case, sorted literal lists allows comparing ith literals of each clause
-        if (function_compare(x->pos_lits+i, y->pos_lits+i) || functions_differ(x->pos_lits[i], y->pos_lits[i], &matches))
+        if (function_compare(x->pos_lits+i, y->pos_lits+i) || functions_differ(x->pos_lits[i], y->pos_lits[i], &matches, 0))
           return release_matches(&matches, 1);
       }
       for (int i = 0; i < x->neg_count; i++) {
         // TODO: account for case in which may have several literals with name
         // Ignoring this case, sorted literal lists allows comparing ith literals of each clause
-        if (function_compare(x->neg_lits+i, y->neg_lits+i) || functions_differ(x->neg_lits[i], y->neg_lits[i], &matches))
+        if (function_compare(x->neg_lits+i, y->neg_lits+i) || functions_differ(x->neg_lits[i], y->neg_lits[i], &matches, 0))
           return release_matches(&matches, 1);
       }
     }
