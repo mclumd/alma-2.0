@@ -129,6 +129,44 @@ void kb_step(kb *collection) {
       if (c->tag == FIF)
         fif_task_map_init(collection, c);
 
+      int truth = (c->pos_count == 1 && c->neg_count == 0 && strcmp(c->pos_lits[0]->name, "true") == 0 && c->pos_lits[0]->term_count == 1);
+      // Special semantic operator: true
+      // Must be a singleton positive literal with unary quote arg
+      // Process quoted material into new formulas with truth as parent
+      if (truth && c->pos_lits[0]->terms[0].type == QUOTE) {
+        alma_quote *quote = c->pos_lits[0]->terms[0].quote;
+        tommy_array unquoted;
+        tommy_array_init(&unquoted);
+        // Raw sentence must be converted into clauses
+        if (quote->type == SENTENCE) {
+          // TODO
+        }
+        // Quote clause can be extracted directly
+        else {
+          // Note that when quasiquotation is added, if done with new term these must be removed from outermost clause
+          clause *u = malloc(sizeof(*u));
+          copy_clause_structure(quote->clause_quote, u);
+          set_variable_ids(u, 1, NULL);
+          tommy_array_insert(&unquoted, u);
+        }
+
+        for (int j = 0; j < tommy_array_size(&unquoted); j++) {
+          clause *curr = tommy_array_get(&unquoted, j);
+          // Parent is true()
+          curr->parent_set_count = 1;
+          curr->parents = malloc(sizeof(*curr->parents));
+          curr->parents[0].count = 1;
+          curr->parents[0].clauses = malloc(sizeof(*curr->parents[0].clauses));
+          curr->parents[0].clauses[0] = c;
+          // Inserted same timestep
+          tommy_array_insert(&collection->new_clauses, curr);
+        }
+        tommy_array_done(&unquoted);
+      }
+
+      // Special semantic operator: reinstate
+      // Must be a singleton positive literal with unary arg
+      // Reinstatement succeeds if have a valid index for a distrusted sentence
       if (reinstate) {
          alma_term *arg = c->pos_lits[0]->terms;
          if (arg->type == FUNCTION && arg->function->term_count == 0) {
@@ -162,6 +200,7 @@ void kb_step(kb *collection) {
            }
          }
       }
+      // Non-reinstate sentences generate tasks
       else {
         res_tasks_from_clause(collection, c, 1);
         fif_tasks_from_clause(collection, c);

@@ -360,10 +360,10 @@ static void quote_convert(alma_node *node) {
 
 void quote_convert_func(alma_function *func) {
   for (int i = 0; i < func->term_count; i++) {
-    if ((func->terms+i)->type == FUNCTION)
-      quote_convert_func((func->terms+i)->function);
-    else if ((func->terms+i)->type == QUOTE) {
-      alma_quote *quote = (func->terms+i)->quote;
+    if (func->terms[i].type == FUNCTION)
+      quote_convert_func(func->terms[i].function);
+    else if (func->terms[i].type == QUOTE) {
+      alma_quote *quote = func->terms[i].quote;
 
       if (quote->type == SENTENCE) {
         quote_convert(quote->sentence);
@@ -373,9 +373,9 @@ void quote_convert_func(alma_function *func) {
         make_cnf(copy);
 
         if (copy->type == FOL && copy->fol->op == AND)
-          free_alma_tree(copy);
+          free_node(copy, 1);
         else {
-          free_alma_tree(quote->sentence);
+          free_node(quote->sentence, 1);
           quote->type = CLAUSE;
 
           clause *c = malloc(sizeof(*c));
@@ -388,7 +388,7 @@ void quote_convert_func(alma_function *func) {
           c->fif = NULL;
           make_clause(copy, c);
           // TODO: when have quasiquotation, set variable IDs; complicated as need context
-          free_alma_tree(copy);
+          free_node(copy, 1);
           quote->clause_quote = c;
         }
       }

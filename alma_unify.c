@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "alma_unify.h"
+#include "alma_kb.h"
 
 // Returns term variable is bound to if it's in the bindings, null otherwise
 alma_term* bindings_contain(binding_list *theta, alma_variable *var) {
@@ -23,11 +24,15 @@ static int occurs_check(binding_list *theta, alma_variable *var, alma_term *x) {
       return occurs_check(theta, var, res);
   }
   // In function case occurs-check each argument
-  else {
+  else if (x->type == FUNCTION) {
     for (int i = 0; i < x->function->term_count; i++) {
       if (occurs_check(theta, var, x->function->terms + i))
         return 1;
     }
+  }
+  else {
+    // Stubbed quote case; need to eventually check when quasiquotation is added, TODO
+    return 0;
   }
   return 0;
 }
@@ -42,9 +47,12 @@ void subst(binding_list *theta, alma_term *term) {
       copy_alma_term(contained, term);
     }
   }
-  else {
+  else if (term->type == FUNCTION) {
     for (int i = 0; i < term->function->term_count; i++)
       subst(theta, term->function->terms+i);
+  }
+  else {
+    // Stubbed quote case; need to eventually subst when quasiquotation is added, TODO
   }
 }
 
@@ -83,6 +91,27 @@ static int unify_var(alma_term *varterm, alma_term *x, binding_list *theta) {
   }
 }
 
+// TODO -- genralize to unify quasiquoted variables when this is added
+static int unify_quotes(alma_quote *x, alma_quote *y, binding_list *theta) {
+  if (x->type == y->type) {
+    if (x->type == SENTENCE) {
+      // TODO, find way to deal with raw sentence quote unification
+    }
+    else {
+      clause *c_x = x->clause_quote;
+      //clause *c_y = y->clause_quote;
+      for (int i = 0; i < c_x->pos_count; i++) {
+        // TODO
+      }
+      for (int i = 0; i < c_x->neg_count; i++) {
+        // TODO
+      }
+      return 1;
+    }
+  }
+  return 0;
+}
+
 // Unification function based on algorithm in AIMA book
 int unify(alma_term *x, alma_term *y, binding_list *theta) {
   // Unification succeeds without changing theta if trying to unify variable with itself
@@ -104,6 +133,9 @@ int unify(alma_term *x, alma_term *y, binding_list *theta) {
         return 0;
     }
     return 1;
+  }
+  else if (x->type == QUOTE && y->type == QUOTE) {
+    return unify_quotes(x->quote, y->quote, theta);
   }
   else
     return 0;
