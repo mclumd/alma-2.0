@@ -139,13 +139,18 @@ void kb_step(kb *collection) {
         tommy_array_init(&unquoted);
         // Raw sentence must be converted into clauses
         if (quote->type == SENTENCE) {
-          // TODO
+          alma_node *sentence_copy = malloc(sizeof(*sentence_copy));
+          copy_alma_tree(quote->sentence, sentence_copy);
+          flatten_node(sentence_copy, &unquoted, 0);
+          free_alma_tree(sentence_copy);
+          free(sentence_copy);
         }
         // Quote clause can be extracted directly
         else {
-          // Note that when quasiquotation is added, if done with new term these must be removed from outermost clause
+          // TODO when quasiquotation is added, if done with new term these must be removed from outermost clause
           clause *u = malloc(sizeof(*u));
           copy_clause_structure(quote->clause_quote, u);
+          // TODO with quasiquotation, only set IDs for newly unquoted variables
           set_variable_ids(u, 1, NULL);
           tommy_array_insert(&unquoted, u);
         }

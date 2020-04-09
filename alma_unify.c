@@ -91,7 +91,26 @@ static int unify_var(alma_term *varterm, alma_term *x, binding_list *theta) {
   }
 }
 
-// TODO -- genralize to unify quasiquoted variables when this is added
+static int unify_quotes(alma_quote *x, alma_quote *y, binding_list *theta);
+
+static int unify_quote_func(alma_function *x, alma_function *y, binding_list *theta) {
+  if (strcmp(x->name, y->name) == 0 && x->term_count == y->term_count) {
+    for (int i = 0; i < x->term_count; i++) {
+      alma_term *x_t = x->terms+i;
+      alma_term *y_t = y->terms+i;
+      if (x_t->type != y_t->type
+          || (x_t->type == VARIABLE && strcmp(x_t->variable->name, y_t->variable->name) != 0)
+          || (x_t->type == FUNCTION && !unify_quote_func(x_t->function, y_t->function, theta))
+          || !unify_quotes(x_t->quote, y_t->quote, theta))
+        return 0;
+    }
+    return 1;
+  }
+  return 0;
+}
+
+// TODO -- generalize to unify quasiquoted variables when this is added
+// Will involve tracking quote_levels
 static int unify_quotes(alma_quote *x, alma_quote *y, binding_list *theta) {
   if (x->type == y->type) {
     if (x->type == SENTENCE) {
@@ -99,13 +118,13 @@ static int unify_quotes(alma_quote *x, alma_quote *y, binding_list *theta) {
     }
     else {
       clause *c_x = x->clause_quote;
-      //clause *c_y = y->clause_quote;
-      for (int i = 0; i < c_x->pos_count; i++) {
-        // TODO
-      }
-      for (int i = 0; i < c_x->neg_count; i++) {
-        // TODO
-      }
+      clause *c_y = y->clause_quote;
+      for (int i = 0; i < c_x->pos_count; i++)
+        if (!unify_quote_func(c_x->pos_lits[i], c_y->pos_lits[i], theta))
+          return 0;
+      for (int i = 0; i < c_x->neg_count; i++)
+        if (!unify_quote_func(c_x->neg_lits[i], c_y->neg_lits[i], theta))
+          return 0;
       return 1;
     }
   }

@@ -42,7 +42,7 @@ void parse_init(void) {
     " alma         : /^/ (<almaformula> | <almacomment>)* /$/ ;  "
     " almacomment  : /%[^\n]*\n/ ;                               "
     " almaformula  : <sentence> '.' ;                            "
-    " sentence     : (<fformula> | <bformula> | <formula>) ;     "
+    " sentence     : <fformula> | <bformula> | <formula> ;       "
     " formula      : \"and(\" <formula> ',' <formula> ')'        "
     "              | \"or(\" <formula> ','  <formula> ')'        "
     "              | \"if(\" <formula> ',' <formula> ')'         "

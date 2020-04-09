@@ -42,7 +42,7 @@ optional arguments:
 alma         : /^/ (<almaformula> | <almacomment>)* /$/         
 almacomment  : /%[^\n]*\n/
 almaformula  : <sentence> '.'
-sentence     : (<fformula> | <bformula> | <formula>)
+sentence     : <fformula> | <bformula> | <formula>
 formula      : \"and(\" <formula> ',' <formula> ')' | \"or(\" <formula> ','  <formula> ')'
              | \"if(\" <formula> ',' <formula> ')' | \"not(\" <formula> ')' | <literal>
 fformula     : \"fif(\" <conjform> ',' \"conclusion(\" <fformconc> ')' ')'

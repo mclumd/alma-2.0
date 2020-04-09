@@ -57,6 +57,7 @@ void alma_fol_print(alma_node *node) {
         break;
     }
 
+    tee("(");
     if (node->fol->op == NOT)
       tee("%s", op);
     alma_fol_print(node->fol->arg1);
@@ -65,6 +66,7 @@ void alma_fol_print(alma_node *node) {
       tee(" %s ", op);
       alma_fol_print(node->fol->arg2);
     }
+    tee(")");
   }
   else
     alma_function_print(node->predicate);

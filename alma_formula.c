@@ -272,8 +272,6 @@ void copy_alma_function(alma_function *original, alma_function *copy) {
   }
 }
 
-static void copy_alma_tree(alma_node *original, alma_node *copy);
-
 void copy_alma_quote(alma_quote *original, alma_quote *copy) {
   copy->type = original->type;
   if (copy->type == SENTENCE) {
@@ -307,7 +305,7 @@ void copy_alma_term(alma_term *original, alma_term *copy) {
 // If original is null and space is allocated for copy, probably will have memory issues
 // So may make sense to just crash on null dereference instead of checking that
 // TODO: Error return for failure?
-static void copy_alma_tree(alma_node *original, alma_node *copy) {
+void copy_alma_tree(alma_node *original, alma_node *copy) {
   copy->type = original->type;
   // FOL case
   if (original->type == FOL) {

@@ -76,5 +76,6 @@ void copy_alma_var(alma_variable *original, alma_variable *copy);
 void copy_alma_function(alma_function *original, alma_function *copy);
 void copy_alma_quote(alma_quote *original, alma_quote *copy);
 void copy_alma_term(alma_term *original, alma_term *copy);
+void copy_alma_tree(alma_node *original, alma_node *copy);
 
 #endif
