@@ -101,7 +101,7 @@ static int unify_quote_func(alma_function *x, alma_function *y, binding_list *th
       if (x_t->type != y_t->type
           || (x_t->type == VARIABLE && strcmp(x_t->variable->name, y_t->variable->name) != 0)
           || (x_t->type == FUNCTION && !unify_quote_func(x_t->function, y_t->function, theta))
-          || !unify_quotes(x_t->quote, y_t->quote, theta))
+          || (x_t->type == QUOTE && !unify_quotes(x_t->quote, y_t->quote, theta)))
         return 0;
     }
     return 1;

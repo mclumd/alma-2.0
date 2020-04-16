@@ -37,8 +37,8 @@ typedef struct kb {
   int verbose; // Boolean flag for printing extra output
 
   long time;
-  char *now_str; // String representation of now(time).
-  char *prev_str; // String representation of now(time-1).
+  char *now; // String representation of now(time).
+  char *prev; // String representation of now(time-1).
   char *wallnow;
   char *wallprev;
 
@@ -104,6 +104,7 @@ void add_clause(kb *collection, clause *curr);
 void remove_clause(kb *collection, clause *c);
 struct backsearch_task;
 void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr, struct backsearch_task *bs);
+void process_new_clauses(kb *collection);
 void make_single_task(kb *collection, clause *c, alma_function *c_lit, clause *other, tommy_array *tasks, int use_bif, int pos);
 void make_res_tasks(kb *collection, clause *c, int count, alma_function **c_lits, tommy_hashlin *map, tommy_array *tasks, int use_bif, int pos);
 void res_tasks_from_clause(kb *collection, clause *c, int process_negatives);
