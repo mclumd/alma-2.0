@@ -458,8 +458,7 @@ int clauses_differ(clause *x, clause *y) {
   if (x->pos_count == y->pos_count && x->neg_count == y->neg_count){
     var_matching matches;
     matches.count = 0;
-    matches.x = NULL;
-    matches.y = NULL;
+    matches.x = matches.y = NULL;
     if (x->tag == FIF) {
       for (int i = 0; i < x->fif->premise_count; i++) {
         alma_function *xf = fif_access(x, i);
@@ -848,14 +847,21 @@ void res_tasks_from_clause(kb *collection, clause *c, int process_negatives) {
 
 // Returns boolean based on success of string parse
 // If parses successfully, adds to collection's new_clauses
-int assert_formula(kb *collection, char *string, int print) {
+// Returns pointer to first clause asserted, if any
+clause* assert_formula(kb *collection, char *string, int print) {
   alma_node *formulas;
   int formula_count;
   if (formulas_from_source(string, 0, &formula_count, &formulas)) {
-    nodes_to_clauses(formulas, formula_count, &collection->new_clauses, print);
-    return 1;
+    tommy_array temp;
+    tommy_array_init(&temp);
+    nodes_to_clauses(formulas, formula_count, &temp, print);
+    clause *ret = tommy_array_size(&temp) > 0 ? tommy_array_get(&temp, 0) : NULL;
+    for (tommy_size_t i = 0; i < tommy_array_size(&temp); i++)
+      tommy_array_insert(&collection->new_clauses, tommy_array_get(&temp, i));
+    tommy_array_done(&temp);
+    return ret;
   }
-  return 0;
+  return NULL;
 }
 
 int delete_formula(kb *collection, char *string, int print) {
@@ -1106,16 +1112,13 @@ void transfer_parent(kb *collection, clause *target, clause *source, int add_chi
         if (insert)
           add_child(source->parents[0].clauses[j], target);
       }
-      if (distrust && !is_distrusted(collection, target->index)) {
-        char *time_str = long_to_str(collection->time);
-        distrust_recursive(collection, target, time_str);
-        free(time_str);
-      }
+      if (distrust && !is_distrusted(collection, target->index))
+        distrust_recursive(collection, target, NULL);
     }
   }
 }
 
-void distrust_recursive(kb *collection, clause *c, char *time) {
+void distrust_recursive(kb *collection, clause *c, clause *parent) {
   // Add c to distrusted set
   distrust_mapping *d = malloc(sizeof(*d));
   d->key = c->index;
@@ -1124,6 +1127,7 @@ void distrust_recursive(kb *collection, clause *c, char *time) {
 
   // Assert distrusted formula
   char *index = long_to_str(c->index);
+  char *time = long_to_str(collection->time);
   char *distrust_str = malloc(strlen(index) + strlen(time) + 15);
   strcpy(distrust_str, "distrusted(");
   int loc = 11;
@@ -1133,8 +1137,9 @@ void distrust_recursive(kb *collection, clause *c, char *time) {
   distrust_str[loc++] = ',';
   strcpy(distrust_str+loc, time);
   loc += strlen(time);
+  free(time);
   strcpy(distrust_str+loc, ").");
-  assert_formula(collection, distrust_str, 0);
+  clause *distrusted = assert_formula(collection, distrust_str, 0);
   free(distrust_str);
 
   // Unindex c from pos_map/list, neg_map/list to prevent use in inference
@@ -1143,11 +1148,20 @@ void distrust_recursive(kb *collection, clause *c, char *time) {
   for (int i = 0; i < c->neg_count; i++)
     map_remove_clause(&collection->neg_map, &collection->neg_list, c->neg_lits[i], c);
 
+  // Parent argument provided will be set for distrusted formula
+  if (parent != NULL) {
+    distrusted->parent_set_count = 1;
+    distrusted->parents = malloc(sizeof(*distrusted->parents));
+    distrusted->parents[0].count = 1;
+    distrusted->parents[0].clauses = malloc(sizeof(*distrusted->parents[0].clauses));
+    distrusted->parents[0].clauses[0] = parent;
+  }
+
   // Recursively distrust children that aren't distrusted already
   if (c->children != NULL) {
     for (int i = 0; i < c->children_count; i++) {
       if (!is_distrusted(collection, c->children[i]->index)) {
-        distrust_recursive(collection, c->children[i], time);
+        distrust_recursive(collection, c->children[i], parent);
       }
     }
   }
@@ -1309,14 +1323,14 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
               contra_str[loc++] = ',';
               strcpy(contra_str+loc, time_str);
               loc += strlen(time_str);
+              free(time_str);
               strcpy(contra_str+loc, ").");
 
               // Assert contra and distrusted
-              assert_formula(collection, contra_str, 0);
+              clause *contra = assert_formula(collection, contra_str, 0);
               free(contra_str);
-              distrust_recursive(collection, current_task->x, time_str);
-              distrust_recursive(collection, current_task->y, time_str);
-              free(time_str);
+              distrust_recursive(collection, current_task->x, contra);
+              distrust_recursive(collection, current_task->y, contra);
             }
           }
         }
@@ -1331,8 +1345,133 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
   tommy_array_init(tasks);
 }
 
+
+// Special semantic operator: true
+// Must be a singleton positive literal with unary quote arg
+// Process quoted material into new formulas with truth as parent
+static void handle_true(kb *collection, clause *truth) {
+  if (truth->pos_lits[0]->term_count == 1 && truth->pos_lits[0]->terms[0].type == QUOTE) {
+    alma_quote *quote = truth->pos_lits[0]->terms[0].quote;
+    tommy_array unquoted;
+    tommy_array_init(&unquoted);
+    // Raw sentence must be converted into clauses
+    if (quote->type == SENTENCE) {
+      alma_node *sentence_copy = malloc(sizeof(*sentence_copy));
+      copy_alma_tree(quote->sentence, sentence_copy);
+      make_cnf(sentence_copy);
+      flatten_node(sentence_copy, &unquoted, 0);
+      free_alma_tree(sentence_copy);
+      free(sentence_copy);
+    }
+    // Quote clause can be extracted directly
+    else {
+      // TODO when quasiquotation is added, if done with new term these must be removed from outermost clause
+      clause *u = malloc(sizeof(*u));
+      copy_clause_structure(quote->clause_quote, u);
+      // TODO with quasiquotation, only set IDs for newly unquoted variables
+      set_variable_ids(u, 1, NULL);
+      tommy_array_insert(&unquoted, u);
+    }
+
+    for (int i = 0; i < tommy_array_size(&unquoted); i++) {
+      clause *curr = tommy_array_get(&unquoted, i);
+      // Parent is true()
+      curr->parent_set_count = 1;
+      curr->parents = malloc(sizeof(*curr->parents));
+      curr->parents[0].count = 1;
+      curr->parents[0].clauses = malloc(sizeof(*curr->parents[0].clauses));
+      curr->parents[0].clauses[0] = truth;
+      // Inserted same timestep
+      tommy_array_insert(&collection->new_clauses, curr);
+    }
+    tommy_array_done(&unquoted);
+  }
+}
+
+// Special semantic operator: distrust
+// Must be a singleton positive literal with unary function arg [TODO: make quote later]
+// If argument matches a formula in the KB exactly (possibly change this later), derives distrusted
+static void handle_distrust(kb *collection, clause *distrust) {
+  if (distrust->pos_lits[0]->term_count == 1 && distrust->pos_lits[0]->terms[0].type == FUNCTION) {
+    alma_function *func = distrust->pos_lits[0]->terms[0].function;
+
+    tommy_hashlin *map = &collection->pos_map;
+    // Can also distrust negated formula
+    if (strcmp(func->name, "not") == 0) {
+      if (func->term_count != 1 || func->terms[0].type == FUNCTION)
+        return;
+      func = func->terms[0].function;
+      map = &collection->neg_map;
+    }
+
+    char *name = name_with_arity(func->name, func->term_count);
+    predname_mapping *result = tommy_hashlin_search(map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
+    free(name);
+    if (result != NULL) {
+      for (int i = result->num_clauses-1; i >= 0; i--) {
+        if (!is_distrusted(collection, result->clauses[i]->index) && result->clauses[i]->pos_count + result->clauses[i]->neg_count == 1) {
+          alma_function *lit = (map == &collection->pos_map ? result->clauses[i]->pos_lits[0] : result->clauses[i]->neg_lits[0]);
+
+          var_matching matches;
+          matches.count = 0;
+          matches.x = matches.y = NULL;
+          // Distrust each match found
+          if (function_compare(&func, &lit) == 0 || !functions_differ(func, lit, &matches, 0))
+            distrust_recursive(collection, result->clauses[i], distrust);
+          release_matches(&matches, 1);
+        }
+      }
+    }
+  }
+}
+
+// Acquires and sets parent for a distrusted() formula lacking one
+// Formula distrusted() refers to is a child of another formula already considered distrusted
+static void handle_distrusted_parent(kb *collection, clause *dist) {
+  if (dist->pos_lits[0]->term_count == 1 && dist->pos_lits[0]->terms[0].type == FUNCTION && dist->pos_lits[0]->terms[0].function->term_count == 0) {
+    long index = atol(dist->pos_lits[0]->terms[0].function->name);
+    index_mapping *result = tommy_hashlin_search(&collection->index_map, im_compare, &index, tommy_hash_u64(0, &index, sizeof(index)));
+    if (result != NULL) {
+      clause *dist_formula = result->value;
+
+      // Want to retrieve any parent that became distrusted this timestep
+      // Observation that parents distrusted earlier would have set these fields at prior timestep
+      // Can thus retrieve any distrusted parent
+      for (int j = 0; j < dist_formula->parent_set_count; j++) {
+        for (int k = 0; k < dist_formula->parents[j].count; k++) {
+          distrust_mapping *res;
+          index = dist_formula->parents[j].clauses[k]->index;
+
+          // Parent found distrusted
+          if ((res = tommy_hashlin_search(&collection->distrusted, dm_compare, &index, tommy_hash_u64(0, &index, sizeof(index))))) {
+            clause *parent_dist = res->value;
+            index = parent_dist->index;
+
+            // Get clause for its distrust sentence
+            result =  tommy_hashlin_search(&collection->index_map, im_compare, &index, tommy_hash_u64(0, &index, sizeof(index)));
+            if (result) {
+              parent_dist = result->value;
+
+              // Get parent of the distrusted and copy it
+              // Distrusted sentence should have single parent and can access the first
+              if (parent_dist->parent_set_count > 0) {
+                dist->parent_set_count = 1;
+                dist->parents = malloc(sizeof(*dist->parents));
+                dist->parents[0].count = 1;
+                dist->parents[0].clauses = malloc(sizeof(*dist->parents[0].clauses));
+                dist->parents[0].clauses[0] = parent_dist->parents[0].clauses[0];
+                return;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
 // Processing of new clauses: inserts non-duplicates derived, makes new tasks from
-// Special handling for true/reinstate
+// Special handling for true, reinstate, distrust
 void process_new_clauses(kb *collection) {
   fif_to_front(&collection->new_clauses);
 
@@ -1344,45 +1483,16 @@ void process_new_clauses(kb *collection) {
       if (c->tag == FIF)
         fif_task_map_init(collection, c);
 
-      int truth = (c->pos_count == 1 && c->neg_count == 0 && strcmp(c->pos_lits[0]->name, "true") == 0 && c->pos_lits[0]->term_count == 1);
-      // Special semantic operator: true
-      // Must be a singleton positive literal with unary quote arg
-      // Process quoted material into new formulas with truth as parent
-      if (truth && c->pos_lits[0]->terms[0].type == QUOTE) {
-        alma_quote *quote = c->pos_lits[0]->terms[0].quote;
-        tommy_array unquoted;
-        tommy_array_init(&unquoted);
-        // Raw sentence must be converted into clauses
-        if (quote->type == SENTENCE) {
-          alma_node *sentence_copy = malloc(sizeof(*sentence_copy));
-          copy_alma_tree(quote->sentence, sentence_copy);
-          make_cnf(sentence_copy);
-          flatten_node(sentence_copy, &unquoted, 0);
-          free_alma_tree(sentence_copy);
-          free(sentence_copy);
+      if (c->pos_count == 1 && c->neg_count == 0) {
+        if (strcmp(c->pos_lits[0]->name, "true") == 0)
+          handle_true(collection, c);
+        if (strcmp(c->pos_lits[0]->name, "distrusted") == 0) {
+          if (c->parent_set_count == 0)
+            // Distrusted() formula without parent attached can now retreive relevent parent info
+            handle_distrusted_parent(collection, c);
         }
-        // Quote clause can be extracted directly
-        else {
-          // TODO when quasiquotation is added, if done with new term these must be removed from outermost clause
-          clause *u = malloc(sizeof(*u));
-          copy_clause_structure(quote->clause_quote, u);
-          // TODO with quasiquotation, only set IDs for newly unquoted variables
-          set_variable_ids(u, 1, NULL);
-          tommy_array_insert(&unquoted, u);
-        }
-
-        for (int j = 0; j < tommy_array_size(&unquoted); j++) {
-          clause *curr = tommy_array_get(&unquoted, j);
-          // Parent is true()
-          curr->parent_set_count = 1;
-          curr->parents = malloc(sizeof(*curr->parents));
-          curr->parents[0].count = 1;
-          curr->parents[0].clauses = malloc(sizeof(*curr->parents[0].clauses));
-          curr->parents[0].clauses[0] = c;
-          // Inserted same timestep
-          tommy_array_insert(&collection->new_clauses, curr);
-        }
-        tommy_array_done(&unquoted);
+        else if (strcmp(c->pos_lits[0]->name, "distrust") == 0)
+          handle_distrust(collection, c);
       }
 
       // Special semantic operator: reinstate
@@ -1449,13 +1559,11 @@ void process_new_clauses(kb *collection) {
         for (int j = 0; j < c->parents[0].count; j++) {
           add_child(c->parents[0].clauses[j], c);
           if (is_distrusted(collection, c->parents[0].clauses[j]->index))
-            distrust = 1;
+            distrust = c->parents[0].clauses[j]->index;
         }
-        if (distrust) {
-          char *time_str = long_to_str(collection->time);
-          distrust_recursive(collection, c, time_str);
-          free(time_str);
-        }
+        // Unable to always retrieve the parent of distrusted sentence for c's parent; pass NULL for now
+        if (distrust)
+          distrust_recursive(collection, c, NULL);
       }
     }
     else {

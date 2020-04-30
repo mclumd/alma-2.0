@@ -108,7 +108,7 @@ void process_new_clauses(kb *collection);
 void make_single_task(kb *collection, clause *c, alma_function *c_lit, clause *other, tommy_array *tasks, int use_bif, int pos);
 void make_res_tasks(kb *collection, clause *c, int count, alma_function **c_lits, tommy_hashlin *map, tommy_array *tasks, int use_bif, int pos);
 void res_tasks_from_clause(kb *collection, clause *c, int process_negatives);
-int assert_formula(kb *collection, char *string, int print);
+clause* assert_formula(kb *collection, char *string, int print);
 int delete_formula(kb *collection, char *string, int print);
 int update_formula(kb *collection, char *string);
 void resolve(res_task *t, binding_list *mgu, clause *result);
@@ -126,7 +126,7 @@ int is_distrusted(kb *collection, long index);
 char* long_to_str(long x);
 void add_child(clause *parent, clause *child);
 void transfer_parent(kb *collection, clause *target, clause *source, int add_children);
-void distrust_recursive(kb *collection, clause *c, char *time);
+void distrust_recursive(kb *collection, clause *c, clause *parent);
 
 int im_compare(const void *arg, const void *obj);
 int pm_compare(const void *arg, const void *obj);
