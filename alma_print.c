@@ -2,6 +2,8 @@
 #include "alma_formula.h"
 #include "alma_fif.h"
 
+char logs_on;
+
 static void alma_function_print(alma_function *func);
 
 static void alma_term_print(alma_term *term) {
@@ -173,7 +175,9 @@ void tee(char const *content, ...) {
   va_start(ap, content);
   vprintf(content, ap);
   va_end(ap);
-  va_start(ap, content);
-  vfprintf(almalog, content, ap);
-  va_end(ap);
+  if (logs_on) {
+    va_start(ap, content);
+    vfprintf(almalog, content, ap);
+    va_end(ap);
+  }
 }

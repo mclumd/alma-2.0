@@ -10,6 +10,8 @@
 
 #define LINELEN 1000
 
+extern char logs_on;
+
 // Initialize global variable (declared in alma_formula header) to count up variable IDs
 long long variable_id_count = 0;
 
@@ -20,10 +22,11 @@ int main(int argc, char **argv) {
   int verbose = 0;
   char *file = NULL;
   char *agent = NULL;
-
+  logs_on = (char) 1;
+  
   //int index;
   int c;
-  while ((c = getopt (argc, argv, "rvf:a:")) != -1)
+  while ((c = getopt (argc, argv, "rxvf:a:")) != -1)
     switch (c) {
       case 'r':
         run = 1;
@@ -34,6 +37,9 @@ int main(int argc, char **argv) {
       case 'f':
         file = optarg;
         break;
+      case 'x':
+	logs_on = (char) 0;
+	break;
       case 'a':
         agent = optarg;
         break;
@@ -52,7 +58,7 @@ int main(int argc, char **argv) {
     }
 
   if (file == NULL) {
-    printf("Please run with an ALMA file argument.\n");
+    printf("Please run with an ALMA file argument using the \"-f\" option.\n");
     return 0;
   }
 
@@ -72,7 +78,9 @@ int main(int argc, char **argv) {
   strncpy(logname+5+agentlen, time, 24);
   strcpy(logname+5+agentlen+timelen, "-log.txt");
 
-  almalog = fopen(logname, "w");
+  if (logs_on) {
+    almalog = fopen(logname, "w");
+  }
   free(logname);
 
   kb *alma_kb;

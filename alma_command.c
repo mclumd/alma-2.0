@@ -7,6 +7,8 @@
 #include "alma_parser.h"
 #include "alma_print.h"
 
+extern char logs_on;
+
 // Caller will need to free collection with kb_halt
 void kb_init(kb **collection, char *file, char *agent, int verbose) {
   // Allocate and initialize
@@ -270,7 +272,9 @@ void kb_print(kb *collection) {
     }
   }
   tee("\n");
-  fflush(almalog);
+  if (logs_on) {
+    fflush(almalog);
+  }
 }
 
 void kb_halt(kb *collection) {
@@ -324,7 +328,9 @@ void kb_halt(kb *collection) {
 
   parse_cleanup();
 
-  fclose(almalog);
+  if (logs_on) {
+    fclose(almalog);
+  }
 }
 
 void kb_assert(kb *collection, char *string) {
