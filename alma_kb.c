@@ -1428,8 +1428,10 @@ static void handle_distrust(kb *collection, clause *distrust) {
 // Acquires and sets parent for a distrusted() formula lacking one
 // Formula distrusted() refers to is a child of another formula already considered distrusted
 static void handle_distrusted_parent(kb *collection, clause *dist) {
-  if (dist->pos_lits[0]->term_count == 1 && dist->pos_lits[0]->terms[0].type == FUNCTION && dist->pos_lits[0]->terms[0].function->term_count == 0) {
+  if (dist->pos_lits[0]->term_count == 2 && dist->pos_lits[0]->terms[0].type == FUNCTION && dist->pos_lits[0]->terms[0].function->term_count == 0) {
     long index = atol(dist->pos_lits[0]->terms[0].function->name);
+
+    // Retrieve clause distrusted() formula references
     index_mapping *result = tommy_hashlin_search(&collection->index_map, im_compare, &index, tommy_hash_u64(0, &index, sizeof(index)));
     if (result != NULL) {
       clause *dist_formula = result->value;
@@ -1437,32 +1439,41 @@ static void handle_distrusted_parent(kb *collection, clause *dist) {
       // Want to retrieve any parent that became distrusted this timestep
       // Observation that parents distrusted earlier would have set these fields at prior timestep
       // Can thus retrieve any distrusted parent
-      for (int j = 0; j < dist_formula->parent_set_count; j++) {
-        for (int k = 0; k < dist_formula->parents[j].count; k++) {
+      for (int i = 0; i < dist_formula->parent_set_count; i++) {
+        for (int j = 0; j < dist_formula->parents[i].count; j++) {
           distrust_mapping *res;
-          index = dist_formula->parents[j].clauses[k]->index;
+          index = dist_formula->parents[i].clauses[j]->index;
 
           // Parent found distrusted
           if ((res = tommy_hashlin_search(&collection->distrusted, dm_compare, &index, tommy_hash_u64(0, &index, sizeof(index))))) {
             clause *parent_dist = res->value;
-            index = parent_dist->index;
 
-            // Get clause for its distrust sentence
-            result =  tommy_hashlin_search(&collection->index_map, im_compare, &index, tommy_hash_u64(0, &index, sizeof(index)));
-            if (result) {
-              parent_dist = result->value;
-
-              // Get parent of the distrusted and copy it
-              // Distrusted sentence should have single parent and can access the first
-              if (parent_dist->parent_set_count > 0) {
-                dist->parent_set_count = 1;
-                dist->parents = malloc(sizeof(*dist->parents));
-                dist->parents[0].count = 1;
-                dist->parents[0].clauses = malloc(sizeof(*dist->parents[0].clauses));
-                dist->parents[0].clauses[0] = parent_dist->parents[0].clauses[0];
-                return;
+            // Get clause for parent's distrust sentence by searching distrusted predicates
+            char *name = name_with_arity("distrusted", 2);
+            predname_mapping *p_res = tommy_hashlin_search(&collection->pos_map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
+            free(name);
+            char *index_str = long_to_str(index);
+            if (p_res != NULL) {
+              for (int k = 0; k < p_res->num_clauses; k++) {
+                parent_dist = p_res->clauses[k];
+                if (strcmp(parent_dist->pos_lits[0]->name, "distrusted") == 0 && parent_dist->pos_lits[0]->terms[0].type == FUNCTION
+                    && strcmp(parent_dist->pos_lits[0]->terms[0].function->name, index_str) == 0 && parent_dist->pos_count == 1
+                    && parent_dist->neg_count == 0) {
+                  // Get parent of the distrusted and copy it
+                  // Distrusted sentence should have single parent, and can access the first
+                  if (parent_dist->parent_set_count > 0) {
+                    dist->parent_set_count = 1;
+                    dist->parents = malloc(sizeof(*dist->parents));
+                    dist->parents[0].count = 1;
+                    dist->parents[0].clauses = malloc(sizeof(*dist->parents[0].clauses));
+                    dist->parents[0].clauses[0] = parent_dist->parents[0].clauses[0];
+                    free(index_str);
+                    return;
+                  }
+                }
               }
             }
+            free(index_str);
           }
         }
       }
