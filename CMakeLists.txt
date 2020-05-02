@@ -10,6 +10,7 @@ include_directories(.)
 include_directories(mpc)
 include_directories(tommyds/tommyds)
 
+add_executable(task_heap_test task_heap_test.c tommyds/tommyds/tommyarray.c res_task_heap.c)
 add_executable(alma.x
         mpc/mpc.c
         mpc/mpc.h

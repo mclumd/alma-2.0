@@ -4,6 +4,7 @@
 #include "tommy.h"
 #include "alma_formula.h"
 #include "alma_unify.h"
+#include "clause.h"
 #include "resolution.h"
 #include "res_task_heap.h"
 
@@ -14,19 +15,54 @@ extern FILE *almalog;
 struct parent_set;
 struct fif_info;
 
+typedef struct parent_set {
+  int count;
+  clause **clauses;
+} parent_set;
+
+
+
+// Map used for entries in index_map
+typedef struct index_mapping {
+  long key;
+  clause *value;
+  tommy_node hash_node; // Used for storage in tommy_hashlin
+  tommy_node list_node; // Used for storage in tommy_list
+} index_mapping;
+
+// Struct to be held in the positive/negative tommy_hashlin hash tables (pos_map/neg_map)
+typedef struct predname_mapping {
+  char *predname; // Key for hashing, name/arity combination (see name_with_arity())
+  int num_clauses;
+  clause **clauses; // Value
+  tommy_node hash_node; // Node used for storage in tommy_hashlin
+  tommy_node list_node; // Node used for storage in tommy_list
+} predname_mapping;
+
+// Used to track entries in distrusted map
+typedef struct distrust_mapping {
+  long key;
+  clause *value;
+  tommy_node node;
+} distrust_mapping;
 
 
 
 typedef struct kb {
   int verbose; // Boolean flag for printing extra output
   int diff_prior;  // Boolean flag for using differential priorities
-  int (*calc_priority)(struct kb*, res_task *);
+  double (*calc_priority)(struct kb*, res_task *);
 
   long time;
   char *now_str; // String representation of now(time).
   char *prev_str; // String representation of now(time-1).
   char *wallnow;
   char *wallprev;
+
+  int tracking_resolutions;
+  int **resolution_choices;
+  tommy_array *subject_list;
+  int num_subjects;
 
   int idling; // Boolean for idle KB state, from lack of tasks to advance
   tommy_array new_clauses; // Clauses to be permanently added when next step
@@ -86,4 +122,5 @@ void distrust_recursive(kb *collection, clause *c, char *time);
 int im_compare(const void *arg, const void *obj);
 int pm_compare(const void *arg, const void *obj);
 char* name_with_arity(char *name, int arity);
+void init_resolution_choices(int ***resolution_choices, int num_subjects, int num_timesteps);
 #endif

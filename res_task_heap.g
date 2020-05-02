@@ -33,7 +33,7 @@
 
 // Returns whether a is on top of b in the heap.
 #if !defined(heap_above)
-# define heap_above(a, b) ((a.priority) <= (b.priority))
+# define heap_above(a, b) (( (a).priority) <= ( (b).priority))
 #endif
 
 // Called after an element changes its index in the heap (including initial push).
@@ -59,9 +59,11 @@
 #define GUARD1 #define RES_TASK_HEAP_H
 #define GUARD2 #endif
 #define INCLUDE0 #include "resolution.h"
+#define INCLUDE1 #include "tommy.h"  
 GUARD0
 GUARD1
 INCLUDE0
+INCLUDE1
 
 #ifdef USE_DUAL_HEAP
 #include "index_heap.h"
@@ -70,9 +72,10 @@ INCLUDE0
 
 typedef struct heap_name
 {
-  heap_type *data; // Array with the elements.
+  //heap_type *data; // Array with the elements.
+  tommy_array data;
   size_t count; // Number of elements actually in the heap.
-  int max_size;
+  tommy_size_t max_size;
 #ifdef USE_DUAL_HEAP
   int max_idx; // Index of maximal element
   int max_val; // Max priority
@@ -81,12 +84,12 @@ typedef struct heap_name
 #endif
 } heap_name;
 STATIC void NAME(_init)(struct heap_name *heap, int size);
-STATIC heap_type NAME(_item)(struct heap_name *heap, int idx);
-STATIC int NAME(_push)(struct heap_name *heap, heap_type value);
-STATIC heap_type NAME(_pop)(struct heap_name *heap);
+STATIC heap_type *NAME(_item)(struct heap_name *heap, int idx);
+STATIC int NAME(_push)(struct heap_name *heap, heap_type *value);
+STATIC heap_type *NAME(_pop)(struct heap_name *heap);
 STATIC void NAME(_emerge)(struct heap_name *heap, size_t index);
 STATIC void NAME(_heapify)(struct heap_name *heap);
-STATIC int NAME(_delete)(struct heap_name *heap, heap_type value);
+STATIC int NAME(_delete)(struct heap_name *heap, heap_type *value);
 STATIC void NAME(_destroy)(struct heap_name *heap);
 GUARD2
 #endif
@@ -107,13 +110,19 @@ INCLUDE1
 #define heap_type res_task_pri
 STATIC void NAME(_init)(struct heap_name *heap, int size) {
   /* For now, just use regular calloc for the data.  Eventually make this a tommy array. */
-  heap->max_size = size;
-  heap->data = calloc(sizeof(res_task_pri), heap->max_size);
+  //heap->max_size = size;   // Max_size ignored while using tommy arrays
+  //heap->data = calloc(sizeof(res_task_pri), heap->max_size);
+  tommy_array_init(&heap->data);
+  //heap->max_size = tommy_array_size(&heap->data);
+  heap->max_size = 1 << TOMMY_ARRAY_BIT;
+  heap->count = 0;
+  tommy_array_grow(&heap->data, size);
+  /*
   for (int i=0; i < heap->max_size; i++) {
     heap->data[i].res_task = NULL;
     heap->data[i].priority = -1;
-  }
-  heap->count = 0;
+  } */
+
 #ifdef USE_DUAL_HEAP
   heap->max_idx = 0;
   heap->max_val = -1;
@@ -122,14 +131,19 @@ STATIC void NAME(_init)(struct heap_name *heap, int size) {
 #endif
 }
 
-STATIC heap_type NAME(_item)(struct heap_name *heap, int idx) {
-    return heap->data[idx];
+STATIC heap_type *NAME(_item)(struct heap_name *heap, int idx) {
+    return (heap_type *) tommy_array_get(&heap->data, idx);
+    //return heap->data[idx];
 }
 
 // Push element to the heap.
-STATIC int NAME(_push)(struct heap_name *heap, heap_type value) {
-  size_t index, parent;
+STATIC int NAME(_push)(struct heap_name *heap, heap_type *value) {
+  tommy_size_t index, parent;
   if (heap->count >= heap->max_size) {
+    heap->max_size *= 2;
+    tommy_array_grow(&heap->data, heap->max_size);
+    heap->max_size = tommy_array_size(&heap->data);
+
 #ifdef USE_DUAL_HEAP
     /* If we're using a dual heap, we'll replace the maximum valued
        item with the new value and swim.  Otherwise we simply don't
@@ -169,43 +183,50 @@ STATIC int NAME(_push)(struct heap_name *heap, heap_type value) {
     // Find out where to put the element and put it in.
     for(index = heap->count++; index; index = parent) {
       parent = (index - 1) / 2;
-      if (heap_above(h    eap->data[parent], value)) break;
-      heap->data[index] =     heap->data[parent];
+      //if (heap_above(heap->data[parent], value)) break;
+      if (heap_above( * (heap_type *) tommy_array_get(&heap->data, parent), *value)) break;
+      //heap->data[index] =     heap->data[parent];
+      tommy_array_set(&heap->data, index, tommy_array_get(&heap->data, parent));
       heap_update(heap, index);   
     }
-    heap->data[index] = value;
+    // heap->data[index] = value;
+    tommy_array_set(&heap->data, index, value);
     heap_update(heap, index);
   }
   return 0;
 }
 
 // Removes the biggest element from the heap.
-STATIC heap_type NAME(_pop)(struct heap_name *heap)
+STATIC heap_type *NAME(_pop)(struct heap_name *heap)
 {
-	size_t index, swap, other;
-    heap_type result;
-    result = heap->data[0];
-	// Remove the biggest element.
-	heap_type temp = heap->data[--heap->count];
+  tommy_size_t index, swap, other;
+  heap_type *result;
+  //result = heap->data[0];
+  result = (heap_type *) tommy_array_get(&heap->data, 0);
+  // Remove the biggest element.
+  //heap_type temp = heap->data[--heap->count];
+  heap_type *temp = (heap_type *) tommy_array_get(&heap->data, --(heap->count));
 
-	// Reorder the elements.
-	index = 0;
-	while (1)
-	{
-		// Find which child to swap with.
-		swap = index * 2 + 1;
-		if (swap >= heap->count) break; // If there are no children, the heap is reordered.
-		other = swap + 1;
-		if ((other < heap->count) && heap_above(heap->data[other], heap->data[swap])) swap = other;
-		if (heap_above(temp, heap->data[swap])) break; // If the bigger child is less than or equal to its parent, the heap is reordered.
-
-		heap->data[index] = heap->data[swap];
-		heap_update(heap, index);
-		index = swap;
-	}
-	heap->data[index] = temp;
-	heap_update(heap, index);
-	return result;
+  // Reorder the elements.
+  index = 0;
+  while (1)
+    {
+      // Find which child to swap with.
+      swap = index * 2 + 1;
+      if (swap >= heap->count) break; // If there are no children, the heap is reordered.
+      other = swap + 1;
+      if ((other < heap->count) && heap_above( *NAME(_item)(heap,other), *NAME(_item)(heap, swap))) swap = other;
+      //if (heap_above(temp, heap->data[swap])) break; // If the bigger child is less than or equal to its parent, the heap is reordered.
+      //heap->data[index] = heap->data[swap];
+      if (heap_above(*temp, *NAME(_item)(heap, swap))) break; // If the bigger child is less than or equal to its parent, the heap is reordered.
+      tommy_array_set(&heap->data, index, NAME(_item)(heap, swap));
+      heap_update(heap, index);
+      index = swap;
+    }
+  //heap->data[index] = temp;
+  tommy_array_set(&heap->data, index, temp);
+  heap_update(heap, index);
+  return result;
 }
 
 // Move an element closer to the front of the heap.
@@ -213,16 +234,19 @@ STATIC void NAME(_emerge)(struct heap_name *heap, size_t index) // TODO ? rename
 {
 	size_t parent;
 
-	heap_type temp = heap->data[index];
+	//heap_type temp = heap->data[index];
+	heap_type *temp = (heap_type *) tommy_array_get(&heap->data, index);
 
 	for(; index; index = parent)
 	{
 		parent = (index - 1) / 2;
-		if (heap_above(heap->data[parent], temp)) break;
-		heap->data[index] = heap->data[parent];
+		if (heap_above( *NAME(_item)(heap, parent), *temp)) break;
+		//heap->data[index] = heap->data[parent];
+		tommy_array_set(&heap->data, index, tommy_array_get(&heap->data, parent));
 		heap_update(heap, index);
 	}
-	heap->data[index] = temp;
+	//heap->data[index] = temp;
+	tommy_array_set(&heap->data, index, temp);
 	heap_update(heap, index);
 }
 
@@ -230,34 +254,37 @@ STATIC void NAME(_emerge)(struct heap_name *heap, size_t index) // TODO ? rename
 STATIC void NAME(_heapify)(struct heap_name *heap)
 {
 	unsigned item, index, swap, other;
-	heap_type temp;
+	heap_type *temp;
 
 	if (heap->count < 2) return;
 
 	// Move each non-leaf element down in its subtree until it satisfies the heap property.
 	item = (heap->count / 2) - 1;
-	while (1)
-	{
-		// Find the position of the current element in its subtree.
-		temp = heap->data[item];
-		index = item;
-		while (1)
+	while (1) {
+	  // Find the position of the current element in its subtree.
+	  //temp = heap->data[item];
+	  temp = tommy_array_get(&heap->data, item);
+	  index = item;
+	  while (1)
 		{
 			// Find the child to swap with.
 			swap = index * 2 + 1;
 			if (swap >= heap->count) break; // If there are no children, the element is placed properly.
 			other = swap + 1;
-			if ((other < heap->count) && heap_above(heap->data[other], heap->data[swap])) swap = other;
-			if (heap_above(temp, heap->data[swap])) break; // If the bigger child is less than or equal to the parent, the element is placed properly.
+			//if ((other < heap->count) && heap_above(heap->data[other], heap->data[swap])) swap = other;
+			if ((other < heap->count) && heap_above( *NAME(_item)(heap, other), *NAME(_item)(heap, swap))) swap = other;
+			if (heap_above(*temp, *NAME(_item)(heap, swap))) break; // If the bigger child is less than or equal to the parent, the element is placed properly.
 
-			heap->data[index] = heap->data[swap];
+			//heap->data[index] = heap->data[swap];
+			tommy_array_set(&heap->data, index, tommy_array_get(&heap->data, swap));
 			heap_update(heap, index);
 			index = swap;
 		}
 		if (index != item)
 		{
-			heap->data[index] = temp;
-			heap_update(heap, index);
+		  //heap->data[index] = temp;
+		  tommy_array_set(&heap->data, index, temp);
+		  heap_update(heap, index);
 		}
 
 		if (!item) return;
@@ -278,19 +305,24 @@ int res_task_pri_eq( res_task_pri a, res_task_pri b) {
 
 
 // Deletes an element.  Returns 1 if value is found and 0 otherwise.
-// The search for the element is based on res_task equality
-STATIC int NAME(_delete)(struct heap_name *heap, heap_type value) {
-  for ( int i=0; i < heap->count; i++) if (  res_task_pri_eq(heap->data[i], value)) {
-	heap->data[i].priority = -1;
+// The search for the element is based on res_task equality and is slow.
+STATIC int NAME(_delete)(struct heap_name *heap, heap_type *value) {
+  heap_type *element;
+  for ( int i=0; i < heap->count; i++) {
+    element = NAME(_item)(heap, i);
+    if (res_task_pri_eq(*element, *value)) {
+	element->priority = -1;
 	NAME(_heapify)(heap);
 	NAME(_pop)(heap);
 	return 1;
-      }
-  return 0;
+    }
+    return 0;
+  }
 }
 
 STATIC void NAME(_destroy)(struct heap_name *heap) {
-  for (int i = 0; i < heap->count; i++) free(heap->data[i].res_task);
+  for (int i = 0; i < heap->count; i++) free(NAME(_item)(heap, i));
+  tommy_array_done(&heap->data);
   free(heap);
 }
 #endif /* !defined(HEADER) */
