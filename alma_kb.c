@@ -10,6 +10,24 @@
 
 static long next_index;
 
+
+void init_resolution_choices(int ***resolution_choices, int num_subjects, int num_timesteps) {
+    int *data;
+    data = calloc(num_subjects*num_timesteps, sizeof(int));
+    *resolution_choices =  malloc(num_subjects * sizeof(int *));
+    for (int i =0; i < num_subjects; i++) {
+        *(*resolution_choices+i) = &(data[num_timesteps*i]);
+    }
+    /* For debugging, file the array to make sure it's right. */
+    for (int i =0; i < num_subjects; i++)  for (int j=0; j< num_timesteps; j++)
+            (*resolution_choices)[i][j] = i*num_timesteps + j;
+
+  /*   *resolution_choices = malloc(sizeof(int **));
+  **resolution_choices = malloc(num_subjects * sizeof(int *));
+  for (int i =0; i < num_subjects; i++)
+      *(*resolution_choices[i]) = &(data[num_timesteps*i]);  */
+}
+
 static void make_clause(alma_node *node, clause *c) {
   // Note: predicate null assignment necessary for freeing of notes without losing predicates
   if (node != NULL) {
@@ -570,7 +588,7 @@ static void remove_res_tasks(kb *collection, clause *c) {
   dummy_task.res_task = malloc(sizeof(res_task));
   dummy_task.res_task->x = c;
 
-  while ( res_task_heap_delete(&collection->res_tasks, dummy_task) ) res_task_heap_delete(&collection->res_tasks, dummy_task);
+  while ( res_task_heap_delete(&collection->res_tasks, &dummy_task) ) res_task_heap_delete(&collection->res_tasks, &dummy_task);
   free(dummy_task.res_task);
 }
 
@@ -763,14 +781,14 @@ void make_single_task(kb *collection, clause *c, alma_function *c_lit, clause *o
         t->neg = c_lit;
       }
       if (!obviously_wont_unify(t)) {
-	  res_task_pri rtask;
-	  rtask.res_task = t;
-	  
-	  rtask.priority = collection->calc_priority(collection, t);
-	  
-	  res_task_heap_push(tasks, rtask);
-	  //tommy_array_insert(tasks, t);
-	}
+	res_task_pri *rtask = malloc(sizeof(*rtask));
+	rtask->res_task = t;
+	double pri;
+	pri = (collection->calc_priority)(collection, t);
+	rtask->priority = pri;
+	res_task_heap_push(tasks, rtask);
+	//tommy_array_insert(tasks, t);
+      }
     }
   }
 }
@@ -1144,177 +1162,193 @@ static binding_list* parent_binding_prepare(backsearch_task *bs, long parent_ind
   else
     return NULL;
 }
-// Process resolution tasks from argument and place results in new_arr
-void process_var_num_res_tasks(kb *collection, res_task_heap *tasks, tommy_array *new_arr, backsearch_task *bs, int num_to_process) {
-  //for (tommy_size_t i = collection->res_tasks_idx; i < collection->res_tasks_idx + num_to_process; i++) {
-    //res_task *current_task = tommy_array_get(tasks, i);
-  for (int i =0; i < num_to_process; i++) {
-    res_task_pri c;
-    c = res_task_heap_pop(tasks);
-    res_task *current_task = c.res_task;
-    if (current_task != NULL) {
-      // Does not do resolution with a distrusted clause
-      if (!is_distrusted(collection, current_task->x->index) && !is_distrusted(collection,  current_task->y->index)) {
-        binding_list *theta = malloc(sizeof(*theta));
-        theta->list = NULL;
-        theta->num_bindings = 0;
-        // Given a res_task, attempt unification
-        if (pred_unify(current_task->pos, current_task->neg, theta)) {
-          // If successful, create clause for result of resolution and add to new_clauses
-          clause *res_result = malloc(sizeof(*res_result));
-          resolve(current_task, theta, res_result);
 
-          binding_list *x_bindings = NULL;
-          if (bs) {
-            x_bindings = parent_binding_prepare(bs, current_task->x->index, theta);
-            binding_list *y_bindings = parent_binding_prepare(bs, current_task->y->index, theta);
-            if (x_bindings != NULL && y_bindings != NULL) {
-              // Check that tracked bindings for unified pair are compatible/unifiable
-              binding_list *parent_theta = malloc(sizeof(*parent_theta));
-              parent_theta->num_bindings = 0;
-              parent_theta->list = NULL;
-              int unify_fail = 0;
-              for (int j = 0; j < x_bindings->num_bindings; j++) {
-                if (!unify(x_bindings->list[j].term, y_bindings->list[j].term, parent_theta)) {
-                  unify_fail = 1;
-                  break;
-                }
-              }
-              cleanup_bindings(y_bindings);
-              if (unify_fail) {
-                cleanup_bindings(parent_theta);
-                cleanup_bindings(x_bindings);
+void note_resolution_subjects(kb *collection, clause *res_result);
 
-                if (res_result->pos_count > 0) {
-                  for (int j = 0; j < res_result->pos_count; j++)
-                    free_function(res_result->pos_lits[j]);
-                  free(res_result->pos_lits);
-                }
-                if (res_result->neg_count > 0) {
-                  for (int j = 0; j < res_result->neg_count; j++)
-                    free_function(res_result->neg_lits[j]);
-                  free(res_result->neg_lits);
-                }
-                free(res_result);
-                goto cleanup;
-              }
-              else {
-                // Use x_bindings with collected info as binding stuff
-                binding_subst(x_bindings, parent_theta);
 
-                // Apply parent_theta to resolution result as well
-                for (int j = 0; j < res_result->pos_count; j++)
-                  for (int k = 0; k < res_result->pos_lits[j]->term_count; k++)
-                    subst(parent_theta, res_result->pos_lits[j]->terms+k);
-                for (int j = 0; j < res_result->neg_count; j++)
-                  for (int k = 0; k < res_result->neg_lits[j]->term_count; k++)
-                    subst(parent_theta, res_result->neg_lits[j]->terms+k);
+// TODO:  Having this function in addition to process_single_res_task is messy; clean it up.
+//void process_one_res_task(kb *collection, res_task_heap *tasks, tommy_array *new_arr, backsearch_task *bs, res_task_pri c);
+void process_one_res_task(kb *collection, res_task_heap *tasks, tommy_array *new_arr, backsearch_task *bs, res_task_pri c) {
+  res_task *current_task = c.res_task;
+  if (current_task != NULL) {
+    // Does not do resolution with a distrusted clause
+    if (!is_distrusted(collection, current_task->x->index) && !is_distrusted(collection,  current_task->y->index)) {
+      binding_list *theta = malloc(sizeof(*theta));
+      theta->list = NULL;
+      theta->num_bindings = 0;
+      // Given a res_task, attempt unification
+      if (pred_unify(current_task->pos, current_task->neg, theta)) {
+	// If successful, create clause for result of resolution and add to new_clauses
+	clause *res_result = malloc(sizeof(*res_result));
+	resolve(current_task, theta, res_result);
+	
+	binding_list *x_bindings = NULL;
+	if (bs) {
+	  x_bindings = parent_binding_prepare(bs, current_task->x->index, theta);
+	  binding_list *y_bindings = parent_binding_prepare(bs, current_task->y->index, theta);
+	  if (x_bindings != NULL && y_bindings != NULL) {
+	    // Check that tracked bindings for unified pair are compatible/unifiable
+	    binding_list *parent_theta = malloc(sizeof(*parent_theta));
+	    parent_theta->num_bindings = 0;
+	    parent_theta->list = NULL;
+	    int unify_fail = 0;
+	    for (int j = 0; j < x_bindings->num_bindings; j++) {
+	      if (!unify(x_bindings->list[j].term, y_bindings->list[j].term, parent_theta)) {
+		unify_fail = 1;
+		break;
+	      }
+	    }
+	    cleanup_bindings(y_bindings);
+	    if (unify_fail) {
+	      cleanup_bindings(parent_theta);
+	      cleanup_bindings(x_bindings);
+	      
+	      if (res_result->pos_count > 0) {
+		for (int j = 0; j < res_result->pos_count; j++)
+		  free_function(res_result->pos_lits[j]);
+		free(res_result->pos_lits);
+	      }
+	      if (res_result->neg_count > 0) {
+		for (int j = 0; j < res_result->neg_count; j++)
+		  free_function(res_result->neg_lits[j]);
+		free(res_result->neg_lits);
+	      }
+	      free(res_result);
+	      goto cleanup;
+	    } else {
+	      // Use x_bindings with collected info as binding stuff
+	      binding_subst(x_bindings, parent_theta);
 
-                cleanup_bindings(parent_theta);
-              }
-            }
-            else if (x_bindings == NULL) {
-              // Consolidate to only x_bindings
-              x_bindings = y_bindings;
-            }
-          }
+	      // Apply parent_theta to resolution result as well
+	      for (int j = 0; j < res_result->pos_count; j++)
+		for (int k = 0; k < res_result->pos_lits[j]->term_count; k++)
+		  subst(parent_theta, res_result->pos_lits[j]->terms+k);
+	      for (int j = 0; j < res_result->neg_count; j++)
+		for (int k = 0; k < res_result->neg_lits[j]->term_count; k++)
+		  subst(parent_theta, res_result->neg_lits[j]->terms+k);
+	      
+	      cleanup_bindings(parent_theta);
+	    }
+	  }
+	  else if (x_bindings == NULL) {
+	    // Consolidate to only x_bindings
+	    x_bindings = y_bindings;
+	  }
+	}
+	
+	// An empty resolution result is not a valid clause to add to KB
+	if (res_result->pos_count > 0 || res_result->neg_count > 0) {
+	  // Initialize parents of result
+	  res_result->parent_set_count = 1;
+	  res_result->parents = malloc(sizeof(*res_result->parents));
+	  res_result->parents[0].count = 2;
+	  res_result->parents[0].clauses = malloc(sizeof(*res_result->parents[0].clauses) * 2);
+	  res_result->parents[0].clauses[0] = current_task->x;
+	  res_result->parents[0].clauses[1] = current_task->y;
+	  res_result->children_count = 0;
+	  res_result->children = NULL;
+	  
+	  set_variable_ids(res_result, 0, x_bindings);
+	  
+	  tommy_array_insert(new_arr, res_result);
+	  if (collection->tracking_resolutions)
+	    note_resolution_subjects(collection, res_result);
+	  if (bs)
+	    tommy_array_insert(&bs->new_clause_bindings, x_bindings);
+	}
+	else {
+	  free(res_result);
+	  
+	  if (bs) {
+	    clause *answer = malloc(sizeof(*answer));
+	    memcpy(answer, bs->target, sizeof(*answer));
+	    if (bs->target->pos_count == 1){
+	      answer->pos_lits = malloc(sizeof(*answer->pos_lits));
+	      answer->pos_lits[0] = malloc(sizeof(*answer->pos_lits[0]));
+	      copy_alma_function(bs->target->pos_lits[0], answer->pos_lits[0]);
+	      for (int j = 0; j < answer->pos_lits[0]->term_count; j++)
+		subst(x_bindings, answer->pos_lits[0]->terms+j);
+	    }
+	    else {
+	      answer->neg_lits = malloc(sizeof(*answer->neg_lits));
+	      answer->neg_lits[0] = malloc(sizeof(*answer->neg_lits[0]));
+	      copy_alma_function(bs->target->neg_lits[0], answer->neg_lits[0]);
+	      for (int j = 0; j < answer->neg_lits[0]->term_count; j++)
+		subst(x_bindings, answer->neg_lits[0]->terms+j);
+	    }
+	    
+	    // TODO: parent setup for answer?
+	    tommy_array_insert(&collection->new_clauses, answer);
+	    cleanup_bindings(x_bindings);
+	  }
+	  else {
+	    // If not a backward search, empty resolution result indicates a contradiction between clauses
+	    
+	    char *arg1 = long_to_str(current_task->x->index);
+	    char *arg2 = long_to_str(current_task->y->index);
+	    char *time_str = long_to_str(collection->time);
+	    
+	    char *contra_str = malloc(strlen(arg1) + strlen(arg2) + strlen(time_str) + 12);
+	    strcpy(contra_str, "contra(");
+	    int loc = 7;
+	    strcpy(contra_str+loc, arg1);
+	    loc += strlen(arg1);
+	    free(arg1);
+	    contra_str[loc++] = ',';
+	    strcpy(contra_str+loc, arg2);
+	    loc += strlen(arg2);
+	    free(arg2);
+	    contra_str[loc++] = ',';
+	    strcpy(contra_str+loc, time_str);
+	    loc += strlen(time_str);
+	    strcpy(contra_str+loc, ").");
 
-          // An empty resolution result is not a valid clause to add to KB
-          if (res_result->pos_count > 0 || res_result->neg_count > 0) {
-            // Initialize parents of result
-            res_result->parent_set_count = 1;
-            res_result->parents = malloc(sizeof(*res_result->parents));
-            res_result->parents[0].count = 2;
-            res_result->parents[0].clauses = malloc(sizeof(*res_result->parents[0].clauses) * 2);
-            res_result->parents[0].clauses[0] = current_task->x;
-            res_result->parents[0].clauses[1] = current_task->y;
-            res_result->children_count = 0;
-            res_result->children = NULL;
-
-            set_variable_ids(res_result, 0, x_bindings);
-
-            tommy_array_insert(new_arr, res_result);
-            if (bs)
-              tommy_array_insert(&bs->new_clause_bindings, x_bindings);
-          }
-          else {
-            free(res_result);
-
-            if (bs) {
-              clause *answer = malloc(sizeof(*answer));
-              memcpy(answer, bs->target, sizeof(*answer));
-              if (bs->target->pos_count == 1){
-                answer->pos_lits = malloc(sizeof(*answer->pos_lits));
-                answer->pos_lits[0] = malloc(sizeof(*answer->pos_lits[0]));
-                copy_alma_function(bs->target->pos_lits[0], answer->pos_lits[0]);
-                for (int j = 0; j < answer->pos_lits[0]->term_count; j++)
-                  subst(x_bindings, answer->pos_lits[0]->terms+j);
-              }
-              else {
-                answer->neg_lits = malloc(sizeof(*answer->neg_lits));
-                answer->neg_lits[0] = malloc(sizeof(*answer->neg_lits[0]));
-                copy_alma_function(bs->target->neg_lits[0], answer->neg_lits[0]);
-                for (int j = 0; j < answer->neg_lits[0]->term_count; j++)
-                  subst(x_bindings, answer->neg_lits[0]->terms+j);
-              }
-
-              // TODO: parent setup for answer?
-              tommy_array_insert(&collection->new_clauses, answer);
-              cleanup_bindings(x_bindings);
-            }
-            else {
-              // If not a backward search, empty resolution result indicates a contradiction between clauses
-
-              char *arg1 = long_to_str(current_task->x->index);
-              char *arg2 = long_to_str(current_task->y->index);
-              char *time_str = long_to_str(collection->time);
-
-              char *contra_str = malloc(strlen(arg1) + strlen(arg2) + strlen(time_str) + 12);
-              strcpy(contra_str, "contra(");
-              int loc = 7;
-              strcpy(contra_str+loc, arg1);
-              loc += strlen(arg1);
-              free(arg1);
-              contra_str[loc++] = ',';
-              strcpy(contra_str+loc, arg2);
-              loc += strlen(arg2);
-              free(arg2);
-              contra_str[loc++] = ',';
-              strcpy(contra_str+loc, time_str);
-              loc += strlen(time_str);
-              strcpy(contra_str+loc, ").");
-
-              // Assert contra and distrusted
-              assert_formula(collection, contra_str, 0);
-              free(contra_str);
-              distrust_recursive(collection, current_task->x, time_str);
-              distrust_recursive(collection, current_task->y, time_str);
-              free(time_str);
-            }
-          }
-        }
-        cleanup:
-        cleanup_bindings(theta);
+	    // Assert contra and distrusted
+	    assert_formula(collection, contra_str, 0);
+	    free(contra_str);
+	    distrust_recursive(collection, current_task->x, time_str);
+	    distrust_recursive(collection, current_task->y, time_str);
+	    free(time_str);
+	  }
+	}
       }
-
-      free(current_task);
+    cleanup:
+      cleanup_bindings(theta);
     }
+    free(current_task);
   }
-  /*
-  collection->res_tasks_idx += num_to_process;
-  if (collection->res_tasks_idx == tommy_array_size(tasks) ) {
-      tee("Resetting res_tasks_idx.\n");
-      tommy_array_done(tasks);
-      tommy_array_init(tasks);
-      collection->res_tasks_idx = 0;
-      } */
 }
 
+
+// Process resolution tasks from argument and place results in new_arr
+void process_var_num_res_tasks(kb *collection, res_task_heap *tasks, tommy_array *new_arr, backsearch_task *bs, int num_to_process) {
+  // First, process everything of priority 0 -- these are things that cannot wait because they will be deleted */
+  res_task_pri  *peek_task;
+  if (tasks->count <= 0) return;
+  peek_task = res_task_heap_item(tasks, 0);
+  while (peek_task->priority == 0) {
+    peek_task = res_task_heap_pop(tasks);
+    process_one_res_task(collection, tasks, new_arr, bs, *peek_task);
+    if (tasks->count <= 0) return;
+    peek_task = res_task_heap_item(tasks, 0);
+  }
+
+
+  for (int i =0; i < num_to_process; i++) {
+      /* Do nothing if everything has been processed. */
+      // TODO:  Better to modify num_to_process after resolving prioirty 0 tasks.
+      if (tasks->count <= 0) return;
+      res_task_pri c;
+      c = *res_task_heap_pop(tasks);
+      process_one_res_task(collection, tasks, new_arr, bs, c);
+  }
+}
 
 //void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr, backsearch_task *bs) {
 void process_res_tasks(kb *collection, res_task_heap *tasks, tommy_array *new_arr, backsearch_task *bs) {
   process_var_num_res_tasks(collection, tasks, new_arr, bs, tasks->count);
 }
+
 //void process_single_res_task(kb *collection, tommy_array *tasks, tommy_array *new_arr, backsearch_task *bs) {
 void process_single_res_task(kb *collection, res_task_heap *tasks, tommy_array *new_arr, backsearch_task *bs) {
   if (tasks->count > 0) {
@@ -1322,4 +1356,29 @@ void process_single_res_task(kb *collection, res_task_heap *tasks, tommy_array *
   } else {
     process_var_num_res_tasks(collection, tasks, new_arr, bs, 0);
   }
+}
+
+
+/* Given the resolution result, find the relevant subjects and mark them as being used. */
+void note_resolution_subjects(kb *collection, clause *res_result) {
+    // TODO:  bring back the function; basically commented out now for debugging
+    return;
+    int current_time = collection->time;
+    int subj_idx;
+    int lit_idx;
+    int term_idx;
+    char *subject;
+    /* For each subject, go through the positive and negative literals, and look for any terms that match */
+    for (subj_idx = 0; subj_idx < collection->num_subjects; subj_idx++) {
+        subject = tommy_array_get(collection->subject_list, subj_idx);
+        for (lit_idx = 0; lit_idx < res_result->pos_count; lit_idx++)
+            for (term_idx = 0; term_idx < (res_result->pos_lits)[lit_idx]->term_count; term_idx++)
+                if (strncmp((res_result->pos_lits)[lit_idx]->terms[term_idx].function->name, subject,
+                            strlen(subject)) == 0)
+                    collection->resolution_choices[subj_idx][current_time] = 1;
+/*    for (lit_idx = 0; lit_idx < res_result->neg_count; lit_idx++)
+      if (strncmp(res_result->neg_lits[lit_idx]->terms->name, subject, strlen(subject)) == 0)
+	    collection->resolution_choices[subj_idx][current_time] = 1;*/
+    }
+//return;
 }

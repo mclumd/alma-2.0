@@ -17,7 +17,10 @@ void kb_init(kb **collection, char *file, char *agent, int verbose, int differen
 
   collec->verbose = verbose;
   collec->diff_prior = differential_priorities;
-  collec->calc_priority = differential_priorities ? (compute_priority) : (zero_priority);
+  //collec->calc_priority = differential_priorities ? (compute_priority) : (zero_priority);
+  collec->calc_priority = differential_priorities ? (compute_priority) : (base_priority);
+  collec->tracking_resolutions = 0;
+  collec->subject_list = malloc(sizeof(tommy_array));
 
   collec->time = 1;
   collec->prev_str = NULL;
@@ -251,20 +254,20 @@ void kb_print(kb *collection) {
   res_task_pri tp;
   res_task *t;
   int j = 0;
-  if (res_tasks->count > 0) {
+  if (res_tasks->count > 0) { 
     tee("---------------------------------------\n");
     tee("Resolution tasks.\n");
     tee("Heap count: %d\n\n", res_tasks->count);
     tee("Pri\t\tx\t\ty\t\tPos\t\tNeg\n");
     for (j=0; j< res_tasks->count; j++) {
-      tp = res_task_heap_item(res_tasks, j);
-      tee("%d\t\t", tp.priority);
+      tp = *res_task_heap_item(res_tasks, j);
+      tee("%g\t\t", tp.priority);
       t = tp.res_task;
       res_task_print(t);
       tee("\n");
     }
-  tee("\n");
-  }
+  tee("END RESOLUTION HEAP.\n");
+  } 
 }
 
 void kb_halt(kb *collection) {

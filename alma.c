@@ -18,29 +18,76 @@ FILE *almalog = NULL;
 void print_usage() {
   fprintf(stderr, "Usage: alma.x [options]\n"
 	  "Options:\n"
-	  "  -P               Assign different priorities for resolution of tasks with astep (default is False)\n"
-	  "  -H <size>        Max size for resolution heap (default 10000)"
-	  "  -r               Run continuosly (default is False)\n"
-	  "  -v               Verbose mode (default is False)\n"
-	  "  -f <filename>    Initial input file (required)\n"
-	  "  -a <name>        Agent name\n"
-	  "  -h               Print this help message\n\n");
+	  "  -P                  Assign different priorities for resolution of tasks with astep (default is False)\n"
+	  "  -R <sfile>          Track resolution steps, using <sfile> for subject names\n"
+	  "  -M <ofile>          Output tracked resolution matrix to <ofile>; assumes -R\n"
+	  "  -T <horizon>          Track resolution steps, timestep horizon; assumes -R\n"
+	  "  -H <size>           Max size for resolution heap (default 10000)"
+	  "  -r                  Run continuosly (default is False)\n"
+	  "  -v                  Verbose mode (default is False)\n"
+	  "  -f <filename>       Initial input file (required)\n"
+	  "  -a <name>           Agent name\n"
+	  "  -h                  Print this help message\n\n");
   return;
 }
 
+void parse_subjects_file(tommy_array *subj_list, int *num_subjects, char *subjects_file) {
+  FILE *sf;
+  sf = fopen(subjects_file, "r");
+  if (sf == NULL) {
+    fprintf(stderr, "Couldn't open subjects file %s\n", subjects_file);
+    exit(1);
+  }
+  char subj_line[1024];
+  int subj_len;
+  char *subj_copy;
+  tommy_array_init(subj_list);
+  *num_subjects = 0;
+  while (fgets(subj_line, 1024, sf) != NULL) {
+    subj_len = strlen(subj_line) + 1; // Add one for terminating \0
+    subj_copy = malloc(subj_len * sizeof(char));
+    strncpy(subj_copy, subj_line, subj_len);
+    subj_copy[subj_len-2] = '\0';
+    tommy_array_insert(subj_list, subj_copy);
+    (*num_subjects)++;
+  }
+  fclose(sf);
+}
 
+void write_resolution_matrix(kb *alma_kb, int num_subjects, int resolutions_horizon, char *filename) {
+  FILE *fp;
+  fp = fopen(filename, "wt");
+  if (fp == NULL) {
+    fprintf(stderr, "Couldn't open file %s for writing.\n", filename);
+    exit(1);
+  }
+  /* For now, just write a text file. */
+  for(int subj = 0; subj < num_subjects; subj++) {
+    for(int t=0; t < resolutions_horizon; t++) {
+      fprintf(fp, "%d ", alma_kb->resolution_choices[subj][t]);
+    }
+    fprintf(fp, "\n");
+  }
+  fclose(fp);
+}
   
 int main(int argc, char **argv) {
   int run = 0;
   int verbose = 0;
   int differential_priorities = 0;
+  int tracking_resolutions = 0;
+  int resolutions_horizon = -1;
+  int num_subjects;
   int res_heap_size = 10000;
+  tommy_array subjects_list;
   char *file = NULL;
   char *agent = NULL;
+  char *subjects_file = NULL;
+  char *resolutions_file = NULL;
 
   //int index;
   int c;
-  while ((c = getopt (argc, argv, "PH:rvf:a:h")) != -1)
+  while ((c = getopt (argc, argv, "PH:rvf:a:hR:M:T:")) != -1)
     switch (c) {
     case 'P':
       differential_priorities = 1;
@@ -62,6 +109,16 @@ int main(int argc, char **argv) {
       break;
     case 'a':
       agent = optarg;
+      break;
+    case 'R':
+      tracking_resolutions = 1;
+      subjects_file = optarg;
+      break;
+    case 'M':
+      resolutions_file = optarg;
+      break;
+    case 'T':
+      resolutions_horizon = atoi(optarg);
       break;
     case '?':
       if (optopt == 'f')
@@ -106,6 +163,12 @@ int main(int argc, char **argv) {
   kb_init(&alma_kb, file, agent, verbose, differential_priorities, res_heap_size);
   kb_print(alma_kb);
 
+  if (tracking_resolutions) {
+    alma_kb->tracking_resolutions = 1;
+    parse_subjects_file(alma_kb->subject_list, &(alma_kb->num_subjects), subjects_file);
+   //init_resolution_choices(&(alma_kb->resolution_choices), alma_kb->num_subjects, resolutions_horizon);
+  }
+  
   if (run) {
     while (!alma_kb->idling) {
       kb_step(alma_kb, 0);
@@ -134,7 +197,10 @@ int main(int argc, char **argv) {
           kb_print(alma_kb);
         }
         else if (strcmp(line, "halt") == 0) {
-          kb_halt(alma_kb);
+            if (tracking_resolutions) {
+                write_resolution_matrix(alma_kb, alma_kb->num_subjects, resolutions_horizon, resolutions_file);
+            }
+            kb_halt(alma_kb);
           break;
         }
         else if ((pos = strstr(line, "add ")) != NULL && pos == line) {
@@ -176,3 +242,5 @@ int main(int argc, char **argv) {
 
   return 0;
 }
+
+
