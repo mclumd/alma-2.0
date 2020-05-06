@@ -786,6 +786,7 @@ void make_single_task(kb *collection, clause *c, alma_function *c_lit, clause *o
 	double pri;
 	pri = (collection->calc_priority)(collection, t);
 	rtask->priority = pri;
+	//if (tasks->count < 10000)  res_task_heap_push(tasks, rtask);
 	res_task_heap_push(tasks, rtask);
 	//tommy_array_insert(tasks, t);
       }
@@ -1361,8 +1362,6 @@ void process_single_res_task(kb *collection, res_task_heap *tasks, tommy_array *
 
 /* Given the resolution result, find the relevant subjects and mark them as being used. */
 void note_resolution_subjects(kb *collection, clause *res_result) {
-    // TODO:  bring back the function; basically commented out now for debugging
-    return;
     int current_time = collection->time;
     int subj_idx;
     int lit_idx;

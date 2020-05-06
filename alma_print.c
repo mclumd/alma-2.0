@@ -157,6 +157,9 @@ void clause_print(clause *c) {
       if (c->children != NULL)
         tee(", ");
     }
+
+
+    /* TODO:  Bring this back; right now it's eating up lots of time
     if (c->children != NULL) {
       tee("children: ");
       for (int i = 0; i < c->children_count; i++) {
@@ -164,7 +167,7 @@ void clause_print(clause *c) {
         if (i < c->children_count-1)
           tee(", ");
       }
-    }
+    } */
     tee(")");
   }
   //tee(" (L%ld)", c->learned);

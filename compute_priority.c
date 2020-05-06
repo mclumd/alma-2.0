@@ -55,7 +55,8 @@ double base_priority(kb *knowledge_base, res_task *t) {
   if ( (strncmp(t->pos->name, "now", 3) == 0 ) && is_number(t->pos->terms[0].variable->name))
     return 0.0;
   else
-    return 1.0;
+    //return 1.0;
+    return (double) rand() / (double) RAND_MAX;
 }
 
 
