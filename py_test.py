@@ -7,6 +7,8 @@ for line in s.split('\n'):
     print(line)
 print('size: {}'.format(l))
 alma.step(a)
+alma.step(a)
+alma.step(a)
 
 s,l = alma.kbprint(a)
 

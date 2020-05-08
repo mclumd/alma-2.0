@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
   int verbose = 0;
   char *file = NULL;
   char *agent = NULL;
-  logs_on = (char) 1;
+  logs_on = (char) 0;
   python_mode = (char) 0;
   
   //int index;
