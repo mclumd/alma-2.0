@@ -63,7 +63,7 @@ shared: alma.o tommyarray.o tommyhashlin.o tommyhash.o tommylist.o mpc.o alma_pa
 	$(CC) -shared -o libalma.so tommyarray.o tommyhashlin.o tommyhash.o tommylist.o mpc.o alma_parser.o alma_formula.o alma_kb.o alma_unify.o alma_command.o alma_print.o alma_proc.o alma_fif.o alma_backsearch.o alma.o
 
 python:
-	sudo python setup.py install
+	sudo python2 setup.py install
 
 run:
 	./alma.x demo/fc-test.pl
