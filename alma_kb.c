@@ -18,14 +18,6 @@ void init_resolution_choices(int ***resolution_choices, int num_subjects, int nu
     for (int i =0; i < num_subjects; i++) {
         *(*resolution_choices+i) = &(data[num_timesteps*i]);
     }
-    /* For debugging, file the array to make sure it's right. */
-    for (int i =0; i < num_subjects; i++)  for (int j=0; j< num_timesteps; j++)
-            (*resolution_choices)[i][j] = i*num_timesteps + j;
-
-  /*   *resolution_choices = malloc(sizeof(int **));
-  **resolution_choices = malloc(num_subjects * sizeof(int *));
-  for (int i =0; i < num_subjects; i++)
-      *(*resolution_choices[i]) = &(data[num_timesteps*i]);  */
 }
 
 static void make_clause(alma_node *node, clause *c) {

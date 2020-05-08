@@ -166,7 +166,7 @@ int main(int argc, char **argv) {
   if (tracking_resolutions) {
     alma_kb->tracking_resolutions = 1;
     parse_subjects_file(alma_kb->subject_list, &(alma_kb->num_subjects), subjects_file);
-   init_resolution_choices(&(alma_kb->resolution_choices), alma_kb->num_subjects, resolutions_horizon);
+    init_resolution_choices(&(alma_kb->resolution_choices), alma_kb->num_subjects, resolutions_horizon);
   }
   
   if (run) {
