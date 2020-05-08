@@ -153,14 +153,14 @@ static int function_compare(const void *p1, const void *p2) {
 
 // Flattens a single alma node and adds its contents to collection
 // Recursively calls when an AND is found to separate conjunctions
-void flatten_node(alma_node *node, tommy_array *clauses, int print) {
+void flatten_node(alma_node *node, tommy_array *clauses, int print, kb_str *buf) {
   if (node->type == FOL && node->fol->op == AND) {
     if (node->fol->arg1->type == FOL)
       node->fol->arg1->fol->tag = node->fol->tag;
-    flatten_node(node->fol->arg1, clauses, print);
+    flatten_node(node->fol->arg1, clauses, print, buf);
     if (node->fol->arg2->type == FOL)
       node->fol->arg2->fol->tag = node->fol->tag;
-    flatten_node(node->fol->arg2, clauses, print);
+    flatten_node(node->fol->arg2, clauses, print, buf);
   }
   else {
     clause *c = malloc(sizeof(*c));
@@ -196,9 +196,9 @@ void flatten_node(alma_node *node, tommy_array *clauses, int print) {
     }
 
     if (print) {
-      tee("-a: ");
-      clause_print(c);
-      tee(" added\n");
+      tee_alt("-a: ", buf);
+      clause_print(c, buf);
+      tee_alt(" added\n", buf);
     }
     tommy_array_insert(clauses, c);
   }
@@ -257,9 +257,9 @@ void copy_clause_structure(clause *original, clause *copy) {
 
 // Flattens trees into set of clauses (tommy_array must be initialized prior)
 // trees argument freed here
-void nodes_to_clauses(alma_node *trees, int num_trees, tommy_array *clauses, int print) {
+void nodes_to_clauses(alma_node *trees, int num_trees, tommy_array *clauses, int print, kb_str *buf) {
   for (int i = 0; i < num_trees; i++) {
-    flatten_node(trees+i, clauses, print);
+    flatten_node(trees+i, clauses, print, buf);
     free_alma_tree(trees+i);
   }
   free(trees);
@@ -808,17 +808,17 @@ void res_tasks_from_clause(kb *collection, clause *c, int process_negatives) {
 
 // Returns boolean based on success of string parse
 // If parses successfully, adds to collection's new_clauses
-int assert_formula(kb *collection, char *string, int print) {
+int assert_formula(kb *collection, char *string, int print, kb_str *buf) {
   alma_node *formulas;
   int formula_count;
   if (formulas_from_source(string, 0, &formula_count, &formulas)) {
-    nodes_to_clauses(formulas, formula_count, &collection->new_clauses, print);
+    nodes_to_clauses(formulas, formula_count, &collection->new_clauses, print, buf);
     return 1;
   }
   return 0;
 }
 
-int delete_formula(kb *collection, char *string, int print) {
+int delete_formula(kb *collection, char *string, int print, kb_str *buf) {
   alma_node *formulas;
   int formula_count;
   if (formulas_from_source(string, 0, &formula_count, &formulas)) {
@@ -826,7 +826,7 @@ int delete_formula(kb *collection, char *string, int print) {
     tommy_array clauses;
     tommy_array_init(&clauses);
     for (int i = 0; i < formula_count; i++) {
-      flatten_node(formulas+i, &clauses, 0);
+      flatten_node(formulas+i, &clauses, 0, buf);
       free_alma_tree(formulas+i);
     }
     free(formulas);
@@ -837,9 +837,9 @@ int delete_formula(kb *collection, char *string, int print) {
       clause *c = duplicate_check(collection, curr);
       if (c != NULL) {
         if (print) {
-          tee("-a: ");
-          clause_print(c);
-          tee(" removed\n");
+          tee_alt("-a: ", buf);
+          clause_print(c, buf);
+          tee_alt(" removed\n", buf);
         }
         remove_clause(collection, c);
       }
@@ -852,7 +852,7 @@ int delete_formula(kb *collection, char *string, int print) {
   return 0;
 }
 
-int update_formula(kb *collection, char *string) {
+int update_formula(kb *collection, char *string, kb_str *buf) {
   alma_node *formulas;
   int formula_count;
   if (formulas_from_source(string, 0, &formula_count, &formulas)) {
@@ -861,7 +861,7 @@ int update_formula(kb *collection, char *string) {
       for (int i = 0; i < formula_count; i++)
         free_alma_tree(formulas+i);
       free(formulas);
-      tee("-a: Incorrect number of arguments to update\n");
+      tee_alt("-a: Incorrect number of arguments to update\n", buf);
       return 0;
     }
 
@@ -869,7 +869,7 @@ int update_formula(kb *collection, char *string) {
     tommy_array clauses;
     tommy_array_init(&clauses);
     for (int i = 0; i < formula_count; i++) {
-      flatten_node(formulas+i, &clauses, 0);
+      flatten_node(formulas+i, &clauses, 0, buf);
       free_alma_tree(formulas+i);
     }
     free(formulas);
@@ -881,17 +881,17 @@ int update_formula(kb *collection, char *string) {
     clause *t_dupe;
     clause *u_dupe;
     if (target->tag == FIF || update->tag == FIF) {
-      tee("-a: Cannot update with fif clause\n");
+      tee_alt("-a: Cannot update with fif clause\n", buf);
       update_fail = 1;
     }
     else if ((t_dupe = duplicate_check(collection, target)) == NULL) {
-      tee("-a: Clause ");
-      clause_print(target);
-      tee(" to update not present\n");
+      tee_alt("-a: Clause ", buf);
+      clause_print(target, buf);
+      tee_alt(" to update not present\n", buf);
       update_fail = 1;
     }
     else if ((u_dupe = duplicate_check(collection, update)) != NULL) {
-      tee("-a: New version of clause already present\n");
+      tee_alt("-a: New version of clause already present\n", buf);
       update_fail = 1;
     }
 
@@ -910,11 +910,11 @@ int update_formula(kb *collection, char *string) {
       if (t_dupe->pos_count + t_dupe->neg_count == 1)
         remove_fif_singleton_tasks(collection, t_dupe);
 
-      tee("-a: ");
-      clause_print(target);
-      tee(" updated to ");
-      clause_print(update);
-      tee("\n");
+      tee_alt("-a: ", buf);
+      clause_print(target, buf);
+      tee_alt(" updated to ", buf);
+      clause_print(update, buf);
+      tee_alt("\n", buf);
       free_clause(target);
 
       // Swap clause contents from update
@@ -1023,7 +1023,7 @@ void add_child(clause *parent, clause *child) {
 }
 
 // Transfers first parent of source into parent collection of target if it's not a repeat
-void transfer_parent(kb *collection, clause *target, clause *source, int add_children) {
+void transfer_parent(kb *collection, clause *target, clause *source, int add_children, kb_str *buf) {
   // Check if the duplicate clause is a repeat from the same parents
   int repeat_parents = 0;
   for (int j = 0; j < target->parent_set_count; j++) {
@@ -1068,14 +1068,14 @@ void transfer_parent(kb *collection, clause *target, clause *source, int add_chi
       }
       if (distrust && !is_distrusted(collection, target->index)) {
         char *time_str = long_to_str(collection->time);
-        distrust_recursive(collection, target, time_str);
+        distrust_recursive(collection, target, time_str, buf);
         free(time_str);
       }
     }
   }
 }
 
-void distrust_recursive(kb *collection, clause *c, char *time) {
+void distrust_recursive(kb *collection, clause *c, char *time, kb_str *buf) {
   // Add c to distrusted set
   distrust_mapping *d = malloc(sizeof(*d));
   d->key = c->index;
@@ -1094,7 +1094,7 @@ void distrust_recursive(kb *collection, clause *c, char *time) {
   strcpy(distrust_str+loc, time);
   loc += strlen(time);
   strcpy(distrust_str+loc, ").");
-  assert_formula(collection, distrust_str, 0);
+  assert_formula(collection, distrust_str, 0, buf);
   free(distrust_str);
 
   // Unindex c from pos_map/list, neg_map/list to prevent use in inference
@@ -1107,7 +1107,7 @@ void distrust_recursive(kb *collection, clause *c, char *time) {
   if (c->children != NULL) {
     for (int i = 0; i < c->children_count; i++) {
       if (!is_distrusted(collection, c->children[i]->index)) {
-        distrust_recursive(collection, c->children[i], time);
+        distrust_recursive(collection, c->children[i], time, buf);
       }
     }
   }
@@ -1136,7 +1136,7 @@ static binding_list* parent_binding_prepare(backsearch_task *bs, long parent_ind
 }
 
 // Process resolution tasks from argument and place results in new_arr
-void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr, backsearch_task *bs) {
+void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr, backsearch_task *bs, kb_str *buf) {
   for (tommy_size_t i = 0; i < tommy_array_size(tasks); i++) {
     res_task *current_task = tommy_array_get(tasks, i);
     if (current_task != NULL) {
@@ -1272,10 +1272,10 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
               strcpy(contra_str+loc, ").");
 
               // Assert contra and distrusted
-              assert_formula(collection, contra_str, 0);
+              assert_formula(collection, contra_str, 0, buf);
               free(contra_str);
-              distrust_recursive(collection, current_task->x, time_str);
-              distrust_recursive(collection, current_task->y, time_str);
+              distrust_recursive(collection, current_task->x, time_str, buf);
+              distrust_recursive(collection, current_task->y, time_str, buf);
               free(time_str);
             }
           }

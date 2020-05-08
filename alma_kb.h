@@ -12,6 +12,13 @@ extern FILE *almalog;
 struct parent_set;
 struct fif_info;
 
+typedef struct kb_str {
+  long size;
+  long limit;
+  char *buffer;
+  char *curr;
+} kb_str;
+
 typedef struct clause {
   int pos_count;
   int neg_count;
@@ -63,6 +70,8 @@ typedef struct kb {
   tommy_list backsearch_tasks;
 
   tommy_hashlin distrusted; // Stores distrusted items by clause index
+
+  long size;
 } kb;
 
 // Map used for entries in index_map
@@ -101,29 +110,29 @@ clause* duplicate_check(kb *collection, clause *c);
 void add_clause(kb *collection, clause *curr);
 void remove_clause(kb *collection, clause *c);
 struct backsearch_task;
-void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr, struct backsearch_task *bs);
+void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr, struct backsearch_task *bs, kb_str *buf);
 void make_single_task(kb *collection, clause *c, alma_function *c_lit, clause *other, tommy_array *tasks, int use_bif, int pos);
 void make_res_tasks(kb *collection, clause *c, int count, alma_function **c_lits, tommy_hashlin *map, tommy_array *tasks, int use_bif, int pos);
 void res_tasks_from_clause(kb *collection, clause *c, int process_negatives);
-int assert_formula(kb *collection, char *string, int print);
-int delete_formula(kb *collection, char *string, int print);
-int update_formula(kb *collection, char *string);
+int assert_formula(kb *collection, char *string, int print, kb_str *buf);
+int delete_formula(kb *collection, char *string, int print, kb_str *buf);
+int update_formula(kb *collection, char *string, kb_str *buf);
 void resolve(res_task *t, binding_list *mgu, clause *result);
 
 // Functions used in alma_command
 char* now(long t);
-char* walltime();
+char* walltime(void);
 void free_clause(clause *c);
 void copy_clause_structure(clause *orignal, clause *copy);
 void set_variable_ids(clause *c, int id_from_name, binding_list *bs_bindings);
-void flatten_node(alma_node *node, tommy_array *clauses, int print);
-void nodes_to_clauses(alma_node *trees, int num_trees, tommy_array *clauses, int print);
+void flatten_node(alma_node *node, tommy_array *clauses, int print, kb_str *buf);
+void nodes_to_clauses(alma_node *trees, int num_trees, tommy_array *clauses, int print, kb_str *buf);
 void free_predname_mapping(void *arg);
 int is_distrusted(kb *collection, long index);
 char* long_to_str(long x);
 void add_child(clause *parent, clause *child);
-void transfer_parent(kb *collection, clause *target, clause *source, int add_children);
-void distrust_recursive(kb *collection, clause *c, char *time);
+void transfer_parent(kb *collection, clause *target, clause *source, int add_children, kb_str *buf);
+void distrust_recursive(kb *collection, clause *c, char *time, kb_str *buf);
 
 int im_compare(const void *arg, const void *obj);
 int pm_compare(const void *arg, const void *obj);

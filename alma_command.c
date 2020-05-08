@@ -8,15 +8,17 @@
 #include "alma_print.h"
 
 extern char logs_on;
+extern char python_mode;
 
 // Caller will need to free collection with kb_halt
-void kb_init(kb **collection, char *file, char *agent, int verbose) {
+void kb_init(kb **collection, char *file, char *agent, int verbose, kb_str *buf) {
   // Allocate and initialize
   *collection = malloc(sizeof(**collection));
   kb *collec = *collection;
 
   collec->verbose = verbose;
 
+  collec->size = 0;
   collec->time = 1;
   collec->prev_str = NULL;
   collec->now_str = NULL;
@@ -44,7 +46,7 @@ void kb_init(kb **collection, char *file, char *agent, int verbose) {
     int num_trees;
 
     if (formulas_from_source(file, 1, &num_trees, &trees)) {
-      nodes_to_clauses(trees, num_trees, &collec->new_clauses, 0);
+      nodes_to_clauses(trees, num_trees, &collec->new_clauses, 0, buf);
       fif_to_front(&collec->new_clauses);
     }
     // If file cannot parse, cleanup and exit
@@ -59,12 +61,12 @@ void kb_init(kb **collection, char *file, char *agent, int verbose) {
     strcpy(sentence, "agentname(");
     strcpy(sentence + 10, agent);
     strcpy(sentence + 10 + namelen, ").");
-    assert_formula(collec, sentence, 0);
+    assert_formula(collec, sentence, 0, buf);
     free(sentence);
   }
-  assert_formula(collec, "now(1).", 0);
+  assert_formula(collec, "now(1).", 0, buf);
   collec->wallprev = walltime();
-  assert_formula(collec, collec->wallprev, 0);
+  assert_formula(collec, collec->wallprev, 0, buf);
 
   // Insert starting clauses
   for (tommy_size_t i = 0; i < tommy_array_size(&collec->new_clauses); i++) {
@@ -109,17 +111,17 @@ static int idling_check(kb *collection) {
   return 0;
 }
 
-void kb_step(kb *collection) {
+void kb_step(kb *collection, kb_str *buf) {
   collection->time++;
 
-  process_res_tasks(collection, &collection->res_tasks, &collection->new_clauses, NULL);
+  process_res_tasks(collection, &collection->res_tasks, &collection->new_clauses, NULL, buf);
   process_fif_tasks(collection);
-  process_backsearch_tasks(collection);
+  process_backsearch_tasks(collection, buf);
 
   collection->now_str = now(collection->time);
-  assert_formula(collection, collection->now_str, 0);
+  assert_formula(collection, collection->now_str, 0, buf);
   collection->wallnow = walltime();
-  assert_formula(collection, collection->wallnow, 0);
+  assert_formula(collection, collection->wallnow, 0, buf);
 
   fif_to_front(&collection->new_clauses);
   // Insert new clauses derived that are not duplicates
@@ -127,6 +129,7 @@ void kb_step(kb *collection) {
     clause *c = tommy_array_get(&collection->new_clauses, i);
     clause *dupe = duplicate_check(collection, c);
     int reinstate = c->pos_count == 1 && c->neg_count == 0 && strcmp(c->pos_lits[0]->name, "reinstate") == 0 && c->pos_lits[0]->term_count == 1;
+    //    tee_alt("step iter %d/%d", buf, (int)i,(int)tommy_array_size(&collection->new_clauses)); //CMAXEY
     if (dupe == NULL || reinstate) {
       if (c->tag == FIF)
         fif_task_map_init(collection, c);
@@ -195,20 +198,20 @@ void kb_step(kb *collection) {
         }
         if (distrust) {
           char *time_str = long_to_str(collection->time);
-          distrust_recursive(collection, c, time_str);
+          distrust_recursive(collection, c, time_str, buf);
           free(time_str);
         }
       }
     }
     else {
       if (collection->verbose) {
-        tee("-a: Duplicate clause ");
-        clause_print(c);
-        tee(" merged into %ld\n", dupe->index);
+        tee_alt("-a: Duplicate clause ", buf);
+        clause_print(c, buf);
+        tee_alt(" merged into %ld\n", buf, dupe->index);
       }
 
       if (c->parents != NULL)
-        transfer_parent(collection, dupe, c, 1);
+        transfer_parent(collection, dupe, c, 1, buf);
 
       free_clause(c);
     }
@@ -217,61 +220,68 @@ void kb_step(kb *collection) {
   // Generate new backsearch tasks
   tommy_node *i = tommy_list_head(&collection->backsearch_tasks);
   while (i) {
-    generate_backsearch_tasks(collection, i->data);
+    generate_backsearch_tasks(collection, i->data, buf);
     i = i->next;
   }
 
   if (collection->prev_str != NULL) {
-    delete_formula(collection, collection->prev_str, 0);
+    delete_formula(collection, collection->prev_str, 0, buf);
     free(collection->prev_str);
   }
   else
-    delete_formula(collection, "now(1).", 0);
+    delete_formula(collection, "now(1).", 0, buf);
   collection->prev_str = collection->now_str;
-  delete_formula(collection, collection->wallprev, 0);
+  delete_formula(collection, collection->wallprev, 0, buf);
   free(collection->wallprev);
   collection->wallprev = collection->wallnow;
 
   collection->idling = idling_check(collection);
 
   if (collection->idling)
-    tee("-a: Idling...\n");
+    tee_alt("-a: Idling...\n", buf);
 
   tommy_array_done(&collection->new_clauses);
   tommy_array_init(&collection->new_clauses);
 }
 
-void kb_print(kb *collection) {
+void kb_print(kb *collection, kb_str *buf) {
+  //  char temp_buf[1000];
+  //  tee_alt("in kb_print:\n",buf);
+
+  //  sprintf(temp_buf," %p:%p",(void *)buf,(void *)temp);
+  //  strcpy(&(buf->buffer[buf->size]),temp_buf);
+  //  buf->size += strlen(temp_buf);
+
   tommy_node *i = tommy_list_head(&collection->clauses);
   while (i) {
     index_mapping *data = i->data;
-    tee("%ld: ", data->key);
-    clause_print(data->value);
-    tee("\n");
+    tee_alt("%ld: ", buf, data->key);
+    clause_print(data->value, buf);
+    tee_alt("\n", buf);
     i = i->next;
   }
 
   i = tommy_list_head(&collection->backsearch_tasks);
   if (i) {
-    tee("Back searches:\n");
+    tee_alt("Back searches:\n", buf);
     for (int count = 0; i != NULL; i = i->next, count++) {
-      tee("%d\n", count);
+      tee_alt("%d\n", buf, count);
       backsearch_task *t = i->data;
       for (tommy_size_t j = 0; j < tommy_array_size(&t->clauses); j++) {
         clause *c = tommy_array_get(&t->clauses, j);
-        tee("%ld: ", c->index);
-        clause_print(c);
+        tee_alt("%ld: ", buf, c->index);
+        clause_print(c, buf);
         binding_mapping *m = tommy_hashlin_search(&t->clause_bindings, bm_compare, &c->index, tommy_hash_u64(0, &c->index, sizeof(c->index)));
         if (m != NULL) {
-          tee(" (bindings: ");
-          print_bindings(m->bindings);
-          tee(")");
+          tee_alt(" (bindings: ", buf);
+          print_bindings(m->bindings, buf);
+          tee_alt(")", buf);
         }
-        tee("\n");
+        tee_alt("\n", buf);
       }
     }
   }
-  tee("\n");
+  tee_alt("\n", buf);
   if (logs_on) {
     fflush(almalog);
   }
@@ -333,26 +343,26 @@ void kb_halt(kb *collection) {
   }
 }
 
-void kb_assert(kb *collection, char *string) {
-  assert_formula(collection, string, 1);
+void kb_assert(kb *collection, char *string, kb_str *buf) {
+  assert_formula(collection, string, 1, buf);
 }
 
-void kb_remove(kb *collection, char *string) {
-  delete_formula(collection, string, 1);
+void kb_remove(kb *collection, char *string, kb_str *buf) {
+  delete_formula(collection, string, 1, buf);
 }
 
-void kb_update(kb *collection, char *string) {
-  update_formula(collection, string);
+void kb_update(kb *collection, char *string, kb_str *buf) {
+  update_formula(collection, string, buf);
 }
 
-void kb_observe(kb *collection, char *string) {
+void kb_observe(kb *collection, char *string, kb_str *buf) {
   // Parse string into clauses
   alma_node *formulas;
   int formula_count;
   if (formulas_from_source(string, 0, &formula_count, &formulas)) {
     tommy_array arr;
     tommy_array_init(&arr);
-    nodes_to_clauses(formulas, formula_count, &arr, 0);
+    nodes_to_clauses(formulas, formula_count, &arr, 0, buf);
 
     for (int i = 0; i < tommy_array_size(&arr); i++) {
       clause *c = tommy_array_get(&arr, i);
@@ -368,13 +378,13 @@ void kb_observe(kb *collection, char *string) {
         time_term.function->terms = NULL;
         lit->terms[lit->term_count-1] = time_term;
         tommy_array_insert(&collection->new_clauses, c);
-        tee("-a: ");
-        clause_print(c);
-        tee(" observed\n");
+        tee_alt("-a: ", buf);
+        clause_print(c, buf);
+        tee_alt(" observed\n", buf);
       }
       else {
-        clause_print(c);
-        tee(" has too many literals\n");
+        clause_print(c, buf);
+        tee_alt(" has too many literals\n", buf);
         free_clause(c);
       }
     }
@@ -382,14 +392,14 @@ void kb_observe(kb *collection, char *string) {
   }
 }
 
-void kb_backsearch(kb *collection, char *string) {
+void kb_backsearch(kb *collection, char *string, kb_str *buf) {
   // Parse string into clauses
   alma_node *formulas;
   int formula_count;
   if (formulas_from_source(string, 0, &formula_count, &formulas)) {
     tommy_array arr;
     tommy_array_init(&arr);
-    nodes_to_clauses(formulas, formula_count, &arr, 0);
+    nodes_to_clauses(formulas, formula_count, &arr, 0, buf);
 
     clause *c = tommy_array_get(&arr, 0);
     // Free all after first
@@ -398,15 +408,15 @@ void kb_backsearch(kb *collection, char *string) {
     tommy_array_done(&arr);
     if (c != NULL) {
       if (c->pos_count + c->neg_count > 1) {
-        tee("-a: query clause has too many literals\n");
+        tee_alt("-a: query clause has too many literals\n", buf);
         free_clause(c);
       }
       else {
         collection->idling = 0;
         backsearch_from_clause(collection, c);
-        tee("-a: Backsearch initiated for ");
-        clause_print(c);
-        tee("\n");
+        tee_alt("-a: Backsearch initiated for ", buf);
+        clause_print(c, buf);
+        tee_alt("\n", buf);
       }
     }
   }

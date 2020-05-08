@@ -1,9 +1,9 @@
 CC = gcc
-CFLAGS = -std=c11 -pedantic-errors -Wall -Werror -Wshadow -Wpedantic -g
+CFLAGS = -std=c11 -pedantic-errors -Wall -Werror -Wshadow -Wpedantic -g -fPIC
 
 TOMMY = tommyds/tommyds/
 
-all: alma.x
+all: alma.x shared python
 
 alma.x: alma.o tommyarray.o tommyhashlin.o tommyhash.o tommylist.o mpc.o alma_parser.o alma_formula.o alma_kb.o alma_unify.o alma_command.o alma_print.o alma_proc.o alma_fif.o alma_backsearch.o
 	$(CC) alma.o tommyarray.o tommyhashlin.o tommyhash.o tommylist.o mpc.o alma_parser.o alma_formula.o alma_kb.o alma_unify.o alma_command.o alma_print.o alma_proc.o alma_fif.o alma_backsearch.o -o alma.x
@@ -57,7 +57,13 @@ alma_backsearch.o: alma_backsearch.c alma_kb.h alma_formula.h alma_backsearch.h 
 	$(CC) $(CFLAGS) -c alma_backsearch.c
 
 clean:
-	rm -f *.x *.o
+	rm -f *.x *.o *.so build/lib.linux-x86_64-2.7/alma.so
+
+shared: alma.o tommyarray.o tommyhashlin.o tommyhash.o tommylist.o mpc.o alma_parser.o alma_formula.o alma_kb.o alma_unify.o alma_command.o alma_print.o alma_proc.o alma_fif.o alma_backsearch.o
+	$(CC) -shared -o libalma.so tommyarray.o tommyhashlin.o tommyhash.o tommylist.o mpc.o alma_parser.o alma_formula.o alma_kb.o alma_unify.o alma_command.o alma_print.o alma_proc.o alma_fif.o alma_backsearch.o alma.o
+
+python:
+	sudo python setup.py install
 
 run:
 	./alma.x demo/fc-test.pl
