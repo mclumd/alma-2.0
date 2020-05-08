@@ -11,7 +11,7 @@
 
 static long next_index;
 
-void make_clause(alma_node *node, clause *c) {
+static void make_clause_rec(alma_node *node, clause *c) {
   // Note: predicate null assignment necessary for freeing of notes without losing predicates
   if (node != NULL) {
     if (node->type == FOL) {
@@ -25,8 +25,8 @@ void make_clause(alma_node *node, clause *c) {
       }
       // Case of node is OR
       else {
-        make_clause(node->fol->arg1, c);
-        make_clause(node->fol->arg2, c);
+        make_clause_rec(node->fol->arg1, c);
+        make_clause_rec(node->fol->arg2, c);
       }
       if (c->tag == NONE)
         c->tag = node->fol->tag;
@@ -162,6 +162,30 @@ static int function_compare(const void *p1, const void *p2) {
     return compare;
 }
 
+void make_clause(alma_node *node, clause *c) {
+  make_clause_rec(node, c);
+
+  // If clause is fif, initialize additional info
+  if (c->tag == FIF) {
+    c->fif = malloc(sizeof(*c->fif));
+    c->fif->premise_count = c->pos_count + c->neg_count - 1;
+    c->fif->ordering = malloc(sizeof(*c->fif->ordering) * c->fif->premise_count);
+    init_ordering(c->fif, node);
+    c->fif->neg_conc = node->fol->arg2->type == FOL ? 1 : 0;
+    // Conclusion will always be last lit
+    if (c->fif->neg_conc)
+      c->fif->conclusion = c->neg_lits[c->neg_count-1];
+    else
+      c->fif->conclusion = c->pos_lits[c->pos_count-1];
+  }
+  // Non-fif clauses can be sorted by literal for ease of resolution
+  // Fif clauses must retain original literal order to not affect their evaluation
+  else {
+    qsort(c->pos_lits, c->pos_count, sizeof(*c->pos_lits), function_compare);
+    qsort(c->neg_lits, c->neg_count, sizeof(*c->neg_lits), function_compare);
+  }
+}
+
 // Flattens a single alma node and adds its contents to collection
 // Recursively calls when an AND is found to separate conjunctions
 void flatten_node(alma_node *node, tommy_array *clauses, int print) {
@@ -184,27 +208,6 @@ void flatten_node(alma_node *node, tommy_array *clauses, int print) {
     c->fif = NULL;
     make_clause(node, c);
     set_variable_ids(c, 1, NULL);
-
-    // If clause is fif, initialize additional info
-    if (c->tag == FIF) {
-      c->fif = malloc(sizeof(*c->fif));
-      c->fif->premise_count = c->pos_count + c->neg_count - 1;
-      c->fif->ordering = malloc(sizeof(*c->fif->ordering) * c->fif->premise_count);
-      init_ordering(c->fif, node);
-      c->fif->neg_conc = node->fol->arg2->type == FOL ? 1 : 0;
-      // Conclusion will always be last lit
-      if (c->fif->neg_conc)
-        c->fif->conclusion = c->neg_lits[c->neg_count-1];
-      else
-        c->fif->conclusion = c->pos_lits[c->pos_count-1];
-    }
-
-    // Non-fif clauses can be sorted by literal for ease of resolution
-    // Fif clauses must retain original literal order to not affect their evaluation
-    if (c->tag != FIF) {
-      qsort(c->pos_lits, c->pos_count, sizeof(*c->pos_lits), function_compare);
-      qsort(c->neg_lits, c->neg_count, sizeof(*c->neg_lits), function_compare);
-    }
 
     if (print) {
       tee("-a: ");
