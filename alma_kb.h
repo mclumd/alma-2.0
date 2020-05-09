@@ -1,6 +1,7 @@
 #ifndef alma_kb_h
 #define alma_kb_h
 
+#include <stdio.h>
 #include "tommy.h"
 #include "alma_formula.h"
 #include "alma_unify.h"
@@ -43,8 +44,8 @@ typedef struct kb {
   int verbose; // Boolean flag for printing extra output
 
   long time;
-  char *now_str; // String representation of now(time).
-  char *prev_str; // String representation of now(time-1).
+  char *now; // String representation of now(time).
+  char *prev; // String representation of now(time-1).
   char *wallnow;
   char *wallprev;
 
@@ -105,18 +106,22 @@ typedef struct res_task {
   alma_function *neg; // Negative literal from y
 } res_task;
 
+void make_clause(alma_node *node, clause *c);
 int clauses_differ(clause *x, clause *y);
 clause* duplicate_check(kb *collection, clause *c);
 void add_clause(kb *collection, clause *curr);
 void remove_clause(kb *collection, clause *c);
 struct backsearch_task;
+
 void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr, struct backsearch_task *bs, kb_str *buf);
+void process_new_clauses(kb *collection, kb_str *buf);
 void make_single_task(kb *collection, clause *c, alma_function *c_lit, clause *other, tommy_array *tasks, int use_bif, int pos);
 void make_res_tasks(kb *collection, clause *c, int count, alma_function **c_lits, tommy_hashlin *map, tommy_array *tasks, int use_bif, int pos);
 void res_tasks_from_clause(kb *collection, clause *c, int process_negatives);
-int assert_formula(kb *collection, char *string, int print, kb_str *buf);
+clause* assert_formula(kb *collection, char *string, int print, kb_str *buf);
 int delete_formula(kb *collection, char *string, int print, kb_str *buf);
 int update_formula(kb *collection, char *string, kb_str *buf);
+
 void resolve(res_task *t, binding_list *mgu, clause *result);
 
 // Functions used in alma_command
@@ -131,8 +136,10 @@ void free_predname_mapping(void *arg);
 int is_distrusted(kb *collection, long index);
 char* long_to_str(long x);
 void add_child(clause *parent, clause *child);
+
 void transfer_parent(kb *collection, clause *target, clause *source, int add_children, kb_str *buf);
-void distrust_recursive(kb *collection, clause *c, char *time, kb_str *buf);
+void distrust_recursive(kb *collection, clause *c, clause *parent, kb_str *buf);
+
 
 int im_compare(const void *arg, const void *obj);
 int pm_compare(const void *arg, const void *obj);

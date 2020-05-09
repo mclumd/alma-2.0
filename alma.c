@@ -4,6 +4,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <getopt.h>
+#include <ctype.h>
 #include "alma_command.h"
 #include "alma_kb.h"
 #include "alma_print.h"
@@ -23,10 +24,12 @@ int main(int argc, char **argv) {
   int verbose = 0;
   char *file = NULL;
   char *agent = NULL;
+
   logs_on = (char) 0;
   python_mode = (char) 0;
   
   //int index;
+
   int c;
   while ((c = getopt (argc, argv, "rxvf:a:")) != -1)
     switch (c) {

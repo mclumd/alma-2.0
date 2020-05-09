@@ -1,7 +1,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include "alma_unify.h"
+
 #include "alma_print.h"
+#include "alma_kb.h"
+
 
 // Returns term variable is bound to if it's in the bindings, null otherwise
 alma_term* bindings_contain(binding_list *theta, alma_variable *var) {
@@ -24,11 +27,15 @@ static int occurs_check(binding_list *theta, alma_variable *var, alma_term *x) {
       return occurs_check(theta, var, res);
   }
   // In function case occurs-check each argument
-  else {
+  else if (x->type == FUNCTION) {
     for (int i = 0; i < x->function->term_count; i++) {
       if (occurs_check(theta, var, x->function->terms + i))
         return 1;
     }
+  }
+  else {
+    // Stubbed quote case; need to eventually check when quasiquotation is added, TODO
+    return 0;
   }
   return 0;
 }
@@ -43,9 +50,12 @@ void subst(binding_list *theta, alma_term *term) {
       copy_alma_term(contained, term);
     }
   }
-  else {
+  else if (term->type == FUNCTION) {
     for (int i = 0; i < term->function->term_count; i++)
       subst(theta, term->function->terms+i);
+  }
+  else {
+    // Stubbed quote case; need to eventually subst when quasiquotation is added, TODO
   }
 }
 
@@ -84,6 +94,46 @@ static int unify_var(alma_term *varterm, alma_term *x, binding_list *theta) {
   }
 }
 
+static int unify_quotes(alma_quote *x, alma_quote *y, binding_list *theta);
+
+static int unify_quote_func(alma_function *x, alma_function *y, binding_list *theta) {
+  if (strcmp(x->name, y->name) == 0 && x->term_count == y->term_count) {
+    for (int i = 0; i < x->term_count; i++) {
+      alma_term *x_t = x->terms+i;
+      alma_term *y_t = y->terms+i;
+      if (x_t->type != y_t->type
+          || (x_t->type == VARIABLE && strcmp(x_t->variable->name, y_t->variable->name) != 0)
+          || (x_t->type == FUNCTION && !unify_quote_func(x_t->function, y_t->function, theta))
+          || (x_t->type == QUOTE && !unify_quotes(x_t->quote, y_t->quote, theta)))
+        return 0;
+    }
+    return 1;
+  }
+  return 0;
+}
+
+// TODO -- generalize to unify quasiquoted variables when this is added
+// Will involve tracking quote_levels
+static int unify_quotes(alma_quote *x, alma_quote *y, binding_list *theta) {
+  if (x->type == y->type) {
+    if (x->type == SENTENCE) {
+      // TODO, find way to deal with raw sentence quote unification
+    }
+    else {
+      clause *c_x = x->clause_quote;
+      clause *c_y = y->clause_quote;
+      for (int i = 0; i < c_x->pos_count; i++)
+        if (!unify_quote_func(c_x->pos_lits[i], c_y->pos_lits[i], theta))
+          return 0;
+      for (int i = 0; i < c_x->neg_count; i++)
+        if (!unify_quote_func(c_x->neg_lits[i], c_y->neg_lits[i], theta))
+          return 0;
+      return 1;
+    }
+  }
+  return 0;
+}
+
 // Unification function based on algorithm in AIMA book
 int unify(alma_term *x, alma_term *y, binding_list *theta) {
   // Unification succeeds without changing theta if trying to unify variable with itself
@@ -105,6 +155,9 @@ int unify(alma_term *x, alma_term *y, binding_list *theta) {
         return 0;
     }
     return 1;
+  }
+  else if (x->type == QUOTE && y->type == QUOTE) {
+    return unify_quotes(x->quote, y->quote, theta);
   }
   else
     return 0;

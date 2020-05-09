@@ -20,10 +20,8 @@ void kb_init(kb **collection, char *file, char *agent, int verbose, kb_str *buf)
 
   collec->size = 0;
   collec->time = 1;
-  collec->prev_str = NULL;
-  collec->now_str = NULL;
-  collec->wallnow = NULL;
-  collec->wallprev = NULL;
+  collec->prev = collec->now = NULL;
+  collec->wallnow = collec->wallprev = NULL;
   collec->idling = 0;
   tommy_array_init(&collec->new_clauses);
   tommy_list_init(&collec->clauses);
@@ -64,7 +62,9 @@ void kb_init(kb **collection, char *file, char *agent, int verbose, kb_str *buf)
     assert_formula(collec, sentence, 0, buf);
     free(sentence);
   }
-  assert_formula(collec, "now(1).", 0, buf);
+
+  collec->prev = now(collec->time);
+  assert_formula(collec, collec->prev, 0, buf);
   collec->wallprev = walltime();
   assert_formula(collec, collec->wallprev, 0, buf);
 
@@ -97,8 +97,8 @@ void kb_init(kb **collection, char *file, char *agent, int verbose, kb_str *buf)
 // System idles if there are no resolution tasks, backsearch tasks, or to_unify fif values
 // First of these is true when no new clauses (source of res tasks) exist
 // To_unify values are all removed in current implementation each step from exhaustive fif
-static int idling_check(kb *collection) {
-  if (tommy_array_size(&collection->new_clauses) <= 2) {
+static int idling_check(kb *collection, int new_clauses) {
+  if (!new_clauses) {
     tommy_node *i = tommy_list_head(&collection->backsearch_tasks);
     while (i) {
       backsearch_task *bt = i->data;
@@ -118,130 +118,31 @@ void kb_step(kb *collection, kb_str *buf) {
   process_fif_tasks(collection);
   process_backsearch_tasks(collection, buf);
 
-  collection->now_str = now(collection->time);
-  assert_formula(collection, collection->now_str, 0, buf);
+  int newc = tommy_array_size(&collection->new_clauses) > 0;
+  process_new_clauses(collection, buf);
+
+  // New clock rules go last
+  collection->now = now(collection->time);
+  assert_formula(collection, collection->now, 0, buf);
   collection->wallnow = walltime();
   assert_formula(collection, collection->wallnow, 0, buf);
+  delete_formula(collection, collection->prev, 0, buf);
+  free(collection->prev);
+  collection->prev = collection->now;
+  delete_formula(collection, collection->wallprev, 0, buf);
+  free(collection->wallprev);
+  collection->wallprev = collection->wallnow;
+  process_new_clauses(collection, buf);
 
-  fif_to_front(&collection->new_clauses);
-  // Insert new clauses derived that are not duplicates
-  for (tommy_size_t i = 0; i < tommy_array_size(&collection->new_clauses); i++) {
-    clause *c = tommy_array_get(&collection->new_clauses, i);
-    clause *dupe = duplicate_check(collection, c);
-    int reinstate = c->pos_count == 1 && c->neg_count == 0 && strcmp(c->pos_lits[0]->name, "reinstate") == 0 && c->pos_lits[0]->term_count == 1;
-    //    tee_alt("step iter %d/%d", buf, (int)i,(int)tommy_array_size(&collection->new_clauses)); //CMAXEY
-    if (dupe == NULL || reinstate) {
-      if (c->tag == FIF)
-        fif_task_map_init(collection, c);
-
-      if (reinstate) {
-         alma_term *arg = c->pos_lits[0]->terms;
-         if (arg->type == FUNCTION && arg->function->term_count == 0) {
-           char *index_str = arg->function->name;
-           int digits = 1;
-           for (int j = 0; j < strlen(index_str); j++) {
-             if (!isdigit(index_str[j])) {
-               digits = 0;
-               break;
-             }
-           }
-           if (digits) {
-             long index = atol(index_str);
-             index_mapping *result = tommy_hashlin_search(&collection->index_map, im_compare, &index, tommy_hash_u64(0, &index, sizeof(index)));
-             if (result != NULL && is_distrusted(collection, index)) {
-               clause *to_reinstate = result->value;
-               clause *reinstatement = malloc(sizeof(*reinstatement));
-               copy_clause_structure(to_reinstate, reinstatement);
-               reinstatement->parent_set_count = to_reinstate->parent_set_count;
-               if (reinstatement->parent_set_count > 0) {
-                 reinstatement->parents = malloc(sizeof(*reinstatement->parents)*reinstatement->parent_set_count);
-                 for (int j = 0; j < reinstatement->parent_set_count; j++) {
-                   reinstatement->parents[j].count = to_reinstate->parents[j].count;
-                   reinstatement->parents[j].clauses = malloc(sizeof(*reinstatement->parents[j].clauses)*to_reinstate->parents[j].count);
-                   for (int k = 0; k < reinstatement->parents[j].count; k++)
-                     reinstatement->parents[j].clauses[k] = to_reinstate->parents[j].clauses[k];
-                 }
-               }
-               tommy_array_insert(&collection->new_clauses, reinstatement);
-             }
-           }
-         }
-      }
-      else {
-        res_tasks_from_clause(collection, c, 1);
-        fif_tasks_from_clause(collection, c);
-
-        // Get tasks between new KB clauses and all bs clauses
-        tommy_node *curr = tommy_list_head(&collection->backsearch_tasks);
-        while (curr) {
-          backsearch_task *t = curr->data;
-          for (int j = 0; j < tommy_array_size(&t->clauses); j++) {
-            clause *bt_c = tommy_array_get(&t->clauses, j);
-            for (int k = 0; k < bt_c->pos_count; k++)
-              make_single_task(collection, bt_c, bt_c->pos_lits[k], c, &t->to_resolve, 1, 0);
-            for (int k = 0; k < bt_c->neg_count; k++)
-              make_single_task(collection, bt_c, bt_c->neg_lits[k], c, &t->to_resolve, 1, 1);
-          }
-          curr = curr->next;
-        }
-      }
-
-      add_clause(collection, c);
-
-      if (c->parents != NULL) {
-        int distrust = 0;
-        // Update child info for parents of new clause, check for distrusted parents
-        for (int j = 0; j < c->parents[0].count; j++) {
-          add_child(c->parents[0].clauses[j], c);
-          if (is_distrusted(collection, c->parents[0].clauses[j]->index))
-            distrust = 1;
-        }
-        if (distrust) {
-          char *time_str = long_to_str(collection->time);
-          distrust_recursive(collection, c, time_str, buf);
-          free(time_str);
-        }
-      }
-    }
-    else {
-      if (collection->verbose) {
-        tee_alt("-a: Duplicate clause ", buf);
-        clause_print(c, buf);
-        tee_alt(" merged into %ld\n", buf, dupe->index);
-      }
-
-      if (c->parents != NULL)
-        transfer_parent(collection, dupe, c, 1, buf);
-
-      free_clause(c);
-    }
-  }
-
-  // Generate new backsearch tasks
   tommy_node *i = tommy_list_head(&collection->backsearch_tasks);
   while (i) {
     generate_backsearch_tasks(collection, i->data, buf);
     i = i->next;
   }
 
-  if (collection->prev_str != NULL) {
-    delete_formula(collection, collection->prev_str, 0, buf);
-    free(collection->prev_str);
-  }
-  else
-    delete_formula(collection, "now(1).", 0, buf);
-  collection->prev_str = collection->now_str;
-  delete_formula(collection, collection->wallprev, 0, buf);
-  free(collection->wallprev);
-  collection->wallprev = collection->wallnow;
-
-  collection->idling = idling_check(collection);
-
+  collection->idling = idling_check(collection, newc);
   if (collection->idling)
     tee_alt("-a: Idling...\n", buf);
-
-  tommy_array_done(&collection->new_clauses);
-  tommy_array_init(&collection->new_clauses);
 }
 
 void kb_print(kb *collection, kb_str *buf) {
@@ -288,8 +189,8 @@ void kb_print(kb *collection, kb_str *buf) {
 }
 
 void kb_halt(kb *collection) {
-  // now_str and prev_str alias at this point, only free one
-  free(collection->now_str);
+  // now and prev alias at this point, only free one
+  free(collection->now);
   if (collection->wallnow == NULL)
     free(collection->wallprev);
   free(collection->wallnow);

@@ -1,4 +1,5 @@
 #include <string.h>
+#include <ctype.h>
 #include "alma_proc.h"
 #include "tommy.h"
 
@@ -26,15 +27,14 @@ int proc_bound_check(alma_function *proc, binding_list *bindings) {
   return 0;
 }
 
-static int introspect(alma_function *arg, binding_list *bindings, kb *alma, int kind) {
+static int introspect(alma_function *arg, binding_list *bindings, kb *collection, int kind) {
   // Create copy and substitute based on bindings available
   alma_term *search_term = malloc(sizeof(*search_term));
   copy_alma_term(arg->terms, search_term);
   subst(bindings, search_term);
 
   alma_function *search = NULL;
-  tommy_hashlin *map = &alma->pos_map;
-  int pos = 1;
+  tommy_hashlin *map = &collection->pos_map;
 
   if (search_term->type == VARIABLE) {
     free_term(search_term);
@@ -46,8 +46,7 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *alma, int 
 
     // Extract from not, if present
     if (strcmp(search->name, "not") == 0) {
-      pos = 0;
-      map = &alma->neg_map;
+      map = &collection->neg_map;
       if (search->term_count != 1) {
         free_term(search_term);
         free(search_term);
@@ -76,8 +75,8 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *alma, int 
   if (result != NULL) {
     for (int i = result->num_clauses-1; i >= 0; i--) {
       // Must be a non-distrusted singleton result
-      if (!is_distrusted(alma, result->clauses[i]->index) && result->clauses[i]->pos_count + result->clauses[i]->neg_count == 1) {
-        alma_function *lit = (pos ? result->clauses[i]->pos_lits[0] : result->clauses[i]->neg_lits[0]);
+      if (!is_distrusted(collection, result->clauses[i]->index) && result->clauses[i]->pos_count + result->clauses[i]->neg_count == 1) {
+        alma_function *lit = (map == &collection->pos_map ? result->clauses[i]->pos_lits[0] : result->clauses[i]->neg_lits[0]);
 
         // Create copy as either empty list or copy of arg
         binding_list *copy = malloc(sizeof(*copy));
@@ -255,27 +254,73 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, binding_list *bi
   return has_ancestor;
 }
 
+static int less_than(alma_term *x, alma_term *y, binding_list *bindings, kb *alma) {
+  char *x_str;
+  char *y_str;
+  if (x->type == VARIABLE) {
+    alma_term *bound = bindings_contain(bindings, x->variable);
+    if (bound == NULL || bound->type != FUNCTION || bound->function->term_count != 0)
+      return 0;
+    x_str = bound->function->name;
+  }
+  else if (x->type == FUNCTION && x->function->term_count == 0)
+    x_str = x->function->name;
+  else
+    return 0;
+  if (y->type == VARIABLE) {
+    alma_term *bound = bindings_contain(bindings, y->variable);
+    if (bound == NULL || bound->type != FUNCTION || bound->function->term_count != 0)
+      return 0;
+    y_str = bound->function->name;
+  }
+  else if (y->type == FUNCTION && y->function->term_count == 0)
+    y_str = y->function->name;
+  else
+    return 0;
+
+  int xval = 0;
+  int yval = 0;
+  for (int i = strlen(x_str)-1, j = 1; i >= 0; i--, j*=10) {
+    if (isdigit(x_str[i]))
+      xval += (x_str[i] - '0') * j;
+    else
+      return 0;
+  }
+  for (int i = strlen(y_str)-1, j = 1; i >= 0; i--, j*=10) {
+    if (isdigit(y_str[i]))
+      yval += (y_str[i] - '0') * j;
+    else
+      return 0;
+  }
+
+  return xval < yval;
+}
+
 // If proc is a valid procedure, runs and returns truth value
 int proc_run(alma_function *proc, binding_list *bindings, kb *alma) {
   alma_function *func = proc->terms[0].function;
-  if (strcmp(proc->terms[0].function->name, "neg_int") == 0) {
+  if (strcmp(func->name, "neg_int") == 0) {
     // Must match (given bindings) the schema neg_int(literal(...))
     if (func->term_count == 1)
       return introspect(func, bindings, alma, run_neg_int);
   }
-  else if (strcmp(proc->terms[0].function->name, "pos_int") == 0) {
+  else if (strcmp(func->name, "pos_int") == 0) {
     // Must match (given bindings) the schema pos_int(literal(...))
     if (func->term_count == 1)
       return introspect(func, bindings, alma, run_pos_int);
   }
-  else if (strcmp(proc->terms[0].function->name, "learned") == 0) {
+  else if (strcmp(func->name, "learned") == 0) {
     // Must match (given bindings) the schema learned(literal(...), Var) OR learned(not(literal(...)), Var) and Var unbound
     if (func->term_count == 2 && func->terms[1].type == VARIABLE && !bindings_contain(bindings, func->terms[1].variable))
       return introspect(func, bindings, alma, run_learned);
   }
-  else if (strcmp(proc->terms[0].function->name, "ancestor") == 0) {
+  else if (strcmp(func->name, "ancestor") == 0) {
     if (func->term_count == 2)
       return ancestor(func->terms+0, func->terms+1, bindings, alma);
+  }
+  else if (strcmp(func->name, "less_than") == 0) {
+    if (func->term_count == 2)
+      return less_than(func->terms+0, func->terms+1, bindings, alma);
   }
   return 0;
 }

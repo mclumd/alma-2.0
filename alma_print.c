@@ -1,9 +1,15 @@
+#include <stdarg.h>
 #include "alma_print.h"
 #include "alma_formula.h"
 #include "alma_fif.h"
 
+
 char logs_on;
 char python_mode;
+
+static void alma_function_print(alma_function *func, kb_str *buf);
+static void alma_quote_print(alma_quote *quote, kb_str *buf);
+
 
 static void alma_function_print(alma_function *func, kb_str *buf);
 
@@ -18,8 +24,10 @@ void disable_python_mode() {
 static void alma_term_print(alma_term *term, kb_str *buf) {
   if (term->type == VARIABLE)
     tee_alt("%s%lld", buf, term->variable->name, term->variable->id);
-  else
+  else if (term->type == FUNCTION)
     alma_function_print(term->function, buf);
+  else
+    alma_quote_print(term->quote, buf);
 }
 
 static void alma_function_print(alma_function *func, kb_str *buf) {
@@ -35,56 +43,48 @@ static void alma_function_print(alma_function *func, kb_str *buf) {
   }
 }
 
-static void alma_fol_print_rec(alma_node *node, int indent, kb_str *buf) {
-  char *spacing = malloc(indent*2 + 1);
-  if (indent > 0)
-    memset(spacing, ' ', indent*2);
-  spacing[indent*2] = '\0';
+static void alma_quote_print(alma_quote *quote, kb_str *buf) {
+  tee_alt("\"", buf);
+  if (quote->type == SENTENCE)
+    alma_fol_print(quote->sentence, buf);
+  else
+    clause_print(quote->clause_quote, buf);
+  tee_alt("\"", buf);
+}
 
+void alma_fol_print(alma_node *node, kb_str *buf) {
   if (node->type == FOL) {
     char *op;
     switch (node->fol->op) {
       case NOT:
-        op = "NOT"; break;
+        op = "~"; break;
       case OR:
-        op = "OR"; break;
+        op = "\\/"; break;
       case AND:
-        op = "AND"; break;
+        op = "/\\"; break;
       case IF:
-        op = "IF"; break;
+        if (node->fol->tag == FIF)
+          op = "-f->";
+        else if (node->fol->tag == BIF)
+          op = "-b->";
+        else
+          op = "--->";
+        break;
     }
 
-    if (node->fol->tag != NONE) {
-      char *tag = "";
-      switch (node->fol->tag) {
-        case FIF:
-          tag = "FIF"; break;
-        case BIF:
-          tag = "BIF"; break;
-        case NONE:
-          tag = "NONE"; break;
-      }
-      tee_alt("%sFOL: %s, tag: %s\n", buf, spacing, op, tag);
-    }
-    else {
-      tee_alt("%sFOL: %s\n", buf, spacing, op);
-    }
+    tee_alt("(",buf);
+    if (node->fol->op == NOT)
+      tee_alt("%s", buf, op);
+    alma_fol_print(node->fol->arg1, buf);
 
-    alma_fol_print_rec(node->fol->arg1, indent+1, buf);
     if (node->fol->arg2 != NULL) {
-      alma_fol_print_rec(node->fol->arg2, indent+1, buf);
+      tee_alt(" %s ", buf, op);
+      alma_fol_print(node->fol->arg2, buf);
     }
+    tee_alt(")", buf);
   }
-  else {
-    tee_alt("%sPREDICATE: ", buf, spacing);
+  else
     alma_function_print(node->predicate, buf);
-    tee_alt("\n", buf);
-  }
-  free(spacing);
-}
-
-void alma_fol_print(alma_node *node, kb_str *buf) {
-  alma_fol_print_rec(node, 0, buf);
 }
 
 static void lits_print(alma_function **lits, int count, char *delimiter, int negate, kb_str *buf) {

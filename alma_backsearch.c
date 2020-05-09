@@ -1,3 +1,4 @@
+#include <string.h>
 #include "alma_backsearch.h"
 
 static void collect_variables(alma_term *term, binding_list *b) {
