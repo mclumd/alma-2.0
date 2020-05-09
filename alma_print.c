@@ -181,6 +181,7 @@ void print_bindings(binding_list *theta, kb_str *buf) {
 
 void tee_alt(char const *content, ...) {
   va_list ap, copy_ap;
+  char fake_str[1000];
   kb_str *dest;
   int bytes = 0, size = 0;
   va_start(ap, content);
@@ -188,8 +189,13 @@ void tee_alt(char const *content, ...) {
   if (python_mode) {
     va_copy(copy_ap, ap);
     size = dest->limit - dest->size;
+    bytes = vsnprintf(fake_str, size, content, copy_ap);
+    va_copy(copy_ap, ap);
     bytes = vsnprintf(&(dest->buffer[dest->size]), size, content, copy_ap);
-    while (bytes == size) {
+    //    printf("TEEEEEE: %s, %d --- %d\n", fake_str, size, bytes);
+
+    while (bytes >= size) {
+      //      printf("IN BYTES LOOP\n");
       dest->limit += 1000;
       dest->buffer = realloc(dest->buffer, dest->limit);
       va_copy(copy_ap,ap);
