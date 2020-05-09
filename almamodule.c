@@ -66,7 +66,7 @@ static PyObject * alma_step(PyObject *self, PyObject *args) {
   return Py_BuildValue("s",ret_val);
 }
 
-static PyObject * alma_kbprint(PyObject *self, PyObject *args) {
+static PyObject * alma_print(PyObject *self, PyObject *args) {
   char *ret_val;
   long alma_kb;
   
@@ -87,7 +87,7 @@ static PyObject * alma_kbprint(PyObject *self, PyObject *args) {
   ret_val[buf.size] = '\0';
   free(buf.buffer);
   
-  return Py_BuildValue("(s,l)",ret_val,buf.size);
+  return Py_BuildValue("s",ret_val);
 }
 
 static PyObject * alma_halt(PyObject *self, PyObject *args) {
@@ -271,10 +271,10 @@ static PyMethodDef AlmaMethods[] = {
   {"init", alma_init, METH_VARARGS,"Initialize an alma kb."},
   {"mode", alma_mode, METH_VARARGS,"Check python mode."},
   {"step", alma_step, METH_VARARGS,"Step an alma kb."},
-  {"kbprint", alma_kbprint, METH_VARARGS,"Print out entire alma kb."},
+  {"kbprint", alma_print, METH_VARARGS,"Print out entire alma kb."},
   {"halt", alma_halt, METH_VARARGS,"Stop an alma kb."},
   {"add", alma_add, METH_VARARGS,"Add a clause or formula to an alma kb."},
-  {"del", alma_del, METH_VARARGS,"Delete a clause or formula from an alma kb."},
+  {"kbdel", alma_del, METH_VARARGS,"Delete a clause or formula from an alma kb."},
   {"update", alma_update, METH_VARARGS,"Update a clause or formula in an alma kb."},
   {"obs", alma_obs, METH_VARARGS,"Observe something in an alma kb."},
   {"bs", alma_bs, METH_VARARGS,"Backsearch an alma kb."},
