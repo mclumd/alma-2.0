@@ -41,7 +41,8 @@ optional arguments:
 ```
 alma         : /^/ (<almaformula> | <almacomment>)* /$/         
 almacomment  : /%[^\n]*\n/
-almaformula  : (<fformula> | <bformula> | <formula>) '.'
+almaformula  : <sentence> '.'
+sentence     : <fformula> | <bformula> | <formula>
 formula      : \"and(\" <formula> ',' <formula> ')' | \"or(\" <formula> ','  <formula> ')'
              | \"if(\" <formula> ',' <formula> ')' | \"not(\" <formula> ')' | <literal>
 fformula     : \"fif(\" <conjform> ',' \"conclusion(\" <fformconc> ')' ')'
@@ -50,7 +51,7 @@ bformula     : \"bif(\" <formula> ',' <formula> ')'
 conjform     : \"and(\" <conjform> ',' <conjform> ')' | \"not(\" <literal> ')' | <literal>
 literal      : <predname> '(' <listofterms> ')' | <predname>
 listofterms  : <term> (',' <term>)*
-term         : <funcname> '(' <listofterms> ')'| <variable> | <constant>
+term         : \"quote\" '(' <sentence> ')' | <funcname> '(' <listofterms> ')'| <variable> | <constant>
 predname     : <prologconst>
 constant     : <prologconst>
 funcname     : <prologconst>

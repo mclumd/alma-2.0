@@ -3,6 +3,7 @@
 mpc_parser_t* Alma;
 mpc_parser_t* Almacomment;
 mpc_parser_t* Almaformula;
+mpc_parser_t* Sentence;
 mpc_parser_t* Formula;
 mpc_parser_t* FFormula;
 mpc_parser_t* FFormConc;
@@ -18,9 +19,10 @@ mpc_parser_t* Variable;
 mpc_parser_t* Prologconst;
 
 void parse_init(void) {
-  Alma  = mpc_new("alma");
+  Alma = mpc_new("alma");
   Almacomment = mpc_new("almacomment");
-  Almaformula  = mpc_new("almaformula");
+  Almaformula = mpc_new("almaformula");
+  Sentence = mpc_new("sentence");
   Formula = mpc_new("formula");
   FFormula = mpc_new("fformula");
   FFormConc = mpc_new("fformconc");
@@ -39,7 +41,8 @@ void parse_init(void) {
     "                                                            "
     " alma         : /^/ (<almaformula> | <almacomment>)* /$/ ;  "
     " almacomment  : /%[^\n]*\n/ ;                               "
-    " almaformula  : (<fformula> | <bformula> | <formula>) '.' ; "
+    " almaformula  : <sentence> '.' ;                            "
+    " sentence     : <fformula> | <bformula> | <formula> ;       "
     " formula      : \"and(\" <formula> ',' <formula> ')'        "
     "              | \"or(\" <formula> ','  <formula> ')'        "
     "              | \"if(\" <formula> ',' <formula> ')'         "
@@ -55,14 +58,15 @@ void parse_init(void) {
     " literal      : <predname> '(' <listofterms> ')'            "
     "              | <predname> ;                                "
     " listofterms  : <term> (',' <term>)* ;                      "
-    " term         : <funcname> '(' <listofterms> ')'            "
+    " term         : \"quote\" '(' <sentence> ')'                "
+    "              | <funcname> '(' <listofterms> ')'            "
     "              | <variable> | <constant> ;                   "
     " predname     : <prologconst> ;                             "
     " constant     : <prologconst> ;                             "
     " funcname     : <prologconst> ;                             "
     " variable     : /[A-Z_][a-zA-Z0-9_]*/ ;                     "
     " prologconst  : /[a-z0-9][a-zA-Z0-9_]*/ ;                   ",
-    Alma, Almacomment, Almaformula, Formula, FFormula, FFormConc, BFormula, Conjform,
+    Alma, Almacomment, Almaformula, Sentence, Formula, FFormula, FFormConc, BFormula, Conjform,
     Literal, Listofterms, Term, Predname, Constant, Funcname, Variable, Prologconst, NULL);
 }
 
@@ -75,6 +79,8 @@ int parse_file(char *filename, mpc_ast_t **ast) {
 
   if (result) {
     *ast = r.output;
+    //mpc_ast_print(*ast);
+    //exit(0);
     return 1;
   }
   else {
@@ -100,6 +106,6 @@ int parse_string(char *string, mpc_ast_t **ast) {
 }
 
 void parse_cleanup(void) {
-  mpc_cleanup(16, Alma, Almacomment, Almaformula, Formula, FFormula, FFormConc, BFormula,
+  mpc_cleanup(17, Alma, Almacomment, Almaformula, Sentence, Formula, FFormula, FFormConc, BFormula,
     Conjform, Literal, Listofterms, Term, Predname, Constant, Funcname, Variable, Prologconst);
 }

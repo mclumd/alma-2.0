@@ -1,3 +1,4 @@
+#include <string.h>
 #include "alma_fif.h"
 #include "alma_proc.h"
 
