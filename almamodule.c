@@ -80,7 +80,7 @@ static PyObject * alma_print(PyObject *self, PyObject *args) {
 
   kb_str buf;
   buf.size = 0;
-  buf.limit = 10000;
+  buf.limit = 1000;
   buf.buffer = malloc(buf.limit);
   buf.buffer[0] = '\0';
   
@@ -109,10 +109,10 @@ static PyObject * alma_halt(PyObject *self, PyObject *args) {
 }
 
 static PyObject * alma_add(PyObject *self, PyObject *args) {
-  const char *input;
+  char *input;
   PyObject *ret_val;
-  char *assertion;
-  int len;
+  //  char *assertion;
+  //  int len;
   long alma_kb;
 
   if (!PyArg_ParseTuple(args, "ls", &alma_kb, &input))
@@ -124,13 +124,14 @@ static PyObject * alma_add(PyObject *self, PyObject *args) {
   buf.buffer = malloc(buf.limit);
   buf.buffer[0] = '\0';
   
-  len = strlen(input);
+  //  len = strlen(input);
   
-  assertion = malloc(len);
-  strncpy(assertion, input, len);
-  assertion[len-1] = '\0';
-  kb_assert((kb *)alma_kb, assertion, &buf);
-  free(assertion);
+  //  assertion = malloc(len);
+  //  strncpy(assertion, input, len);
+  //  assertion[len-1] = '\0';
+  //  kb_assert((kb *)alma_kb, assertion, &buf);
+  kb_assert((kb *)alma_kb, input, &buf);
+  //  free(assertion);
 
   //  ret_val = malloc(buf.size + 1);
   //  strcpy(ret_val,buf.buffer);
@@ -143,11 +144,12 @@ static PyObject * alma_add(PyObject *self, PyObject *args) {
 }
 
 static PyObject * alma_del(PyObject *self, PyObject *args) {
-  const char *input;
+  char *input;
   PyObject *ret_val;
-  char *assertion;
-  int len;
+  //  char *assertion;
+  //  int len;
   long alma_kb;
+  //  int error;
   
   if (!PyArg_ParseTuple(args, "ls", &alma_kb, &input))
     return NULL;
@@ -158,29 +160,33 @@ static PyObject * alma_del(PyObject *self, PyObject *args) {
   buf.buffer = malloc(buf.limit);
   buf.buffer[0] = '\0';
   
-  len = strlen(input);
+  //  len = strlen(input);
   
-  assertion = malloc(len);
-  strncpy(assertion, input, len);
-  assertion[len-1] = '\0';
-  kb_remove((kb *)alma_kb, assertion, &buf);
-  free(assertion);
+  //  assertion = malloc(len);
+  //  strncpy(assertion, input, len);
+  //  assertion[len-1] = '\0';
+  //  kb_remove((kb *)alma_kb, assertion, &buf);
+  kb_remove((kb *)alma_kb, input, &buf);
+  //  free(assertion);
 
   //  ret_val = malloc(buf.size + 1);
   //  strcpy(ret_val,buf.buffer);
   //  ret_val[buf.size] = '\0';
+  
   buf.buffer[buf.size] = '\0';
   ret_val = Py_BuildValue("s",buf.buffer);
+
+
   free(buf.buffer);
   
   return ret_val;
 }
 
 static PyObject * alma_update(PyObject *self, PyObject *args) {
-  const char *input;
+  char *input;
   PyObject *ret_val;
-  char *assertion;
-  int len;
+  //  char *assertion;
+  //  int len;
   long alma_kb;
   
   if (!PyArg_ParseTuple(args, "ls", &alma_kb, &input))
@@ -192,13 +198,14 @@ static PyObject * alma_update(PyObject *self, PyObject *args) {
   buf.buffer = malloc(buf.limit);
   buf.buffer[0] = '\0';
   
-  len = strlen(input);
+  //  len = strlen(input);
   
-  assertion = malloc(len);
-  strncpy(assertion, input, len);
-  assertion[len - 1] = '\0';
-  kb_update((kb *)alma_kb, assertion, &buf);
-  free(assertion);
+  //  assertion = malloc(len);
+  //  strncpy(assertion, input, len);
+  //  assertion[len - 1] = '\0';
+  kb_update((kb *)alma_kb, input, &buf);
+  //  kb_update((kb *)alma_kb, assertion, &buf);
+  //  free(assertion);
 
   //  ret_val = malloc(buf.size + 1);
   //  strcpy(ret_val,buf.buffer);
@@ -211,10 +218,10 @@ static PyObject * alma_update(PyObject *self, PyObject *args) {
 }
 
 static PyObject * alma_obs(PyObject *self, PyObject *args) {
-  const char *input;
+  char *input;
   PyObject *ret_val;
-  char *assertion;
-  int len;
+  //  char *assertion;
+  //  int len;
   long alma_kb;
   
   if (!PyArg_ParseTuple(args, "ls", &alma_kb, &input))
@@ -226,13 +233,14 @@ static PyObject * alma_obs(PyObject *self, PyObject *args) {
   buf.buffer = malloc(buf.limit);
   buf.buffer[0] = '\0';
   
-  len = strlen(input);
+  //  len = strlen(input);
   
-  assertion = malloc(len);
-  strncpy(assertion, input, len);
-  assertion[len-1] = '\0';
-  kb_observe((kb *)alma_kb, assertion, &buf);
-  free(assertion);
+  //  assertion = malloc(len);
+  //  strncpy(assertion, input, len);
+  //  assertion[len-1] = '\0';
+  kb_observe((kb *)alma_kb, input, &buf);
+  //  kb_observe((kb *)alma_kb, assertion, &buf);
+  //  free(assertion);
 
   //  ret_val = malloc(buf.size + 1);
   //  strcpy(ret_val,buf.buffer);
@@ -245,10 +253,10 @@ static PyObject * alma_obs(PyObject *self, PyObject *args) {
 }
 
 static PyObject * alma_bs(PyObject *self, PyObject *args) {
-  const char *input;
+  char *input;
   PyObject *ret_val;
-  char *assertion;
-  int len;
+  //  char *assertion;
+  //  int len;
   long alma_kb;
   
   if (!PyArg_ParseTuple(args, "ls", &alma_kb, &input))
@@ -260,13 +268,14 @@ static PyObject * alma_bs(PyObject *self, PyObject *args) {
   buf.buffer = malloc(buf.limit);
   buf.buffer[0] = '\0';
   
-  len = strlen(input);
+  //  len = strlen(input);
   
-  assertion = malloc(len);
-  strncpy(assertion, input, len);
-  assertion[len-1] = '\0';
-  kb_backsearch((kb *)alma_kb, assertion, &buf);
-  free(assertion);
+  //  assertion = malloc(len);
+  //  strncpy(assertion, input, len);
+  //  assertion[len-1] = '\0';
+  kb_backsearch((kb *)alma_kb, input, &buf);
+  //  kb_backsearch((kb *)alma_kb, assertion, &buf);
+  //  free(assertion);
 
   //  ret_val = malloc(buf.size + 1);
   //  strcpy(ret_val,buf.buffer);

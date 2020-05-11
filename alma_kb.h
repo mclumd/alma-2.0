@@ -110,7 +110,7 @@ void make_clause(alma_node *node, clause *c);
 int clauses_differ(clause *x, clause *y);
 clause* duplicate_check(kb *collection, clause *c);
 void add_clause(kb *collection, clause *curr);
-void remove_clause(kb *collection, clause *c);
+void remove_clause(kb *collection, clause *c, kb_str *buf);
 struct backsearch_task;
 
 void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr, struct backsearch_task *bs, kb_str *buf);

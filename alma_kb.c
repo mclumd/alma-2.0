@@ -659,7 +659,8 @@ static void remove_child(clause *p, clause *c) {
 
 // Given a clause already existing in KB, remove from data structures
 // Note that fif removal, or removal of a singleton clause used in a fif rule, may be very expensive
-void remove_clause(kb *collection, clause *c) {
+void remove_clause(kb *collection, clause *c, kb_str *buf) {
+  //  printf("ALMA: IN REMOVE CLAUSE\n");
   if (c->tag == FIF) {
     // fif must be removed from fif_map and all fif tasks using it deleted
     char *name = c->fif->conclusion->name;
@@ -706,18 +707,32 @@ void remove_clause(kb *collection, clause *c) {
   tommy_hashlin_remove_existing(&collection->index_map, &result->hash_node);
   free(result);
 
+  //  printf("ALMA: MID WAY THROUGH REMOVE CLAUSE: CHILDREN COUNT %d\n",c->children_count);
+  
   // Remove clause from the parents list of each of its children
   for (int i = 0; i < c->children_count; i++) {
     clause *child = c->children[i];
     if (child != NULL) {
       int new_count = child->parent_set_count;
-
+      //      printf("ALMA: CHILD POS LITS POINTER: %p\n",(void *)child->pos_lits);
+      //      for (int z = 0; z < child->pos_count; z++) {
+      //      	tee_alt("IN ALMA REMOVE_CLAUSE: CHILD POS LITS NAME AND POINTER: %s : %p\n",buf,child->pos_lits[z]->name,(void *)child);	
+      //      }
+      //      tee_alt("IN ALMA REMOVE_CLAUSE: PARENT SET COUNT %d\n",buf,child->parent_set_count);
       //  If a parent set has a clause matching, remove match
       for (int j = 0; j < child->parent_set_count; j++) {
+	//	tee_alt("IN ALMA REMOVE_CLAUSE: NUM PARENT CLAUSES %d\n",buf,child->parents[j].count);
         for (int k = 0; k < child->parents[j].count; k++) {
+	  //	  tee_alt("IN ALMA REMOVE_CLAUSE: LOOP IN REMOVE CLAUSE: (i,j,k) => (%d,%d,%d)\n",buf,i,j,k);
+	  //	  tee_alt("IN ALMA REMOVE_CLAUSE: PARENT SET CLAUSE POINTER %p\n",buf,(void *)child->parents[j].clauses);
+	  //	  if (!child->parents[j].clauses) {
+	  //	    return 0;
+	  //	  }
           if (child->parents[j].clauses[k] == c) {
             // If last parent in set, deallocate
+	    //	    printf("ALMA: REMOVE CLAUSE: BEFORE PARENT COUNT\n");
             if (child->parents[j].count == 1) {
+	      //	      tee_alt("IN ALMA: REMOVE CLAUSE: PARENT COUNT IS ONE\n",buf);
               new_count--;
               child->parents[j].count = 0;
               free(child->parents[j].clauses);
@@ -725,6 +740,7 @@ void remove_clause(kb *collection, clause *c) {
             }
             // Otherwise, reallocate without parent
             else {
+	      //	      tee_alt("IN ALMA: REMOVE CLAUSE: PARENT COUNT IS %d\n",buf, child->parents[j].count);
               child->parents[j].count--;
               child->parents[j].clauses[k] = child->parents[j].clauses[child->parents[j].count];
               child->parents[j].clauses = realloc(child->parents[j].clauses, sizeof(*child->parents[j].clauses)*child->parents[j].count);
@@ -751,6 +767,7 @@ void remove_clause(kb *collection, clause *c) {
             }
             break;
           }
+	  //	  printf("ALMA: REMOVE CLAUSE: END OF THIS LOOP\n");
         }
       }
 
@@ -770,6 +787,10 @@ void remove_clause(kb *collection, clause *c) {
             loc++;
           }
         }
+	//	printf("REALLOCING PARENTS 1\n");
+	//	for (int z = 0; z < child->pos_count; z++) {
+	//	  printf("ALMA: CHILD POS LITS NAME: %s\n",child->pos_lits[z]->name);	
+	//	}
         child->parents = realloc(child->parents, sizeof(*child->parents)*new_count);
       }
       if (new_count == 0 && child->parents != NULL) {
@@ -786,6 +807,8 @@ void remove_clause(kb *collection, clause *c) {
       remove_child(c->parents[i].clauses[j], c);
 
   free_clause(c);
+  //  return 1;
+  //  printf("ALMA: LEAVING REMOVE CLAUSE\n");
 }
 
 // Compare function to be used by tommy_hashlin_search for distrust_mapping
@@ -879,21 +902,24 @@ int delete_formula(kb *collection, char *string, int print, kb_str *buf) {
       free_alma_tree(formulas+i);
     }
     free(formulas);
-
+    
+    //    tee_alt("ALMA IN DELETE FORMULA: clause size %d\n",buf,tommy_array_size(&clauses));
     // Process and remove each clause
     for (tommy_size_t i = 0; i < tommy_array_size(&clauses); i++) {
       clause *curr = tommy_array_get(&clauses, i);
       clause *c = duplicate_check(collection, curr);
+      //      tee_alt("ALMA IN DELETE FORMULA LOOP: CLAUSE POINTER %p\n",buf,(void *)c);
       if (c != NULL) {
         if (print) {
           tee_alt("-a: ", buf);
           clause_print(c, buf);
           tee_alt(" removed\n", buf);
         }
-        remove_clause(collection, c);
+        remove_clause(collection, c, buf);
       }
       free_clause(curr);
     }
+
     tommy_array_done(&clauses);
 
     return 1;
@@ -1091,6 +1117,11 @@ void transfer_parent(kb *collection, clause *target, clause *source, int add_chi
   // Copy parents of source to target
   // As a new clause target has only one parent set
   if (!repeat_parents) {
+    //    printf("REALLOCING PARENTS 2\n");
+    //    for (int z = 0; z < target->pos_count; z++) {
+    //      printf("ALMA: TARGET POS LITS NAME: %s\n",target->pos_lits[z]->name);	
+    //    }
+
     target->parents = realloc(target->parents, sizeof(*target->parents) * (target->parent_set_count + 1));
     int last = target->parent_set_count;
     target->parents[last].count = source->parents[0].count;

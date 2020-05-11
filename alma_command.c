@@ -249,6 +249,7 @@ void kb_assert(kb *collection, char *string, kb_str *buf) {
 }
 
 void kb_remove(kb *collection, char *string, kb_str *buf) {
+  //  tee_alt("ALMA: IN KB REMOVE\n",buf);
   delete_formula(collection, string, 1, buf);
 }
 
