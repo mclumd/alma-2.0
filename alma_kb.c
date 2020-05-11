@@ -243,12 +243,12 @@ void free_clause(clause *c) {
 void copy_clause_structure(clause *original, clause *copy) {
   copy->pos_count = original->pos_count;
   copy->neg_count = original->neg_count;
-  copy->pos_lits = malloc(sizeof(*copy->pos_lits)*copy->pos_count);
+  copy->pos_lits = copy->pos_count > 0 ? malloc(sizeof(*copy->pos_lits)*copy->pos_count) : NULL;
   for (int i = 0; i < copy->pos_count; i++) {
     copy->pos_lits[i] = malloc(sizeof(*copy->pos_lits[i]));
     copy_alma_function(original->pos_lits[i], copy->pos_lits[i]);
   }
-  copy->neg_lits = malloc(sizeof(*copy->neg_lits)*copy->neg_count);
+  copy->neg_lits = copy->neg_count > 0 ? malloc(sizeof(*copy->neg_lits)*copy->neg_count) : NULL;
   for (int i = 0; i < copy->neg_count; i++) {
     copy->neg_lits[i] = malloc(sizeof(*copy->neg_lits[i]));
     copy_alma_function(original->neg_lits[i], copy->neg_lits[i]);
@@ -417,6 +417,8 @@ static int quotes_differ(alma_quote *x, alma_quote *y, var_matching *matches, in
     else {
       clause *c_x = x->clause_quote;
       clause *c_y = y->clause_quote;
+      if (c_x->pos_count != c_y->pos_count || c_x->neg_count != c_y->neg_count)
+        return 1;
       for (int i = 0; i < c_x->pos_count; i++)
         if (functions_differ(c_x->pos_lits[i], c_y->pos_lits[i], matches, quote_level+1))
           return 1;
@@ -774,7 +776,7 @@ void remove_clause(kb *collection, clause *c, kb_str *buf) {
       if (new_count > 0 && new_count != child->parent_set_count) {
         // Collect non-null parent sets at start of parents
         int loc = 1;
-        for (int j = 0; j < child->parent_set_count-1; j++) {
+        for (int j = 0; j < child->parent_set_count-1; j++, loc++) {
           if (child->parents[j].clauses == NULL) {
             while (loc < child->parent_set_count && child->parents[loc].clauses == NULL)
               loc++;
@@ -783,8 +785,6 @@ void remove_clause(kb *collection, clause *c, kb_str *buf) {
             child->parents[j].clauses = child->parents[loc].clauses;
             child->parents[j].count = child->parents[loc].count;
             child->parents[loc].clauses = NULL;
-            //child->parents[loc].count = 0;
-            loc++;
           }
         }
 	//	printf("REALLOCING PARENTS 1\n");
@@ -1562,6 +1562,7 @@ void process_new_clauses(kb *collection, kb_str *buf) {
                clause *to_reinstate = result->value;
                clause *reinstatement = malloc(sizeof(*reinstatement));
                copy_clause_structure(to_reinstate, reinstatement);
+               set_variable_ids(reinstatement, 1, NULL);
                reinstatement->parent_set_count = to_reinstate->parent_set_count;
                if (reinstatement->parent_set_count > 0) {
                  reinstatement->parents = malloc(sizeof(*reinstatement->parents)*reinstatement->parent_set_count);
