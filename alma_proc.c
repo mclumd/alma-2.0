@@ -335,7 +335,7 @@ static int idx_to_form(alma_term *index_term, alma_term *result, binding_list *b
     quoted->quote = malloc(sizeof(*quoted->quote));
     quoted->quote->type = CLAUSE;
     quoted->quote->clause_quote = quote_form;
-    add_binding(bindings, result->variable, quoted);
+    add_binding(bindings, result->variable, quoted, 0);
     return 1;
   }
   else

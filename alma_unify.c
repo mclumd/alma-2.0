@@ -78,7 +78,7 @@ static int unify_var(alma_term *varterm, alma_term *x, binding_list *theta) {
     return 0;
   }
   else {
-    add_binding(theta, var, x);
+    add_binding(theta, var, x, 1);
     return 1;
   }
 }
@@ -171,13 +171,18 @@ int pred_unify(alma_function *x, alma_function *y, binding_list *theta) {
 // Operations on bindings
 
 // Append new binding of var/term
-void add_binding(binding_list *theta, alma_variable *var, alma_term *term) {
+void add_binding(binding_list *theta, alma_variable *var, alma_term *term, int copy_term) {
   theta->num_bindings++;
   theta->list = realloc(theta->list, sizeof(*theta->list) * theta->num_bindings);
   theta->list[theta->num_bindings-1].var = malloc(sizeof(*var));
   copy_alma_var(var, theta->list[theta->num_bindings-1].var);
-  theta->list[theta->num_bindings-1].term = malloc(sizeof(*term));
-  copy_alma_term(term, theta->list[theta->num_bindings-1].term);
+  if (copy_term) {
+    theta->list[theta->num_bindings-1].term = malloc(sizeof(*term));
+    copy_alma_term(term, theta->list[theta->num_bindings-1].term);
+  }
+  else {
+    theta->list[theta->num_bindings-1].term = term;
+  }
 
   // Cascade substitution call to deal with bound variables inside other bindings
   cascade_substitution(theta);
