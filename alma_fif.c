@@ -373,14 +373,14 @@ void process_fif_tasks(kb *collection) {
   // Loop over hashlin contents of collection's fif tasks; based on tommy_hashlin_foreach
   // TODO: may want double indexing if this loops too many times
   tommy_size_t bucket_max = collection->fif_tasks.low_max + collection->fif_tasks.split;
-	for (tommy_size_t pos = 0; pos < bucket_max; ++pos) {
-		tommy_hashlin_node *node = *tommy_hashlin_pos(&collection->fif_tasks, pos);
+  for (tommy_size_t pos = 0; pos < bucket_max; ++pos) {
+    tommy_hashlin_node *node = *tommy_hashlin_pos(&collection->fif_tasks, pos);
 
-		while (node) {
-			fif_task_mapping *data = node->data;
-			node = node->next;
-			process_fif_task_mapping(collection, data, &to_progress);
-		}
+    while (node) {
+      fif_task_mapping *data = node->data;
+      node = node->next;
+      process_fif_task_mapping(collection, data, &to_progress);
+    }
   }
 
   tommy_list progressed;

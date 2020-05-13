@@ -542,16 +542,16 @@ clause* distrusted_dupe_check(kb *collection, clause *c) {
   // Loop over hashlin contents of distrusted; based on tommy_hashlin_foreach
   // TODO: may want double indexing if this loops too many times
   tommy_size_t bucket_max = collection->distrusted.low_max + collection->distrusted.split;
-	for (tommy_size_t pos = 0; pos < bucket_max; ++pos) {
-		tommy_hashlin_node *node = *tommy_hashlin_pos(&collection->distrusted, pos);
+  for (tommy_size_t pos = 0; pos < bucket_max; ++pos) {
+    tommy_hashlin_node *node = *tommy_hashlin_pos(&collection->distrusted, pos);
 
-		while (node) {
-			distrust_mapping *data = node->data;
-			node = node->next;
+    while (node) {
+      distrust_mapping *data = node->data;
+      node = node->next;
 
       if (!clauses_differ(data->value, c))
         return data->value;
-		}
+    }
   }
   return NULL;
 }
