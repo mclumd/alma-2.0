@@ -83,8 +83,6 @@ static int unify_var(alma_term *varterm, alma_term *x, binding_list *theta) {
   }
 }
 
-static int unify_quotes(alma_quote *x, alma_quote *y, binding_list *theta);
-
 static int unify_quote_func(alma_function *x, alma_function *y, binding_list *theta) {
   if (strcmp(x->name, y->name) == 0 && x->term_count == y->term_count) {
     for (int i = 0; i < x->term_count; i++) {
@@ -103,7 +101,7 @@ static int unify_quote_func(alma_function *x, alma_function *y, binding_list *th
 
 // TODO -- generalize to unify quasiquoted variables when this is added
 // Will involve tracking quote_levels
-static int unify_quotes(alma_quote *x, alma_quote *y, binding_list *theta) {
+int unify_quotes(alma_quote *x, alma_quote *y, binding_list *theta) {
   if (x->type == y->type) {
     if (x->type == SENTENCE) {
       // TODO, find way to deal with raw sentence quote unification

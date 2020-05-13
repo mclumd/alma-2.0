@@ -99,6 +99,7 @@ typedef struct res_task {
 
 void make_clause(alma_node *node, clause *c);
 int clauses_differ(clause *x, clause *y);
+clause* distrusted_dupe_check(kb *collection, clause *c);
 clause* duplicate_check(kb *collection, clause *c);
 void add_clause(kb *collection, clause *curr);
 void remove_clause(kb *collection, clause *c);
