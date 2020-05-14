@@ -923,6 +923,11 @@ int delete_formula(kb *collection, char *string, int print) {
         }
         remove_clause(collection, c);
       }
+      else if (print) {
+        tee("-a: ");
+        clause_print(curr);
+        tee(" not found\n");
+      }
       free_clause(curr);
     }
     tommy_array_done(&clauses);
