@@ -206,6 +206,7 @@ void flatten_node(alma_node *node, tommy_array *clauses, int print, kb_str *buf)
     c->children = NULL;
     c->tag = NONE;
     c->fif = NULL;
+    c->dirty_bit = (char) 1;
     make_clause(node, c);
     set_variable_ids(c, 1, NULL);
 
@@ -593,6 +594,7 @@ void add_clause(kb *collection, clause *c) {
   // Add clause to overall clause list and index map
   index_mapping *ientry = malloc(sizeof(*ientry));
   c->index = ientry->key = next_index++;
+  c->dirty_bit = (char) 1;
   ientry->value = c;
   c->learned = collection->time;
   tommy_list_insert_tail(&collection->clauses, &ientry->list_node, ientry);
@@ -1005,6 +1007,7 @@ int update_formula(kb *collection, char *string, kb_str *buf) {
       lits_temp = t_dupe->neg_lits;
       t_dupe->neg_lits = update->neg_lits;
       update->neg_lits = lits_temp;
+      t_dupe->dirty_bit = (char) 1;
 
       // Generate new tasks with updated clause
       res_tasks_from_clause(collection, t_dupe, 1);
@@ -1526,6 +1529,7 @@ void process_new_clauses(kb *collection, kb_str *buf) {
     clause *dupe = duplicate_check(collection, c);
     int reinstate = c->pos_count == 1 && c->neg_count == 0 && strcmp(c->pos_lits[0]->name, "reinstate") == 0 && c->pos_lits[0]->term_count == 1;
     if (dupe == NULL || reinstate) {
+      //      c->dirty_bit = (char) 1;
       if (c->tag == FIF)
         fif_task_map_init(collection, c);
 

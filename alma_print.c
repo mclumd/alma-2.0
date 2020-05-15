@@ -167,6 +167,7 @@ void clause_print(clause *c, kb_str *buf) {
     }
     tee_alt(")", buf);
   }
+  c->dirty_bit = (char) 0;
   //tee_alt(" (L%ld)", c->learned);
 }
 

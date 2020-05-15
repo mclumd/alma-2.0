@@ -15,3 +15,22 @@ s = alma.kbprint(a)
 for line in s.split('\n'):
     print(line)
 #print('size: {}'.format(l))
+
+s = alma.add(a,"do(move).")
+print(s)
+s = alma.step(a)
+print(s)
+
+s = alma.kbprint(a)
+
+for line in s.split('\n'):
+    print(line)
+
+    
+s = alma.update(a,"do(move). doing(move).")
+print(s)
+
+s = alma.kbprint(a)
+
+for line in s.split('\n'):
+    print(line)

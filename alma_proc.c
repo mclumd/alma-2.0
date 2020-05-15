@@ -254,6 +254,8 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, binding_list *bi
   return has_ancestor;
 }
 
+// Returns true if digit value of x is less than digit value of y
+// Else, incuding cases where types differ, false
 static int less_than(alma_term *x, alma_term *y, binding_list *bindings, kb *alma) {
   char *x_str;
   char *y_str;
@@ -296,6 +298,50 @@ static int less_than(alma_term *x, alma_term *y, binding_list *bindings, kb *alm
   return xval < yval;
 }
 
+// If first argument is a digit that's valid index of formula, binds second arg to quote of it and returns true
+static int idx_to_form(alma_term *index_term, alma_term *result, binding_list *bindings, kb *alma) {
+  char *idx_str;
+  if (index_term->type == VARIABLE) {
+    alma_term *bound = bindings_contain(bindings, index_term->variable);
+    if (bound == NULL || bound->type != FUNCTION || bound->function->term_count != 0)
+      return 0;
+    idx_str = bound->function->name;
+  }
+  else if (index_term->type == FUNCTION && index_term->function->term_count == 0)
+    idx_str = index_term->function->name;
+  else
+    return 0;
+
+  if (result->type != VARIABLE || bindings_contain(bindings, result->variable))
+    return 0;
+
+  long index = 0;
+  for (int i = strlen(idx_str)-1, j = 1; i >= 0; i--, j*=10) {
+    if (isdigit(idx_str[i]))
+      index += (idx_str[i] - '0') * j;
+    else
+      return 0;
+  }
+
+  index_mapping *map_res = tommy_hashlin_search(&alma->index_map, im_compare, &index, tommy_hash_u64(0, &index, sizeof(index)));
+  if (map_res != NULL) {
+    clause *formula = map_res->value;
+    clause *quote_form = malloc(sizeof(*quote_form));
+    copy_clause_structure(formula, quote_form);
+    set_variable_ids(quote_form, 1, NULL);
+
+    alma_term *quoted = malloc(sizeof(*quoted));
+    quoted->type = QUOTE;
+    quoted->quote = malloc(sizeof(*quoted->quote));
+    quoted->quote->type = CLAUSE;
+    quoted->quote->clause_quote = quote_form;
+    add_binding(bindings, result->variable, quoted, 0);
+    return 1;
+  }
+  else
+    return 0;
+}
+
 // If proc is a valid procedure, runs and returns truth value
 int proc_run(alma_function *proc, binding_list *bindings, kb *alma) {
   alma_function *func = proc->terms[0].function;
@@ -321,6 +367,10 @@ int proc_run(alma_function *proc, binding_list *bindings, kb *alma) {
   else if (strcmp(func->name, "less_than") == 0) {
     if (func->term_count == 2)
       return less_than(func->terms+0, func->terms+1, bindings, alma);
+  }
+  else if (strcmp(func->name, "idx_to_form") == 0) {
+    if (func->term_count == 2)
+      return idx_to_form(func->terms+0, func->terms+1, bindings, alma);
   }
   return 0;
 }
