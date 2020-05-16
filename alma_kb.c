@@ -538,7 +538,26 @@ static void remove_dupe_literals(int *count, alma_function ***triple) {
   }
 }
 
-// If c is found to be a clause duplicate, returns a pointer to that clause; null otherwise
+// Checks if c is a distrusted clause's duplicate; returns pointer ot that clause if so
+clause* distrusted_dupe_check(kb *collection, clause *c) {
+  // Loop over hashlin contents of distrusted; based on tommy_hashlin_foreach
+  // TODO: may want double indexing if this loops too many times
+  tommy_size_t bucket_max = collection->distrusted.low_max + collection->distrusted.split;
+  for (tommy_size_t pos = 0; pos < bucket_max; ++pos) {
+    tommy_hashlin_node *node = *tommy_hashlin_pos(&collection->distrusted, pos);
+
+    while (node) {
+      distrust_mapping *data = node->data;
+      node = node->next;
+
+      if (!clauses_differ(data->value, c))
+        return data->value;
+    }
+  }
+  return NULL;
+}
+
+// If c is found to be a clause's duplicate, returns a pointer to that clause; null otherwise
 // See comments preceding clauses_differ function for further detail
 clause* duplicate_check(kb *collection, clause *c) {
   if (c->tag == FIF) {
@@ -661,6 +680,12 @@ static void remove_child(clause *p, clause *c) {
   }
 }
 
+// Compare function to be used by tommy_hashlin_search for distrust_mapping
+// Compares long arg to key of distrust_mapping
+static int dm_compare(const void *arg, const void *obj) {
+  return *(const long*)arg - ((const distrust_mapping*)obj)->key;
+}
+
 // Given a clause already existing in KB, remove from data structures
 // Note that fif removal, or removal of a singleton clause used in a fif rule, may be very expensive
 void remove_clause(kb *collection, clause *c, kb_str *buf) {
@@ -693,11 +718,21 @@ void remove_clause(kb *collection, clause *c, kb_str *buf) {
     }
   }
   else {
-    // non-fif must be unindexed from pos/neg maps, have resolution tasks and fif tasks (if in any) removed
-    for (int i = 0; i < c->pos_count; i++)
-      map_remove_clause(&collection->pos_map, &collection->pos_list, c->pos_lits[i], c);
-    for (int i = 0; i < c->neg_count; i++)
-      map_remove_clause(&collection->neg_map, &collection->neg_list, c->neg_lits[i], c);
+    // If a clause is distrusted in KB, remove its distrust_mapping from hashmap
+    distrust_mapping *d = tommy_hashlin_search(&collection->distrusted, dm_compare, &c->index, tommy_hash_u64(0, &c->index, sizeof(c->index)));
+    if (d != NULL) {
+      if(d->value == c) {
+      tommy_hashlin_remove_existing(&collection->distrusted, &d->node);
+      free(d);
+      }
+    }
+    else {
+      // Non-fif must be unindexed from pos/neg maps, have resolution tasks and fif tasks (if in any) removed
+      for (int i = 0; i < c->pos_count; i++)
+        map_remove_clause(&collection->pos_map, &collection->pos_list, c->pos_lits[i], c);
+      for (int i = 0; i < c->neg_count; i++)
+        map_remove_clause(&collection->neg_map, &collection->neg_list, c->neg_lits[i], c);
+    }
 
     remove_res_tasks(collection, c);
 
@@ -813,12 +848,6 @@ void remove_clause(kb *collection, clause *c, kb_str *buf) {
   //  printf("ALMA: LEAVING REMOVE CLAUSE\n");
 }
 
-// Compare function to be used by tommy_hashlin_search for distrust_mapping
-// Compares long arg to key of distrust_mapping
-static int dm_compare(const void *arg, const void *obj) {
-  return *(const long*)arg - ((const distrust_mapping*)obj)->key;
-}
-
 int is_distrusted(kb *collection, long index) {
   return tommy_hashlin_search(&collection->distrusted, dm_compare, &index, tommy_hash_u64(0, &index, sizeof(index))) != NULL;
 }
@@ -910,7 +939,12 @@ int delete_formula(kb *collection, char *string, int print, kb_str *buf) {
     for (tommy_size_t i = 0; i < tommy_array_size(&clauses); i++) {
       clause *curr = tommy_array_get(&clauses, i);
       clause *c = duplicate_check(collection, curr);
+
       //      tee_alt("ALMA IN DELETE FORMULA LOOP: CLAUSE POINTER %p\n",buf,(void *)c);
+
+      if (c == NULL && curr->tag != FIF)
+        c = distrusted_dupe_check(collection, curr);
+
       if (c != NULL) {
         if (print) {
           tee_alt("-a: ", buf);
@@ -918,6 +952,11 @@ int delete_formula(kb *collection, char *string, int print, kb_str *buf) {
           tee_alt(" removed\n", buf);
         }
         remove_clause(collection, c, buf);
+      }
+      else if (print) {
+        tee_alt("-a: ", buf);
+        clause_print(curr, buf);
+        tee_alt(" not found\n", buf);
       }
       free_clause(curr);
     }

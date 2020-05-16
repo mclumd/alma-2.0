@@ -130,45 +130,34 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, binding_list *bi
   subst(bindings, descendant_copy);
 
   int has_ancestor = 0;
-  if (ancestor_copy->type == FUNCTION && descendant_copy->type == FUNCTION) {
-    alma_function *ancestor_f = ancestor_copy->function;
-    alma_function *descendant_f = descendant_copy->function;
+  if ((ancestor_copy->type == FUNCTION || (ancestor_copy->type == QUOTE && ancestor_copy->quote->type == CLAUSE))
+      && (descendant_copy->type == FUNCTION || (descendant_copy->type == QUOTE && descendant_copy->quote->type == CLAUSE))) {
 
+    alma_function *ancestor_f;
     int a_pos = 1;
-    // Extract from not, if present
-    if (strcmp(ancestor_f->name, "not") == 0) {
-      a_pos = 0;
-      if (ancestor_f->term_count != 1)
-        goto ancestor_ret;
-
-      alma_term *temp = ancestor_copy;
-      ancestor_copy = ancestor_f->terms;
-      free(temp->function->name);
-      free(temp->function);
-      free(temp);
-      if (ancestor_copy->type != FUNCTION)
-        goto ancestor_ret;
-
+    alma_quote *quote_holder = NULL;
+    if (ancestor_copy->type == FUNCTION) {
       ancestor_f = ancestor_copy->function;
+      // Extract from not, if present
+      if (strcmp(ancestor_f->name, "not") == 0) {
+        a_pos = 0;
+        if (ancestor_f->term_count != 1)
+          goto ancestor_ret;
+
+        alma_term *temp = ancestor_copy;
+        ancestor_copy = ancestor_f->terms;
+        free(temp->function->name);
+        free(temp->function);
+        free(temp);
+        if (ancestor_copy->type != FUNCTION)
+          goto ancestor_ret;
+
+        ancestor_f = ancestor_copy->function;
+      }
     }
-
-    int d_pos = 1;
-    tommy_hashlin *d_map = &alma->pos_map;
-    if (strcmp(descendant_f->name, "not") == 0) {
-      d_pos = 0;
-      d_map = &alma->neg_map;
-      if (descendant_f->term_count != 1)
-        goto ancestor_ret;
-
-      alma_term *temp = descendant_copy;
-      descendant_copy = descendant_f->terms;
-      free(temp->function->name);
-      free(temp->function);
-      free(temp);
-      if (descendant_copy->type != FUNCTION)
-        goto ancestor_ret;
-
-      descendant_f = descendant_copy->function;
+    else if (ancestor_copy->type == QUOTE) {
+      quote_holder = malloc(sizeof(*quote_holder));
+      quote_holder->type = CLAUSE;
     }
 
     // Frontier of parents to expand
@@ -176,28 +165,58 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, binding_list *bi
     tommy_array_init(&queue);
 
     binding_list *desc_bindings = NULL;
-    // Locate clause unifying with descendant
-    // Note: for now, will just use first unifying case for ancestor search
-    // If necessary, can make more general at later point, by trying all possibilities
-    char *name = name_with_arity(descendant_f->name, descendant_f->term_count);
-    predname_mapping *result = tommy_hashlin_search(d_map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
-    free(name);
-    if (result != NULL) {
-      for (int i = result->num_clauses-1; i >= 0; i--) {
-        if (result->clauses[i]->pos_count + result->clauses[i]->neg_count == 1) {
-          alma_function *lit = (d_pos ? result->clauses[i]->pos_lits[0] : result->clauses[i]->neg_lits[0]);
-          // Create copy as either empty list or copy of arg
-          desc_bindings = malloc(sizeof(*desc_bindings));
-          copy_bindings(desc_bindings, bindings);
+    // Unquoted case for desdendant: must locate clause unifying with descendant
+    if (descendant_copy->type == FUNCTION) {
+      alma_function *descendant_f = descendant_copy->function;
+      int d_pos = 1;
+      tommy_hashlin *d_map = &alma->pos_map;
+      if (strcmp(descendant_f->name, "not") == 0) {
+        d_pos = 0;
+        d_map = &alma->neg_map;
+        if (descendant_f->term_count != 1)
+          goto ancestor_ret;
 
-          if (pred_unify(descendant_f, lit, desc_bindings)) {
-            // Starting item for queue
-            tommy_array_insert(&queue, result->clauses[i]);
-            break;
+        alma_term *temp = descendant_copy;
+        descendant_copy = descendant_f->terms;
+        free(temp->function->name);
+        free(temp->function);
+        free(temp);
+        if (descendant_copy->type != FUNCTION)
+          goto ancestor_ret;
+
+        descendant_f = descendant_copy->function;
+      }
+
+      // Note: for now, will just use first unifying case for ancestor search
+      // If necessary, can make more general at later point, by trying all possibilities
+      char *name = name_with_arity(descendant_f->name, descendant_f->term_count);
+      predname_mapping *result = tommy_hashlin_search(d_map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
+      free(name);
+      if (result != NULL) {
+        for (int i = result->num_clauses-1; i >= 0; i--) {
+          if (result->clauses[i]->pos_count + result->clauses[i]->neg_count == 1) {
+            alma_function *lit = (d_pos ? result->clauses[i]->pos_lits[0] : result->clauses[i]->neg_lits[0]);
+            // Create copy as either empty list or copy of arg
+            desc_bindings = malloc(sizeof(*desc_bindings));
+            copy_bindings(desc_bindings, bindings);
+
+            if (pred_unify(descendant_f, lit, desc_bindings)) {
+              // Starting item for queue
+              tommy_array_insert(&queue, result->clauses[i]);
+              break;
+            }
+            cleanup_bindings(desc_bindings);
           }
-          cleanup_bindings(desc_bindings);
         }
       }
+    }
+    // Quoted case for desdendant: can use duplicate check to retreive any matching clause from KB
+    else if (descendant_copy->type == QUOTE) {
+      clause *c = duplicate_check(alma, descendant_copy->quote->clause_quote);
+      if (c == NULL && descendant_copy->quote->clause_quote->tag != FIF)
+        c = distrusted_dupe_check(alma, descendant_copy->quote->clause_quote);
+      if (c != NULL)
+        tommy_array_insert(&queue, c);
     }
 
     // Checked items to avoid cycles
@@ -217,21 +236,33 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, binding_list *bi
       if (!present) {
         tommy_array_insert(&checked, c);
 
-        // If singleton with literal sign matching anecstor's, try unifying with ancestor
-        if (c->pos_count + c->neg_count == 1 && (a_pos ? c->pos_count : c->neg_count) == 1) {
-          alma_function *lit = (a_pos ? c->pos_lits[0] : c->neg_lits[0]);
-
-          binding_list *anc_bindings = malloc(sizeof(*anc_bindings));
-          copy_bindings(anc_bindings, desc_bindings);
-
-          if (pred_unify(ancestor_f, lit, anc_bindings)) {
-            swap_bindings(anc_bindings, bindings);
-            cleanup_bindings(anc_bindings);
-            has_ancestor = 1;
-            break;
-          }
-          cleanup_bindings(anc_bindings);
+        int success = 0;
+        binding_list *anc_bindings = malloc(sizeof(*anc_bindings));
+        if (desc_bindings == NULL) {
+          desc_bindings = malloc(sizeof(*desc_bindings));
+          copy_bindings(desc_bindings, bindings);
         }
+        copy_bindings(anc_bindings, desc_bindings);
+
+        if (ancestor_copy->type == FUNCTION && c->pos_count + c->neg_count == 1 && (a_pos ? c->pos_count : c->neg_count) == 1) {
+            alma_function *lit = (a_pos ? c->pos_lits[0] : c->neg_lits[0]);
+            // If singleton with literal sign matching ancestor's, try unifying with ancestor
+            success = pred_unify(ancestor_f, lit, anc_bindings);
+        }
+        else if (ancestor_copy->type == QUOTE && c->pos_count == ancestor_copy->quote->clause_quote->pos_count
+                 && c->neg_count == ancestor_copy->quote->clause_quote->neg_count) {
+            quote_holder->clause_quote = c;
+            // Try unifying pair of quotes
+            success = unify_quotes(ancestor_copy->quote, quote_holder, anc_bindings);
+        }
+
+        if (success) {
+          swap_bindings(anc_bindings, bindings);
+          cleanup_bindings(anc_bindings);
+          has_ancestor = 1;
+          break;
+        }
+        cleanup_bindings(anc_bindings);
 
         // Queue parents for expansion
         for (int i = 0; i < c->parent_set_count; i++)
@@ -242,6 +273,8 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, binding_list *bi
 
     if (desc_bindings != NULL)
       cleanup_bindings(desc_bindings);
+    if (quote_holder != NULL)
+      free(quote_holder);
     tommy_array_done(&queue);
     tommy_array_done(&checked);
   }
