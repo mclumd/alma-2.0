@@ -234,6 +234,37 @@ void free_clause(clause *c) {
   free(c);
 }
 
+// Space for copy must be allocated before call
+// Does not copy parents/children/index/learned
+void copy_clause_structure(clause *original, clause *copy) {
+  copy->pos_count = original->pos_count;
+  copy->neg_count = original->neg_count;
+  copy->pos_lits = malloc(sizeof(*copy->pos_lits)*copy->pos_count);
+  for (int i = 0; i < copy->pos_count; i++) {
+    copy->pos_lits[i] = malloc(sizeof(*copy->pos_lits[i]));
+    copy_alma_function(original->pos_lits[i], copy->pos_lits[i]);
+  }
+  copy->neg_lits = malloc(sizeof(*copy->neg_lits)*copy->neg_count);
+  for (int i = 0; i < copy->neg_count; i++) {
+    copy->neg_lits[i] = malloc(sizeof(*copy->neg_lits[i]));
+    copy_alma_function(original->neg_lits[i], copy->neg_lits[i]);
+  }
+  copy->parent_set_count = copy->children_count = 0;
+  copy->parents = NULL;
+  copy->children = NULL;
+  copy->tag = original->tag;
+  if (copy->tag == FIF) {
+    copy->fif = malloc(sizeof(*copy->fif));
+    copy->fif->premise_count = original->fif->premise_count;
+    copy->fif->ordering = malloc(sizeof(*copy->fif->ordering)*copy->fif->premise_count);
+    memcpy(copy->fif->ordering, original->fif->ordering, sizeof(*copy->fif->ordering)*copy->fif->premise_count);
+    copy->fif->conclusion = original->fif->neg_conc ? copy->neg_lits[copy->neg_count-1] : copy->pos_lits[copy->pos_count-1];
+    copy->fif->neg_conc = original->fif->neg_conc;
+  }
+  else
+    copy->fif = NULL;
+}
+
 // Flattens trees into set of clauses (tommy_array must be initialized prior)
 // trees argument freed here
 void nodes_to_clauses(alma_node *trees, int num_trees, tommy_array *clauses, int print) {
@@ -1174,7 +1205,7 @@ void process_one_res_task(kb *collection, res_task_heap *tasks, tommy_array *new
 	// If successful, create clause for result of resolution and add to new_clauses
 	clause *res_result = malloc(sizeof(*res_result));
 	resolve(current_task, theta, res_result);
-	
+
 	binding_list *x_bindings = NULL;
 	if (bs) {
 	  x_bindings = parent_binding_prepare(bs, current_task->x->index, theta);
@@ -1195,7 +1226,7 @@ void process_one_res_task(kb *collection, res_task_heap *tasks, tommy_array *new
 	    if (unify_fail) {
 	      cleanup_bindings(parent_theta);
 	      cleanup_bindings(x_bindings);
-	      
+
 	      if (res_result->pos_count > 0) {
 		for (int j = 0; j < res_result->pos_count; j++)
 		  free_function(res_result->pos_lits[j]);
@@ -1219,7 +1250,7 @@ void process_one_res_task(kb *collection, res_task_heap *tasks, tommy_array *new
 	      for (int j = 0; j < res_result->neg_count; j++)
 		for (int k = 0; k < res_result->neg_lits[j]->term_count; k++)
 		  subst(parent_theta, res_result->neg_lits[j]->terms+k);
-	      
+
 	      cleanup_bindings(parent_theta);
 	    }
 	  }
@@ -1228,8 +1259,8 @@ void process_one_res_task(kb *collection, res_task_heap *tasks, tommy_array *new
 	    x_bindings = y_bindings;
 	  }
 	}
-	
-	// An empty resolution result is not a valid clause to add to KB
+
+	// A resolution result must be empty to be a valid clause to add to KB
 	if (res_result->pos_count > 0 || res_result->neg_count > 0) {
 	  // Initialize parents of result
 	  res_result->parent_set_count = 1;
@@ -1240,9 +1271,9 @@ void process_one_res_task(kb *collection, res_task_heap *tasks, tommy_array *new
 	  res_result->parents[0].clauses[1] = current_task->y;
 	  res_result->children_count = 0;
 	  res_result->children = NULL;
-	  
+
 	  set_variable_ids(res_result, 0, x_bindings);
-	  
+
 	  tommy_array_insert(new_arr, res_result);
 	  if (collection->tracking_resolutions)
 	    note_resolution_subjects(collection, res_result);
@@ -1251,7 +1282,7 @@ void process_one_res_task(kb *collection, res_task_heap *tasks, tommy_array *new
 	}
 	else {
 	  free(res_result);
-	  
+
 	  if (bs) {
 	    clause *answer = malloc(sizeof(*answer));
 	    memcpy(answer, bs->target, sizeof(*answer));
@@ -1269,18 +1300,18 @@ void process_one_res_task(kb *collection, res_task_heap *tasks, tommy_array *new
 	      for (int j = 0; j < answer->neg_lits[0]->term_count; j++)
 		subst(x_bindings, answer->neg_lits[0]->terms+j);
 	    }
-	    
+
 	    // TODO: parent setup for answer?
 	    tommy_array_insert(&collection->new_clauses, answer);
 	    cleanup_bindings(x_bindings);
 	  }
 	  else {
 	    // If not a backward search, empty resolution result indicates a contradiction between clauses
-	    
+
 	    char *arg1 = long_to_str(current_task->x->index);
 	    char *arg2 = long_to_str(current_task->y->index);
 	    char *time_str = long_to_str(collection->time);
-	    
+
 	    char *contra_str = malloc(strlen(arg1) + strlen(arg2) + strlen(time_str) + 12);
 	    strcpy(contra_str, "contra(");
 	    int loc = 7;

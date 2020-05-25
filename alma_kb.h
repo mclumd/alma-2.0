@@ -109,6 +109,7 @@ void resolve(res_task *t, binding_list *mgu, clause *result);
 char* now(long t);
 char* walltime();
 void free_clause(clause *c);
+void copy_clause_structure(clause *orignal, clause *copy);
 void set_variable_ids(clause *c, int id_from_name, binding_list *bs_bindings);
 void flatten_node(alma_node *node, tommy_array *clauses, int print);
 void nodes_to_clauses(alma_node *trees, int num_trees, tommy_array *clauses, int print);

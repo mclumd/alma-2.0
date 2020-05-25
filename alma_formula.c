@@ -333,25 +333,10 @@ void negation_inwards(alma_node *node) {
     if (node->fol->op == NOT) {
       alma_node *notarg = node->fol->arg1;
       if (notarg->type == FOL) {
-        // TODO: Refactor common and/or case
         switch (notarg->fol->op) {
-          case AND: {
-            // New nodes for result of De Morgan's
-            alma_node *negated_arg1 = malloc(sizeof(*negated_arg1));
-            alma_fol_init(negated_arg1, NOT, notarg->fol->arg1, NULL, NONE);
-            alma_node *negated_arg2 = malloc(sizeof(*negated_arg2));
-            alma_fol_init(negated_arg2, NOT, notarg->fol->arg2, NULL, NONE);
-            // Free unused AND
-            notarg->fol->arg1 = NULL;
-            notarg->fol->arg2 = NULL;
-            free_node(notarg, 1);
-            // Adjust node to be OR instead of NOT
-            node->fol->op = OR;
-            node->fol->arg1 = negated_arg1;
-            node->fol->arg2 = negated_arg2;
-            break;
-          }
+          case AND:
           case OR: {
+            alma_operator op = notarg->fol->op;
             // New nodes for result of De Morgan's
             alma_node *negated_arg1 = malloc(sizeof(*negated_arg1));
             alma_fol_init(negated_arg1, NOT, notarg->fol->arg1, NULL, NONE);
@@ -361,8 +346,8 @@ void negation_inwards(alma_node *node) {
             notarg->fol->arg1 = NULL;
             notarg->fol->arg2 = NULL;
             free_node(notarg, 1);
-            // Adjust node to be AND instead of NOT
-            node->fol->op = AND;
+            // Adjust AND node to be OR, or OR node to be AND, instead of NOT
+            node->fol->op = op == AND ? OR : AND;
             node->fol->arg1 = negated_arg1;
             node->fol->arg2 = negated_arg2;
             break;
