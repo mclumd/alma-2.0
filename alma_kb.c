@@ -21,7 +21,8 @@ void init_resolution_choices(int ***resolution_choices, int num_subjects, int nu
     }
 }
 
-static void make_clause(alma_node *node, clause *c) {
+
+
 static void make_clause_rec(alma_node *node, clause *c) {
   // Note: predicate null assignment necessary for freeing of notes without losing predicates
   if (node != NULL) {
@@ -1285,7 +1286,6 @@ void note_resolution_subjects(kb *collection, clause *res_result);
 
 
 // TODO:  Having this function in addition to process_single_res_task is messy; clean it up.
-//void process_one_res_task(kb *collection, res_task_heap *tasks, tommy_array *new_arr, backsearch_task *bs, res_task_pri c);
 void process_one_res_task(kb *collection, res_task_heap *tasks, tommy_array *new_arr, backsearch_task *bs, res_task_pri c) {
   res_task *current_task = c.res_task;
   if (current_task != NULL) {
@@ -1365,18 +1365,18 @@ void process_one_res_task(kb *collection, res_task_heap *tasks, tommy_array *new
 	  res_result->parents[0].clauses[1] = current_task->y;
 	  res_result->children_count = 0;
 	  res_result->children = NULL;
-
+	  
 	  set_variable_ids(res_result, 0, x_bindings);
-
+	  
 	  tommy_array_insert(new_arr, res_result);
 	  if (collection->tracking_resolutions)
-	    note_resolution_subjects(collection, res_result);
+            note_resolution_subjects(collection, res_result);
 	  if (bs)
 	    tommy_array_insert(&bs->new_clause_bindings, x_bindings);
 	}
 	else {
 	  free(res_result);
-
+	  
 	  if (bs) {
 	    clause *answer = malloc(sizeof(*answer));
 	    memcpy(answer, bs->target, sizeof(*answer));
@@ -1431,13 +1431,11 @@ void process_one_res_task(kb *collection, res_task_heap *tasks, tommy_array *new
           }
         }
         cleanup:
-        cleanup_bindings(theta);
+      cleanup_bindings(theta);
       }
-      free(current_task);
-    }
+    free(current_task);
   }
 }
-
 
 
 // Process resolution tasks from argument and place results in new_arr

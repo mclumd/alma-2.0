@@ -1,4 +1,5 @@
 #include "res_task_heap.h"
+#include <stdio.h>
 
 
 
@@ -24,7 +25,7 @@ int main(int argc, char *argv[]) {
       res_task_heap_push(&pq, &tasks[perm[i]]);
   for (int i=0; i < 10; i++) {
       popped_task = res_task_heap_pop(&pq);
-      printf("Got prioirty %d\n", popped_task->priority);
+      printf("Got prioirty %f\n", popped_task->priority);
   }
 }
 

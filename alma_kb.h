@@ -101,6 +101,7 @@ void process_res_tasks(kb *collection, res_task_heap *tasks, tommy_array *new_ar
 void process_single_res_task(kb *collection, res_task_heap *tasks, tommy_array *new_arr, struct backsearch_task *bs);
 void make_single_task(kb *collection, clause *c, alma_function *c_lit, clause *other, res_task_heap *tasks, int use_bif, int pos);
 void make_res_tasks(kb *collection, clause *c, int count, alma_function **c_lits, tommy_hashlin *map, res_task_heap *tasks, int use_bif, int pos);
+void process_new_clauses(kb *collection);
 void res_tasks_from_clause(kb *collection, clause *c, int process_negatives);
 clause* assert_formula(kb *collection, char *string, int print);
 int delete_formula(kb *collection, char *string, int print);
