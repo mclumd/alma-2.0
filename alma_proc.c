@@ -200,6 +200,14 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, binding_list *bi
         }
       }
     }
+    // Quoted case for desdendant: can use duplicate check to retreive any matching clause from KB
+    else if (descendant_copy->type == QUOTE) {
+      clause *c = duplicate_check(alma, descendant_copy->quote->clause_quote);
+      if (c == NULL && descendant_copy->quote->clause_quote->tag != FIF)
+        c = distrusted_dupe_check(alma, descendant_copy->quote->clause_quote);
+      if (c != NULL)
+        tommy_array_insert(&queue, c);
+    }
 
     // Checked items to avoid cycles
     tommy_array checked;
@@ -243,6 +251,8 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, binding_list *bi
 
     if (desc_bindings != NULL)
       cleanup_bindings(desc_bindings);
+    if (quote_holder != NULL)
+      free(quote_holder);
     tommy_array_done(&queue);
     tommy_array_done(&checked);
   }
@@ -255,27 +265,123 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, binding_list *bi
   return has_ancestor;
 }
 
+// Returns true if digit value of x is less than digit value of y
+// Else, incuding cases where types differ, false
+static int less_than(alma_term *x, alma_term *y, binding_list *bindings, kb *alma) {
+  char *x_str;
+  char *y_str;
+  if (x->type == VARIABLE) {
+    alma_term *bound = bindings_contain(bindings, x->variable);
+    if (bound == NULL || bound->type != FUNCTION || bound->function->term_count != 0)
+      return 0;
+    x_str = bound->function->name;
+  }
+  else if (x->type == FUNCTION && x->function->term_count == 0)
+    x_str = x->function->name;
+  else
+    return 0;
+  if (y->type == VARIABLE) {
+    alma_term *bound = bindings_contain(bindings, y->variable);
+    if (bound == NULL || bound->type != FUNCTION || bound->function->term_count != 0)
+      return 0;
+    y_str = bound->function->name;
+  }
+  else if (y->type == FUNCTION && y->function->term_count == 0)
+    y_str = y->function->name;
+  else
+    return 0;
+
+  int xval = 0;
+  int yval = 0;
+  for (int i = strlen(x_str)-1, j = 1; i >= 0; i--, j*=10) {
+    if (isdigit(x_str[i]))
+      xval += (x_str[i] - '0') * j;
+    else
+      return 0;
+  }
+  for (int i = strlen(y_str)-1, j = 1; i >= 0; i--, j*=10) {
+    if (isdigit(y_str[i]))
+      yval += (y_str[i] - '0') * j;
+    else
+      return 0;
+  }
+
+  return xval < yval;
+}
+
+// If first argument is a digit that's valid index of formula, binds second arg to quote of it and returns true
+static int idx_to_form(alma_term *index_term, alma_term *result, binding_list *bindings, kb *alma) {
+  char *idx_str;
+  if (index_term->type == VARIABLE) {
+    alma_term *bound = bindings_contain(bindings, index_term->variable);
+    if (bound == NULL || bound->type != FUNCTION || bound->function->term_count != 0)
+      return 0;
+    idx_str = bound->function->name;
+  }
+  else if (index_term->type == FUNCTION && index_term->function->term_count == 0)
+    idx_str = index_term->function->name;
+  else
+    return 0;
+
+  if (result->type != VARIABLE || bindings_contain(bindings, result->variable))
+    return 0;
+
+  long index = 0;
+  for (int i = strlen(idx_str)-1, j = 1; i >= 0; i--, j*=10) {
+    if (isdigit(idx_str[i]))
+      index += (idx_str[i] - '0') * j;
+    else
+      return 0;
+  }
+
+  index_mapping *map_res = tommy_hashlin_search(&alma->index_map, im_compare, &index, tommy_hash_u64(0, &index, sizeof(index)));
+  if (map_res != NULL) {
+    clause *formula = map_res->value;
+    clause *quote_form = malloc(sizeof(*quote_form));
+    copy_clause_structure(formula, quote_form);
+    set_variable_ids(quote_form, 1, NULL);
+
+    alma_term *quoted = malloc(sizeof(*quoted));
+    quoted->type = QUOTE;
+    quoted->quote = malloc(sizeof(*quoted->quote));
+    quoted->quote->type = CLAUSE;
+    quoted->quote->clause_quote = quote_form;
+    add_binding(bindings, result->variable, quoted, 0);
+    return 1;
+  }
+  else
+    return 0;
+}
+
 // If proc is a valid procedure, runs and returns truth value
 int proc_run(alma_function *proc, binding_list *bindings, kb *alma) {
   alma_function *func = proc->terms[0].function;
-  if (strcmp(proc->terms[0].function->name, "neg_int") == 0) {
+  if (strcmp(func->name, "neg_int") == 0) {
     // Must match (given bindings) the schema neg_int(literal(...))
     if (func->term_count == 1)
       return introspect(func, bindings, alma, run_neg_int);
   }
-  else if (strcmp(proc->terms[0].function->name, "pos_int") == 0) {
+  else if (strcmp(func->name, "pos_int") == 0) {
     // Must match (given bindings) the schema pos_int(literal(...))
     if (func->term_count == 1)
       return introspect(func, bindings, alma, run_pos_int);
   }
-  else if (strcmp(proc->terms[0].function->name, "learned") == 0) {
+  else if (strcmp(func->name, "learned") == 0) {
     // Must match (given bindings) the schema learned(literal(...), Var) OR learned(not(literal(...)), Var) and Var unbound
     if (func->term_count == 2 && func->terms[1].type == VARIABLE && !bindings_contain(bindings, func->terms[1].variable))
       return introspect(func, bindings, alma, run_learned);
   }
-  else if (strcmp(proc->terms[0].function->name, "ancestor") == 0) {
+  else if (strcmp(func->name, "ancestor") == 0) {
     if (func->term_count == 2)
       return ancestor(func->terms+0, func->terms+1, bindings, alma);
+  }
+  else if (strcmp(func->name, "less_than") == 0) {
+    if (func->term_count == 2)
+      return less_than(func->terms+0, func->terms+1, bindings, alma);
+  }
+  else if (strcmp(func->name, "idx_to_form") == 0) {
+    if (func->term_count == 2)
+      return idx_to_form(func->terms+0, func->terms+1, bindings, alma);
   }
   return 0;
 }

@@ -4,6 +4,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <getopt.h>
+#include <ctype.h>
 #include "alma_command.h"
 #include "alma_kb.h"
 #include "alma_print.h"
@@ -85,7 +86,6 @@ int main(int argc, char **argv) {
   char *subjects_file = NULL;
   char *resolutions_file = NULL;
 
-  //int index;
   int c;
   while ((c = getopt (argc, argv, "PH:rvf:a:hR:M:T:")) != -1)
     switch (c) {

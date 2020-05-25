@@ -1,6 +1,7 @@
 #ifndef alma_kb_h
 #define alma_kb_h
 
+#include <stdio.h>
 #include "tommy.h"
 #include "alma_formula.h"
 #include "alma_unify.h"
@@ -54,8 +55,8 @@ typedef struct kb {
   double (*calc_priority)(struct kb*, res_task *);
 
   long time;
-  char *now_str; // String representation of now(time).
-  char *prev_str; // String representation of now(time-1).
+  char *now; // String representation of now(time).
+  char *prev; // String representation of now(time-1).
   char *wallnow;
   char *wallprev;
 
@@ -80,7 +81,7 @@ typedef struct kb {
 
   //tommy_array res_tasks; // Stores tasks for resolution (non-tagged clauses) in next step
   res_task_heap res_tasks;
-  int res_heap_size;   
+  int res_heap_size;
 
   // If grow to have many fifs, having pos and neg versions may help
   tommy_hashlin fif_tasks; // Stores tasks for fif rules
@@ -91,6 +92,7 @@ typedef struct kb {
 } kb;
 
 int clauses_differ(clause *x, clause *y);
+clause* distrusted_dupe_check(kb *collection, clause *c);
 clause* duplicate_check(kb *collection, clause *c);
 void add_clause(kb *collection, clause *curr);
 void remove_clause(kb *collection, clause *c);
@@ -100,7 +102,7 @@ void process_single_res_task(kb *collection, res_task_heap *tasks, tommy_array *
 void make_single_task(kb *collection, clause *c, alma_function *c_lit, clause *other, res_task_heap *tasks, int use_bif, int pos);
 void make_res_tasks(kb *collection, clause *c, int count, alma_function **c_lits, tommy_hashlin *map, res_task_heap *tasks, int use_bif, int pos);
 void res_tasks_from_clause(kb *collection, clause *c, int process_negatives);
-int assert_formula(kb *collection, char *string, int print);
+clause* assert_formula(kb *collection, char *string, int print);
 int delete_formula(kb *collection, char *string, int print);
 int update_formula(kb *collection, char *string);
 void resolve(res_task *t, binding_list *mgu, clause *result);
@@ -118,7 +120,7 @@ int is_distrusted(kb *collection, long index);
 char* long_to_str(long x);
 void add_child(clause *parent, clause *child);
 void transfer_parent(kb *collection, clause *target, clause *source, int add_children);
-void distrust_recursive(kb *collection, clause *c, char *time);
+void distrust_recursive(kb *collection, clause *c, clause *parent);
 
 int im_compare(const void *arg, const void *obj);
 int pm_compare(const void *arg, const void *obj);
