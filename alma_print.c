@@ -13,6 +13,10 @@ static void alma_quote_print(alma_quote *quote, kb_str *buf);
 
 static void alma_function_print(alma_function *func, kb_str *buf);
 
+void enable_logs() {
+  logs_on = 1;
+}
+
 void enable_python_mode() {
   python_mode = 1;
 }

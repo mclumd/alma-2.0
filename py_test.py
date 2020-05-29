@@ -1,6 +1,6 @@
 import alma
 
-a,s = alma.init(1,'../koca-master/agent.pl','0')
+a,s = alma.init(1,0,'../koca-master/agent.pl','0')
 s = alma.kbprint(a)
 
 for line in s.split('\n'):

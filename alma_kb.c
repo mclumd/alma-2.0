@@ -189,6 +189,9 @@ void make_clause(alma_node *node, clause *c) {
 // Flattens a single alma node and adds its contents to collection
 // Recursively calls when an AND is found to separate conjunctions
 void flatten_node(alma_node *node, tommy_array *clauses, int print, kb_str *buf) {
+  //  printf("FLATTEN NODE FUNC: %p, %p, %p\n",(void *)node,(void *)clauses,(void *)buf);
+  //  printf("buf ptr and size: %p, %d\n",(void *)buf->buffer,(int)buf->limit);
+  //  printf("after BUF\n");
   if (node->type == FOL && node->fol->op == AND) {
     if (node->fol->arg1->type == FOL)
       node->fol->arg1->fol->tag = node->fol->tag;
@@ -198,6 +201,7 @@ void flatten_node(alma_node *node, tommy_array *clauses, int print, kb_str *buf)
     flatten_node(node->fol->arg2, clauses, print, buf);
   }
   else {
+    //    printf("HERE IN FLATTEN\n");
     clause *c = malloc(sizeof(*c));
     c->pos_count = c->neg_count = 0;
     c->pos_lits = c->neg_lits = NULL;
@@ -206,14 +210,20 @@ void flatten_node(alma_node *node, tommy_array *clauses, int print, kb_str *buf)
     c->children = NULL;
     c->tag = NONE;
     c->fif = NULL;
+    //    printf("RIGHT BEFORE DIRTY BIT\n");
     c->dirty_bit = (char) 1;
     make_clause(node, c);
     set_variable_ids(c, 1, NULL);
 
+    //    printf("ABOUT TO PRINT\n");
     if (print) {
+      //      printf("STARTING PRINTING\n");
       tee_alt("-a: ", buf);
+      //      printf("PRINT MID 1\n");
       clause_print(c, buf);
+      //      printf("PRINT MID 2\n");
       tee_alt(" added\n", buf);
+      //      printf("DONE PRINTING\n");
     }
     tommy_array_insert(clauses, c);
   }
@@ -273,7 +283,9 @@ void copy_clause_structure(clause *original, clause *copy) {
 // Flattens trees into set of clauses (tommy_array must be initialized prior)
 // trees argument freed here
 void nodes_to_clauses(alma_node *trees, int num_trees, tommy_array *clauses, int print, kb_str *buf) {
+  //  printf("NODES 2 CLAUSES: %d\n",num_trees);
   for (int i = 0; i < num_trees; i++) {
+    //    printf("FLATTEN NODE: %d/%d",i,num_trees);
     flatten_node(trees+i, clauses, print, buf);
     free_alma_tree(trees+i);
   }
@@ -909,6 +921,8 @@ clause* assert_formula(kb *collection, char *string, int print, kb_str *buf) {
   alma_node *formulas;
   int formula_count;
   if (formulas_from_source(string, 0, &formula_count, &formulas)) {
+    //    printf("HEREEEE; %s\n",string);
+    //    printf("BUF: %p\n",(void *)buf);
     tommy_array temp;
     tommy_array_init(&temp);
     nodes_to_clauses(formulas, formula_count, &temp, print, buf);

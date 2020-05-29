@@ -4,6 +4,7 @@
 #include "alma_kb.h"
 #include "alma_unify.h"
 
+void enable_logs(void);
 void enable_python_mode(void);
 void disable_python_mode(void);
 void tee_alt(char const *content, ...);
