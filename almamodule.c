@@ -6,14 +6,18 @@
 extern char python_mode;
 
 static PyObject * alma_init(PyObject *self, PyObject *args) {
-  int verbose;
+  int verbose, log_mode;
   PyObject *ret_val;
   char *file;
   char *agent;
 
-  if (!PyArg_ParseTuple(args, "iss", &verbose, &file, &agent))
+  if (!PyArg_ParseTuple(args, "iiss", &verbose, &log_mode, &file, &agent))
     return NULL;
 
+  if (log_mode) {
+    enable_logs();
+  }
+  
   enable_python_mode();
 
   kb_str buf;
@@ -118,6 +122,8 @@ static PyObject * alma_add(PyObject *self, PyObject *args) {
   if (!PyArg_ParseTuple(args, "ls", &alma_kb, &input))
     return NULL;
 
+  //  printf("IN C ALMA_ADD\n");
+  
   kb_str buf;
   buf.size = 0;
   buf.limit = 1000;
