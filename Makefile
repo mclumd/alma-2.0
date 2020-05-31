@@ -1,12 +1,13 @@
 CC = gcc
-CFLAGS = -std=c11 -pedantic-errors -Wall -Werror -Wshadow -Wpedantic -g
+#CFLAGS = -std=c11 -pedantic-errors -Wall -Werror -Wshadow -Wpedantic -g
+CFLAGS = -std=gnu11 -pedantic-errors -Wall -Wshadow -Wpedantic -g -mno-avx2 -mtune=generic -mno-avx2
 
 TOMMY = tommyds/tommyds/
 
 all: alma.x
 
-alma.x: alma.o tommyarray.o tommyhashlin.o tommyhash.o tommylist.o mpc.o alma_parser.o alma_formula.o alma_kb.o alma_unify.o alma_command.o alma_print.o alma_proc.o alma_fif.o alma_backsearch.o res_task_heap.o
-	$(CC) alma.o tommyarray.o tommyhashlin.o tommyhash.o tommylist.o mpc.o alma_parser.o alma_formula.o alma_kb.o alma_unify.o alma_command.o alma_print.o alma_proc.o alma_fif.o alma_backsearch.o res_task_heap.o -o alma.x
+alma.x: alma.o tommyarray.o tommyhashlin.o tommyhash.o tommylist.o mpc.o alma_parser.o alma_formula.o alma_kb.o alma_unify.o alma_command.o alma_print.o alma_proc.o alma_fif.o alma_backsearch.o res_task_heap.o alma_term_search.o compute_priority.o
+	$(CC) alma.o tommyarray.o tommyhashlin.o tommyhash.o tommylist.o mpc.o alma_parser.o alma_formula.o alma_kb.o alma_unify.o alma_command.o alma_print.o alma_proc.o alma_fif.o alma_backsearch.o res_task_heap.o alma_term_search.o compute_priority.o -o alma.x
 
 alma.o: alma.c alma_command.h alma_kb.h alma_print.h
 	$(CC) $(CFLAGS) -c alma.c
@@ -57,12 +58,19 @@ alma_backsearch.o: alma_backsearch.c alma_kb.h alma_formula.h alma_backsearch.h 
 	$(CC) $(CFLAGS) -c alma_backsearch.c
 
 res_task_heap.o:  res_task_heap.c res_task_heap.h alma_kb.h 
-	$(CC) $(CFLAGS) -c res_task_heap.c index_heap.c
+	$(CC) $(CFLAGS) -c res_task_heap.c #index_heap.c
 
 res_task_heap.c:  res_task_heap.g alma_kb.h index_heap.h
-	$(CC) -std=c99 -E -P -DHEADER -Dheap_type=res_task_pri  -Dheap_name=res_task_heap - < "res_task_heap.g" > "res_task_heap.h"
-	$(CC) -std=c99 -E -P -DSOURCE -Dheap_type=res_task_pri -Dheap_name=res_task_heap -DHEADER_NAME=res_task_heap.h - < "res_task_heap.g" > "res_task_heap.c"
+	$(CC) -std=gnu99 -E -P -DHEADER -Dheap_type=res_task_pri  -Dheap_name=res_task_heap - < "res_task_heap.g" > "res_task_heap.h"
+	$(CC) -std=gnu99 -E -P -DSOURCE -Dheap_type=res_task_pri -Dheap_name=res_task_heap -DHEADER_NAME=res_task_heap.h - < "res_task_heap.g" > "res_task_heap.c"
 	#$(CC) -std=c99 -E -P -Dheap_name=index_heap -DSOURCE -Dheap_type=index_heap  -DHEADER_NAME=index_heap.h -  < "res_task_heap.g" > "index_heap.c"
+
+alma_term_search.o: alma_term_search.c alma_term_search.h
+	$(CC) $(CFLAGS) -c alma_term_search.c
+
+compute_priority.o: compute_priority.c
+	$(CC) $(CFLAGS) -c compute_priority.c
+
 
 clean:
 	rm -f *.x *.o

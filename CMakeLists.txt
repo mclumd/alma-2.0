@@ -31,4 +31,5 @@ add_executable(alma.x
 		res_task_heap.c
 		priority_function.cpp
 		compute_priority.c
+		alma_term_search.c
 		)

@@ -1,4 +1,6 @@
 #include <stdlib.h>
+#include <stdio.h>
+#include <sys/types.h>
 #include "alma_command.h"
 #include "tommy.h"
 #include "alma_formula.h"
@@ -9,8 +11,48 @@
 #include "res_task_heap.h"
 #include "compute_priority.h"
 
+
+void parse_subjects_file(tommy_array *subj_list, int *num_subjects, char *subjects_file) {
+  FILE *sf;
+  sf = fopen(subjects_file, "r");
+  if (sf == NULL) {
+    fprintf(stderr, "Couldn't open subjects file %s\n", subjects_file);
+    exit(1);
+  }
+  char subj_line[1024];
+  int subj_len;
+  char *subj_copy;
+  tommy_array_init(subj_list);
+  *num_subjects = 0;
+  while (fgets(subj_line, 1024, sf) != NULL) {
+    subj_len = strlen(subj_line) + 1; // Add one for terminating \0
+    subj_copy = malloc(subj_len * sizeof(char));
+    strncpy(subj_copy, subj_line, subj_len);
+    subj_copy[subj_len-2] = '\0';
+    tommy_array_insert(subj_list, subj_copy);
+    (*num_subjects)++;
+  }
+  fclose(sf);
+}
+
+void parse_subjects_priorites(double *prior_list, int num, char *filename) {
+  FILE *pf;
+  pf = fopen(filename, "r");
+  if (pf == NULL) {
+    fprintf(stderr, "Couldn't subject priority file %s\n", filename);
+    exit(1);
+  }
+  char line[1024];
+  int i = 0;
+  while ( (fgets(line, 1024, pf) != NULL) && ( i < num) ) {
+    prior_list[i] = strtod(line, NULL);
+    i++;
+  }
+  fclose(pf);
+}
+
 // Caller will need to free collection with kb_halt
-void kb_init(kb **collection, char *file, char *agent, int verbose, int differential_priorities, int res_heap_size) {
+void kb_init(kb **collection, char *file, char *agent, int verbose, int differential_priorities, int res_heap_size, rl_init_params rip) {
   // Allocate and initialize
   *collection = malloc(sizeof(**collection));
   kb *collec = *collection;
@@ -19,7 +61,7 @@ void kb_init(kb **collection, char *file, char *agent, int verbose, int differen
   collec->diff_prior = differential_priorities;
   //collec->calc_priority = differential_priorities ? (compute_priority) : (zero_priority);
   collec->calc_priority = differential_priorities ? (compute_priority) : (base_priority);
-  collec->tracking_resolutions = 0;
+  collec->tracking_resolutions = rip.tracking_resolutions;
   collec->subject_list = malloc(sizeof(tommy_array));
 
   collec->time = 1;
@@ -43,6 +85,18 @@ void kb_init(kb **collection, char *file, char *agent, int verbose, int differen
   tommy_hashlin_init(&collec->distrusted);
 
   parse_init();
+
+  if (rip.tracking_resolutions) {
+    parse_subjects_file(collec->subject_list, &(collec->num_subjects), rip.subjects_file);
+    init_resolution_choices(&(collec->resolution_choices), collec->num_subjects, rip.resolutions_horizon);
+    collec->subject_priorities = malloc(sizeof(double)* collec->num_subjects);
+    if (rip.rl_priority_file == NULL) {
+      for (int i=0; i < collec->num_subjects; i++) collec->subject_priorities[i] = 0.0;
+    } else{
+      parse_subjects_priorites(collec->subject_priorities, collec->num_subjects, rip.rl_priority_file);
+    }
+  }
+
 
   // Given a file argument, obtain other initial clauses from
   if (file != NULL) {
@@ -99,6 +153,25 @@ void kb_init(kb **collection, char *file, char *agent, int verbose, int differen
     i = i->next;
   }
 }
+
+
+int load_file(kb *collec, char *filename) {
+  FILE *fp;
+  char *line = NULL;
+  size_t len = 0;
+  ssize_t read;
+  
+  fp = fopen(filename, "r");
+  if (fp == NULL) return 0;
+
+
+  while ((read = getline(&line, &len, fp)) != -1) kb_assert(collec, line);    
+  fclose(fp);
+  if (line) free(line);
+  
+  return 1;
+}
+
 
 // System idles if there are no resolution tasks, backsearch tasks, or to_unify fif values
 // First of these is true when no new clauses (source of res tasks) exist
@@ -193,8 +266,9 @@ void kb_print(kb *collection) {
   res_task_pri tp;
   res_task *t;
   int j = 0;
-  if (res_tasks->count > 0) {
-    tee("---------------------------------------\n");
+
+  if ((res_tasks->count > 0)) {
+    tee("Begin RH---------------------------------------\n");
     tee("Resolution tasks.\n");
     tee("Heap count: %d\n\n", res_tasks->count);
     tee("Pri\t\tx\t\ty\t\tPos\t\tNeg\n");
@@ -205,7 +279,7 @@ void kb_print(kb *collection) {
       res_task_print(t);
       tee("\n");
     }
-  tee("END RESOLUTION HEAP.\n");
+  tee("End RH---------------------------------------\n");
   }
 }
 

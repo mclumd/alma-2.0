@@ -90,6 +90,7 @@ STATIC heap_type *NAME(_pop)(struct heap_name *heap);
 STATIC void NAME(_emerge)(struct heap_name *heap, size_t index);
 STATIC void NAME(_heapify)(struct heap_name *heap);
 STATIC int NAME(_delete)(struct heap_name *heap, heap_type *value);
+STATIC int NAME(_clausal_delete)(struct heap_name *heap, clause *c);
 STATIC void NAME(_destroy)(struct heap_name *heap);
 GUARD2
 #endif
@@ -303,6 +304,10 @@ int res_task_pri_eq( res_task_pri a, res_task_pri b) {
   return res_task_eq(*(a.res_task), *(b.res_task));
 }
 
+// Returns true iff one of the clauses in the res_task corresponding to a is c
+int res_task_pri_clause_cont( res_task_pri a, clause *c) {
+  return ( (a.res_task)->x == c  || (a.res_task)->y == c);
+}
 
 // Deletes an element.  Returns 1 if value is found and 0 otherwise.
 // The search for the element is based on res_task equality and is slow.
@@ -311,13 +316,30 @@ STATIC int NAME(_delete)(struct heap_name *heap, heap_type *value) {
   for ( int i=0; i < heap->count; i++) {
     element = NAME(_item)(heap, i);
     if (res_task_pri_eq(*element, *value)) {
-	element->priority = -1;
-	NAME(_heapify)(heap);
-	NAME(_pop)(heap);
-	return 1;
+      element->priority = -1;
+      NAME(_heapify)(heap);
+      NAME(_pop)(heap);
+      return 1;
     }
     return 0;
   }
+}
+
+// Delete any heap element that contains the given clause (a prelude to clause deletion).
+// This destroys any pretense that this is type-neutral; probably the quickest thing.
+STATIC int NAME(_clausal_delete)(struct heap_name *heap, clause *c) {
+  heap_type *element;
+  int num_matches = 0;
+  for ( int i=0; i < heap->count; i++) {
+    element = NAME(_item)(heap, i);
+    if (res_task_pri_clause_cont(*element, c)) {
+      element->priority = -1;
+      num_matches++;
+    }
+  }
+  NAME(_heapify)(heap);
+  for (int j=0; j < num_matches; j++) NAME(_pop)(heap);
+  return num_matches;
 }
 
 STATIC void NAME(_destroy)(struct heap_name *heap) {

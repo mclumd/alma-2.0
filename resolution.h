@@ -17,4 +17,5 @@ typedef struct res_task_pri {
     double priority;
 } res_task_pri;
 
+
 #endif

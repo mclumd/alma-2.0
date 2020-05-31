@@ -63,6 +63,7 @@ typedef struct kb {
   int tracking_resolutions;
   int **resolution_choices;
   tommy_array *subject_list;
+  double *subject_priorities;
   int num_subjects;
 
   int idling; // Boolean for idle KB state, from lack of tasks to advance
@@ -91,6 +92,7 @@ typedef struct kb {
   tommy_hashlin distrusted; // Stores distrusted items by clause index
 } kb;
 
+void make_clause(alma_node *node, clause *c);
 int clauses_differ(clause *x, clause *y);
 clause* distrusted_dupe_check(kb *collection, clause *c);
 clause* duplicate_check(kb *collection, clause *c);

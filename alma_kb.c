@@ -8,6 +8,8 @@
 #include "alma_fif.h"
 #include "alma_proc.h"
 #include "alma_print.h"
+#include "alma_term_search.h"
+#include "res_task_heap.h"
 
 static long next_index;
 
@@ -743,7 +745,7 @@ void remove_clause(kb *collection, clause *c) {
     if (d != NULL) {
       if(d->value == c) {
       tommy_hashlin_remove_existing(&collection->distrusted, &d->node);
-      free(d);
+      // free(d);   // TODO:  bring free back; trying to resolve mem error quickly
       }
     }
     else {
@@ -843,6 +845,9 @@ void remove_clause(kb *collection, clause *c) {
     for (int j = 0; j < c->parents[i].count; j++)
       remove_child(c->parents[i].clauses[j], c);
 
+  //Remove any resolutions that involve c
+  
+  res_task_heap_clausal_delete( &(collection->res_tasks), c);
   free_clause(c);
 }
 
@@ -1478,58 +1483,20 @@ void process_single_res_task(kb *collection, res_task_heap *tasks, tommy_array *
 
 
 
-static int lits_search(alma_function **lits, int count, char *search_term);
-static int alma_term_search(alma_term *term, char *search_term);
-static int alma_function_search(alma_function *func, char *search_term);
 
-static int alma_term_search(alma_term *term, char *search_term) {
-  if (term->type == VARIABLE)
-    return strstr(term->variable->name, search_term) == NULL ? 0 : 1;
-  else
-    return alma_function_search(term->function, search_term);
-}
-
-static int alma_function_search(alma_function *func, char *search_term) {
-    if (strstr(func->name, search_term) != NULL) return 1;
-  if (func->term_count > 0) {
-    for (int i = 0; i < func->term_count; i++) {
-      if (alma_term_search(func->terms + i, search_term)) return 1;
-    }
-  }
-    return 0;
-}
-
-static int lits_search(alma_function **lits, int count, char *search_term) {
-  for (int i = 0; i < count; i++) {
-    if (alma_function_search(lits[i], search_term)) return 1;
-  }
-  return 0;
-}
 
 /* Given the resolution result, find the relevant subjects and mark them as being used. */
 void note_resolution_subjects(kb *collection, clause *res_result) {
   //return;   // Debugging!
   int current_time = collection->time;
   int subj_idx;
-  int lit_idx;
-  alma_function *cur_lit;
-  int term_idx;
   char *subject;
-  int dbg_test;
   /* For each subject, go through the positive and negative literals, and look for any terms that match */
   for (subj_idx = 0; subj_idx < collection->num_subjects; subj_idx++) {
     subject = tommy_array_get(collection->subject_list, subj_idx);
-      // Some debugging stuff
-     /* dbg_test = lits_search(res_result->pos_lits, res_result->pos_count, subject);
-     dbg_test = lits_search(res_result->neg_lits, res_result->neg_count, subject);
-     tee( "looking for %s in:", subject);
-     clause_print(res_result);
-     tee("\n"); */
     if ( lits_search(res_result->pos_lits, res_result->pos_count, subject) ||
 	 lits_search(res_result->neg_lits, res_result->neg_count, subject) ) {
       collection->resolution_choices[subj_idx][current_time] = 1;
-      //tee("found!!!\n");
-      //fprintf(stderr, "Found subject match for subject number %d at time %d\n", subj_idx, current_time);
     }
   }
 }
