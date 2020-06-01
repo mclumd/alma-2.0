@@ -188,17 +188,17 @@ void make_clause(alma_node *node, clause *c) {
 
 // Flattens a single alma node and adds its contents to collection
 // Recursively calls when an AND is found to separate conjunctions
-void flatten_node(alma_node *node, tommy_array *clauses, int print, kb_str *buf) {
+void flatten_node(kb *collection, alma_node *node, tommy_array *clauses, int print, kb_str *buf) {
   //  printf("FLATTEN NODE FUNC: %p, %p, %p\n",(void *)node,(void *)clauses,(void *)buf);
   //  printf("buf ptr and size: %p, %d\n",(void *)buf->buffer,(int)buf->limit);
   //  printf("after BUF\n");
   if (node->type == FOL && node->fol->op == AND) {
     if (node->fol->arg1->type == FOL)
       node->fol->arg1->fol->tag = node->fol->tag;
-    flatten_node(node->fol->arg1, clauses, print, buf);
+    flatten_node(collection, node->fol->arg1, clauses, print, buf);
     if (node->fol->arg2->type == FOL)
       node->fol->arg2->fol->tag = node->fol->tag;
-    flatten_node(node->fol->arg2, clauses, print, buf);
+    flatten_node(collection, node->fol->arg2, clauses, print, buf);
   }
   else {
     //    printf("HERE IN FLATTEN\n");
@@ -218,11 +218,11 @@ void flatten_node(alma_node *node, tommy_array *clauses, int print, kb_str *buf)
     //    printf("ABOUT TO PRINT\n");
     if (print) {
       //      printf("STARTING PRINTING\n");
-      tee_alt("-a: ", buf);
+      tee_alt("-a: ", collection, buf);
       //      printf("PRINT MID 1\n");
-      clause_print(c, buf);
+      clause_print(collection, c, buf);
       //      printf("PRINT MID 2\n");
-      tee_alt(" added\n", buf);
+      tee_alt(" added\n", collection, buf);
       //      printf("DONE PRINTING\n");
     }
     tommy_array_insert(clauses, c);
@@ -282,11 +282,11 @@ void copy_clause_structure(clause *original, clause *copy) {
 
 // Flattens trees into set of clauses (tommy_array must be initialized prior)
 // trees argument freed here
-void nodes_to_clauses(alma_node *trees, int num_trees, tommy_array *clauses, int print, kb_str *buf) {
+void nodes_to_clauses(kb *collection, alma_node *trees, int num_trees, tommy_array *clauses, int print, kb_str *buf) {
   //  printf("NODES 2 CLAUSES: %d\n",num_trees);
   for (int i = 0; i < num_trees; i++) {
     //    printf("FLATTEN NODE: %d/%d",i,num_trees);
-    flatten_node(trees+i, clauses, print, buf);
+    flatten_node(collection, trees+i, clauses, print, buf);
     free_alma_tree(trees+i);
   }
   free(trees);
@@ -925,7 +925,7 @@ clause* assert_formula(kb *collection, char *string, int print, kb_str *buf) {
     //    printf("BUF: %p\n",(void *)buf);
     tommy_array temp;
     tommy_array_init(&temp);
-    nodes_to_clauses(formulas, formula_count, &temp, print, buf);
+    nodes_to_clauses(collection, formulas, formula_count, &temp, print, buf);
     clause *ret = tommy_array_size(&temp) > 0 ? tommy_array_get(&temp, 0) : NULL;
     for (tommy_size_t i = 0; i < tommy_array_size(&temp); i++)
       tommy_array_insert(&collection->new_clauses, tommy_array_get(&temp, i));
@@ -943,7 +943,7 @@ int delete_formula(kb *collection, char *string, int print, kb_str *buf) {
     tommy_array clauses;
     tommy_array_init(&clauses);
     for (int i = 0; i < formula_count; i++) {
-      flatten_node(formulas+i, &clauses, 0, buf);
+      flatten_node(collection, formulas+i, &clauses, 0, buf);
       free_alma_tree(formulas+i);
     }
     free(formulas);
@@ -961,16 +961,16 @@ int delete_formula(kb *collection, char *string, int print, kb_str *buf) {
 
       if (c != NULL) {
         if (print) {
-          tee_alt("-a: ", buf);
-          clause_print(c, buf);
-          tee_alt(" removed\n", buf);
+          tee_alt("-a: ", collection, buf);
+          clause_print(collection, c, buf);
+          tee_alt(" removed\n", collection, buf);
         }
         remove_clause(collection, c, buf);
       }
       else if (print) {
-        tee_alt("-a: ", buf);
-        clause_print(curr, buf);
-        tee_alt(" not found\n", buf);
+        tee_alt("-a: ", collection, buf);
+        clause_print(collection, curr, buf);
+        tee_alt(" not found\n", collection, buf);
       }
       free_clause(curr);
     }
@@ -991,7 +991,7 @@ int update_formula(kb *collection, char *string, kb_str *buf) {
       for (int i = 0; i < formula_count; i++)
         free_alma_tree(formulas+i);
       free(formulas);
-      tee_alt("-a: Incorrect number of arguments to update\n", buf);
+      tee_alt("-a: Incorrect number of arguments to update\n", collection, buf);
       return 0;
     }
 
@@ -999,7 +999,7 @@ int update_formula(kb *collection, char *string, kb_str *buf) {
     tommy_array clauses;
     tommy_array_init(&clauses);
     for (int i = 0; i < formula_count; i++) {
-      flatten_node(formulas+i, &clauses, 0, buf);
+      flatten_node(collection, formulas+i, &clauses, 0, buf);
       free_alma_tree(formulas+i);
     }
     free(formulas);
@@ -1011,17 +1011,17 @@ int update_formula(kb *collection, char *string, kb_str *buf) {
     clause *t_dupe;
     clause *u_dupe;
     if (target->tag == FIF || update->tag == FIF) {
-      tee_alt("-a: Cannot update with fif clause\n", buf);
+      tee_alt("-a: Cannot update with fif clause\n", collection, buf);
       update_fail = 1;
     }
     else if ((t_dupe = duplicate_check(collection, target)) == NULL) {
-      tee_alt("-a: Clause ", buf);
-      clause_print(target, buf);
-      tee_alt(" to update not present\n", buf);
+      tee_alt("-a: Clause ", collection, buf);
+      clause_print(collection, target, buf);
+      tee_alt(" to update not present\n", collection, buf);
       update_fail = 1;
     }
     else if ((u_dupe = duplicate_check(collection, update)) != NULL) {
-      tee_alt("-a: New version of clause already present\n", buf);
+      tee_alt("-a: New version of clause already present\n", collection, buf);
       update_fail = 1;
     }
 
@@ -1040,11 +1040,11 @@ int update_formula(kb *collection, char *string, kb_str *buf) {
       if (t_dupe->pos_count + t_dupe->neg_count == 1)
         remove_fif_singleton_tasks(collection, t_dupe);
 
-      tee_alt("-a: ", buf);
-      clause_print(target, buf);
-      tee_alt(" updated to ", buf);
-      clause_print(update, buf);
-      tee_alt("\n", buf);
+      tee_alt("-a: ", collection, buf);
+      clause_print(collection, target, buf);
+      tee_alt(" updated to ", collection, buf);
+      clause_print(collection, update, buf);
+      tee_alt("\n", collection, buf);
       free_clause(target);
 
       // Swap clause contents from update
@@ -1450,7 +1450,7 @@ static void handle_true(kb *collection, clause *truth, kb_str *buf) {
       alma_node *sentence_copy = malloc(sizeof(*sentence_copy));
       copy_alma_tree(quote->sentence, sentence_copy);
       make_cnf(sentence_copy);
-      flatten_node(sentence_copy, &unquoted, 0, buf);
+      flatten_node(collection, sentence_copy, &unquoted, 0, buf);
       free_alma_tree(sentence_copy);
       free(sentence_copy);
     }
@@ -1672,9 +1672,9 @@ void process_new_clauses(kb *collection, kb_str *buf) {
     }
     else {
       if (collection->verbose) {
-        tee_alt("-a: Duplicate clause ", buf);
-        clause_print(c, buf);
-        tee_alt(" merged into %ld\n", buf, dupe->index);
+        tee_alt("-a: Duplicate clause ", collection, buf);
+        clause_print(collection, c, buf);
+        tee_alt(" merged into %ld\n", collection, buf, dupe->index);
       }
 
       if (c->parents != NULL)

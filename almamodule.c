@@ -4,6 +4,7 @@
 #include "alma_print.h"
 
 extern char python_mode;
+extern char logs_on;
 
 static PyObject * alma_init(PyObject *self, PyObject *args) {
   int verbose, log_mode;
@@ -15,6 +16,7 @@ static PyObject * alma_init(PyObject *self, PyObject *args) {
     return NULL;
 
   if (log_mode) {
+    printf("ENABLING LOGS!\n");
     enable_logs();
   }
   
@@ -27,7 +29,7 @@ static PyObject * alma_init(PyObject *self, PyObject *args) {
   buf.buffer[0] = '\0';
   
   kb *alma_kb;
-  kb_init(&alma_kb,file,agent,verbose, &buf); 
+  kb_init(&alma_kb,file,agent,verbose, &buf, log_mode); 
 
   //  ret_val = malloc(buf.size + 1);
   //  strcpy(ret_val,buf.buffer);

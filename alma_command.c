@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <time.h>
 #include "alma_command.h"
 #include "tommy.h"
 #include "alma_formula.h"
@@ -11,7 +12,7 @@ extern char logs_on;
 extern char python_mode;
 
 // Caller will need to free collection with kb_halt
-void kb_init(kb **collection, char *file, char *agent, int verbose, kb_str *buf) {
+void kb_init(kb **collection, char *file, char *agent, int verbose, kb_str *buf, int logon) {
   // Allocate and initialize
   *collection = malloc(sizeof(**collection));
   kb *collec = *collection;
@@ -44,7 +45,7 @@ void kb_init(kb **collection, char *file, char *agent, int verbose, kb_str *buf)
     int num_trees;
 
     if (formulas_from_source(file, 1, &num_trees, &trees)) {
-      nodes_to_clauses(trees, num_trees, &collec->new_clauses, 0, buf);
+      nodes_to_clauses(collec, trees, num_trees, &collec->new_clauses, 0, buf);
       fif_to_front(&collec->new_clauses);
     }
     // If file cannot parse, cleanup and exit
@@ -91,6 +92,29 @@ void kb_init(kb **collection, char *file, char *agent, int verbose, kb_str *buf)
       fif_tasks_from_clause(collec, c);
     }
     i = i->next;
+  }
+
+  if (logon) {
+    time_t rawtime;
+    time(&rawtime);
+    char *time = ctime(&rawtime);
+    int timelen = strlen(time)-1;
+    for (int idx = 0; idx < timelen; idx++)
+      if (time[idx] == ' ' || time[idx] == ':')
+	time[idx] = '-';
+    int agentlen = agent != NULL ? strlen(agent) : 0;
+    char *logname = malloc(4 + agentlen + 1 + timelen + 9);
+    strcpy(logname, "alma");
+    if (agent != NULL)
+      strcpy(logname+4, agent);
+    logname[4+agentlen] = '-';
+    strncpy(logname+5+agentlen, time, 24);
+    strcpy(logname+5+agentlen+timelen, "-log.txt");
+    
+    collec->almalog = fopen(logname, "w");
+    free(logname);
+  } else {
+    collec->almalog = NULL;
   }
 }
 
@@ -142,7 +166,7 @@ void kb_step(kb *collection, kb_str *buf) {
 
   collection->idling = idling_check(collection, newc);
   if (collection->idling)
-    tee_alt("-a: Idling...\n", buf);
+    tee_alt("-a: Idling...\n", collection, buf);
 }
 
 void kb_print(kb *collection, kb_str *buf) {
@@ -157,36 +181,36 @@ void kb_print(kb *collection, kb_str *buf) {
   while (i) {
     index_mapping *data = i->data;
     if (data->value->dirty_bit || 1) {
-      tee_alt("%ld: ", buf, data->key);
-      clause_print(data->value, buf);
-      tee_alt("\n", buf);
+      tee_alt("%ld: ", collection, buf, data->key);
+      clause_print(collection, data->value, buf);
+      tee_alt("\n", collection, buf);
     }
     i = i->next;
   }
 
   i = tommy_list_head(&collection->backsearch_tasks);
   if (i) {
-    tee_alt("Back searches:\n", buf);
+    tee_alt("Back searches:\n", collection, buf);
     for (int count = 0; i != NULL; i = i->next, count++) {
-      tee_alt("%d\n", buf, count);
+      tee_alt("%d\n", collection, buf, count);
       backsearch_task *t = i->data;
       for (tommy_size_t j = 0; j < tommy_array_size(&t->clauses); j++) {
         clause *c = tommy_array_get(&t->clauses, j);
-        tee_alt("%ld: ", buf, c->index);
-        clause_print(c, buf);
+        tee_alt("%ld: ", collection, buf, c->index);
+        clause_print(collection, c, buf);
         binding_mapping *m = tommy_hashlin_search(&t->clause_bindings, bm_compare, &c->index, tommy_hash_u64(0, &c->index, sizeof(c->index)));
         if (m != NULL) {
-          tee_alt(" (bindings: ", buf);
-          print_bindings(m->bindings, buf);
-          tee_alt(")", buf);
+          tee_alt(" (bindings: ", collection, buf);
+          print_bindings(collection, m->bindings, buf);
+          tee_alt(")", collection, buf);
         }
-        tee_alt("\n", buf);
+        tee_alt("\n", collection, buf);
       }
     }
   }
-  tee_alt("\n", buf);
+  tee_alt("\n", collection, buf);
   if (logs_on) {
-    fflush(almalog);
+    fflush(collection->almalog);
   }
 }
 
@@ -237,13 +261,13 @@ void kb_halt(kb *collection) {
   tommy_hashlin_foreach(&collection->distrusted, free);
   tommy_hashlin_done(&collection->distrusted);
 
+  if (logs_on) {
+    fclose(collection->almalog);
+  }
+
   free(collection);
 
   parse_cleanup();
-
-  if (logs_on) {
-    fclose(almalog);
-  }
 }
 
 void kb_assert(kb *collection, char *string, kb_str *buf) {
@@ -266,7 +290,7 @@ void kb_observe(kb *collection, char *string, kb_str *buf) {
   if (formulas_from_source(string, 0, &formula_count, &formulas)) {
     tommy_array arr;
     tommy_array_init(&arr);
-    nodes_to_clauses(formulas, formula_count, &arr, 0, buf);
+    nodes_to_clauses(collection, formulas, formula_count, &arr, 0, buf);
 
     for (int i = 0; i < tommy_array_size(&arr); i++) {
       clause *c = tommy_array_get(&arr, i);
@@ -282,13 +306,13 @@ void kb_observe(kb *collection, char *string, kb_str *buf) {
         time_term.function->terms = NULL;
         lit->terms[lit->term_count-1] = time_term;
         tommy_array_insert(&collection->new_clauses, c);
-        tee_alt("-a: ", buf);
-        clause_print(c, buf);
-        tee_alt(" observed\n", buf);
+        tee_alt("-a: ", collection, buf);
+        clause_print(collection, c, buf);
+        tee_alt(" observed\n", collection, buf);
       }
       else {
-        clause_print(c, buf);
-        tee_alt(" has too many literals\n", buf);
+        clause_print(collection, c, buf);
+        tee_alt(" has too many literals\n", collection, buf);
         free_clause(c);
       }
     }
@@ -303,7 +327,7 @@ void kb_backsearch(kb *collection, char *string, kb_str *buf) {
   if (formulas_from_source(string, 0, &formula_count, &formulas)) {
     tommy_array arr;
     tommy_array_init(&arr);
-    nodes_to_clauses(formulas, formula_count, &arr, 0, buf);
+    nodes_to_clauses(collection, formulas, formula_count, &arr, 0, buf);
 
     clause *c = tommy_array_get(&arr, 0);
     // Free all after first
@@ -312,15 +336,15 @@ void kb_backsearch(kb *collection, char *string, kb_str *buf) {
     tommy_array_done(&arr);
     if (c != NULL) {
       if (c->pos_count + c->neg_count > 1) {
-        tee_alt("-a: query clause has too many literals\n", buf);
+        tee_alt("-a: query clause has too many literals\n", collection, buf);
         free_clause(c);
       }
       else {
         collection->idling = 0;
         backsearch_from_clause(collection, c);
-        tee_alt("-a: Backsearch initiated for ", buf);
-        clause_print(c, buf);
-        tee_alt("\n", buf);
+        tee_alt("-a: Backsearch initiated for ", collection, buf);
+        clause_print(collection, c, buf);
+        tee_alt("\n", collection, buf);
       }
     }
   }

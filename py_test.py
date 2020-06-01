@@ -34,3 +34,12 @@ s = alma.kbprint(a)
 
 for line in s.split('\n'):
     print(line)
+
+s = alma.kbdel(a,"doing(move).")
+
+print(s)
+
+s = alma.kbprint(a)
+
+for line in s.split('\n'):
+    print(line)
