@@ -15,7 +15,7 @@ extern char logs_on;
 extern char python_mode;
 
 // Initialize global variable (declared in alma_formula header) to count up variable IDs
-long long variable_id_count = 0;
+//long long variable_id_count = 0;
 
 FILE *almalog = NULL;
 

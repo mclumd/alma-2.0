@@ -24,6 +24,7 @@ void kb_init(kb **collection, char *file, char *agent, int verbose, kb_str *buf,
   collec->prev = collec->now = NULL;
   collec->wallnow = collec->wallprev = NULL;
   collec->idling = 0;
+  collec->variable_id_count = 0;
   tommy_array_init(&collec->new_clauses);
   tommy_list_init(&collec->clauses);
   tommy_hashlin_init(&collec->index_map);

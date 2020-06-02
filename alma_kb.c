@@ -70,20 +70,20 @@ static void find_variable_names(tommy_array *list, alma_term *term, int id_from_
   }
 }
 
-static void set_variable_names(tommy_array *list, alma_term *term, int id_from_name) {
+static void set_variable_names(tommy_array *list, alma_term *term, int id_from_name, kb *collection) {
   if (term->type == VARIABLE) {
     for (tommy_size_t i = 0; i < tommy_array_size(list); i++) {
       if (id_from_name) {
         if (strcmp(term->variable->name, tommy_array_get(list, i)) == 0)
-          term->variable->id = variable_id_count + i;
+          term->variable->id = collection->variable_id_count + i;
       }
       else if (term->variable->id == *(long long *)tommy_array_get(list, i))
-        term->variable->id = variable_id_count + i;
+        term->variable->id = collection->variable_id_count + i;
     }
   }
   else if (term->type == FUNCTION) {
     for (int i = 0; i < term->function->term_count; i++)
-      set_variable_names(list, term->function->terms+i, id_from_name);
+      set_variable_names(list, term->function->terms+i, id_from_name, collection);
   }
   else {
     // TODO quote case
@@ -95,7 +95,7 @@ static void set_variable_names(tommy_array *list, alma_term *term, int id_from_n
 // 1) If clause is result of resolution, replace existing matching IDs with fresh values each
 // 2) Otherwise, give variables with the same name matching IDs
 // Fresh ID values drawn from variable_id_count global variable
-void set_variable_ids(clause *c, int id_from_name, binding_list *bs_bindings) {
+void set_variable_ids(clause *c, int id_from_name, binding_list *bs_bindings, kb *collection) {
   tommy_array vars;
   tommy_array_init(&vars);
 
@@ -108,17 +108,17 @@ void set_variable_ids(clause *c, int id_from_name, binding_list *bs_bindings) {
 
   for (int i = 0; i < c->pos_count; i++)
     for (int j = 0; j < c->pos_lits[i]->term_count; j++)
-      set_variable_names(&vars, c->pos_lits[i]->terms+j, id_from_name);
+      set_variable_names(&vars, c->pos_lits[i]->terms+j, id_from_name, collection);
   for (int i = 0; i < c->neg_count; i++)
     for (int j = 0; j < c->neg_lits[i]->term_count; j++)
-      set_variable_names(&vars, c->neg_lits[i]->terms+j, id_from_name);
+      set_variable_names(&vars, c->neg_lits[i]->terms+j, id_from_name, collection);
 
   // If bindings for a backsearch have been passed in, update variable names for them as well
   if (bs_bindings)
     for (int i = 0; i < bs_bindings->num_bindings; i++)
-      set_variable_names(&vars, bs_bindings->list[i].term, id_from_name);
+      set_variable_names(&vars, bs_bindings->list[i].term, id_from_name, collection);
 
-  variable_id_count += tommy_array_size(&vars);
+  collection->variable_id_count += tommy_array_size(&vars);
   if (!id_from_name) {
     for (int i = 0; i < tommy_array_size(&vars); i++)
       free(tommy_array_get(&vars, i));
@@ -213,7 +213,7 @@ void flatten_node(kb *collection, alma_node *node, tommy_array *clauses, int pri
     //    printf("RIGHT BEFORE DIRTY BIT\n");
     c->dirty_bit = (char) 1;
     make_clause(node, c);
-    set_variable_ids(c, 1, NULL);
+    set_variable_ids(c, 1, NULL, collection);
 
     //    printf("ABOUT TO PRINT\n");
     if (print) {
@@ -1363,7 +1363,7 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
             res_result->children_count = 0;
             res_result->children = NULL;
 
-            set_variable_ids(res_result, 0, x_bindings);
+            set_variable_ids(res_result, 0, x_bindings, collection);
 
             tommy_array_insert(new_arr, res_result);
             if (bs)
@@ -1460,7 +1460,7 @@ static void handle_true(kb *collection, clause *truth, kb_str *buf) {
       clause *u = malloc(sizeof(*u));
       copy_clause_structure(quote->clause_quote, u);
       // TODO with quasiquotation, only set IDs for newly unquoted variables
-      set_variable_ids(u, 1, NULL);
+      set_variable_ids(u, 1, NULL, collection);
       tommy_array_insert(&unquoted, u);
     }
 
@@ -1619,7 +1619,7 @@ void process_new_clauses(kb *collection, kb_str *buf) {
                clause *to_reinstate = result->value;
                clause *reinstatement = malloc(sizeof(*reinstatement));
                copy_clause_structure(to_reinstate, reinstatement);
-               set_variable_ids(reinstatement, 1, NULL);
+               set_variable_ids(reinstatement, 1, NULL, collection);
                reinstatement->parent_set_count = to_reinstate->parent_set_count;
                if (reinstatement->parent_set_count > 0) {
                  reinstatement->parents = malloc(sizeof(*reinstatement->parents)*reinstatement->parent_set_count);
