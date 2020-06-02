@@ -78,6 +78,8 @@ typedef struct kb {
   FILE *almalog;
 
   long long variable_id_count;
+
+  long next_index;
 } kb;
 
 // Map used for entries in index_map

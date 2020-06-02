@@ -9,7 +9,7 @@
 #include "alma_proc.h"
 #include "alma_print.h"
 
-static long next_index;
+//static long next_index;
 
 static void make_clause_rec(alma_node *node, clause *c) {
   // Note: predicate null assignment necessary for freeing of notes without losing predicates
@@ -624,7 +624,7 @@ clause* duplicate_check(kb *collection, clause *c) {
 void add_clause(kb *collection, clause *c) {
   // Add clause to overall clause list and index map
   index_mapping *ientry = malloc(sizeof(*ientry));
-  c->index = ientry->key = next_index++;
+  c->index = ientry->key = collection->next_index++;
   c->dirty_bit = (char) 1;
   ientry->value = c;
   c->learned = collection->time;
