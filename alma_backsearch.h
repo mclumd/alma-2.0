@@ -31,8 +31,8 @@ typedef struct backsearch_task {
 } backsearch_task;
 
 void backsearch_from_clause(kb *collection, clause *c);
-void generate_backsearch_tasks(kb *collection, backsearch_task *bt);
-void process_backsearch_tasks(kb *collection);
+void generate_backsearch_tasks(kb *collection, backsearch_task *bt, kb_str *buf);
+void process_backsearch_tasks(kb *collection, kb_str *buf);
 void backsearch_halt(backsearch_task *t);
 
 int bm_compare(const void *arg, const void *obj);

@@ -51,8 +51,11 @@ void parse_subjects_priorites(double *prior_list, int num, char *filename) {
   fclose(pf);
 }
 
+extern char logs_on;
+extern char python_mode;
+
 // Caller will need to free collection with kb_halt
-void kb_init(kb **collection, char *file, char *agent, int verbose, int differential_priorities, int res_heap_size, rl_init_params rip) {
+void kb_init(kb **collection, char *file, char *agent, int verbose, int differential_priorities, int res_heap_size, rl_init_params rip, kb_str *buf) {
   // Allocate and initialize
   *collection = malloc(sizeof(**collection));
   kb *collec = *collection;
@@ -64,6 +67,7 @@ void kb_init(kb **collection, char *file, char *agent, int verbose, int differen
   collec->tracking_resolutions = rip.tracking_resolutions;
   collec->subject_list = malloc(sizeof(tommy_array));
 
+  collec->size = 0;
   collec->time = 1;
   collec->prev = collec->now = NULL;
   collec->wallnow = collec->wallprev = NULL;
@@ -86,16 +90,35 @@ void kb_init(kb **collection, char *file, char *agent, int verbose, int differen
 
   parse_init();
 
-  if (rip.tracking_resolutions) {
-    parse_subjects_file(collec->subject_list, &(collec->num_subjects), rip.subjects_file);
-    init_resolution_choices(&(collec->resolution_choices), collec->num_subjects, rip.resolutions_horizon);
-    collec->subject_priorities = malloc(sizeof(double)* collec->num_subjects);
-    if (rip.rl_priority_file == NULL) {
-      for (int i=0; i < collec->num_subjects; i++) collec->subject_priorities[i] = 0.0;
-    } else{
-      parse_subjects_priorites(collec->subject_priorities, collec->num_subjects, rip.rl_priority_file);
+  if (rip.tracking_resolutions)
+    {
+      if (rip.use_lists)
+        {
+          collec->subject_list = rip.tracking_subjects;
+          collec->num_subjects = rip.tracking_subjects->count;
+        }
+      else
+        {
+          parse_subjects_file (collec->subject_list, &(collec->num_subjects), rip.subjects_file);
+        }
+      init_resolution_choices (&(collec->resolution_choices), collec->num_subjects, rip.resolutions_horizon);
+      if (rip.use_lists)
+        {
+          collec->subject_priorities = rip.tracking_priorities;
+        }
+      else
+        {
+          collec->subject_priorities = malloc (sizeof (double) * collec->num_subjects);
+          if (rip.rl_priority_file == NULL)
+            {
+              for (int i = 0; i < collec->num_subjects; i++) collec->subject_priorities[i] = 0.0;
+            }
+          else
+            {
+              parse_subjects_priorites (collec->subject_priorities, collec->num_subjects, rip.rl_priority_file);
+            }
+        }
     }
-  }
 
 
   // Given a file argument, obtain other initial clauses from
@@ -104,7 +127,7 @@ void kb_init(kb **collection, char *file, char *agent, int verbose, int differen
     int num_trees;
 
     if (formulas_from_source(file, 1, &num_trees, &trees)) {
-      nodes_to_clauses(trees, num_trees, &collec->new_clauses, 0);
+      nodes_to_clauses(trees, num_trees, &collec->new_clauses, 0, buf);
       fif_to_front(&collec->new_clauses);
     }
     // If file cannot parse, cleanup and exit
@@ -119,14 +142,14 @@ void kb_init(kb **collection, char *file, char *agent, int verbose, int differen
     strcpy(sentence, "agentname(");
     strcpy(sentence + 10, agent);
     strcpy(sentence + 10 + namelen, ").");
-    assert_formula(collec, sentence, 0);
+    assert_formula(collec, sentence, 0, buf);
     free(sentence);
   }
 
   collec->prev = now(collec->time);
-  assert_formula(collec, collec->prev, 0);
+  assert_formula(collec, collec->prev, 0, buf);
   collec->wallprev = walltime();
-  assert_formula(collec, collec->wallprev, 0);
+  assert_formula(collec, collec->wallprev, 0, buf);
 
   // Insert starting clauses
   for (tommy_size_t i = 0; i < tommy_array_size(&collec->new_clauses); i++) {
@@ -155,20 +178,20 @@ void kb_init(kb **collection, char *file, char *agent, int verbose, int differen
 }
 
 
-int load_file(kb *collec, char *filename) {
+int load_file(kb *collec, char *filename, kb_str *buf) {
   FILE *fp;
   char *line = NULL;
   size_t len = 0;
   ssize_t read;
-  
+
   fp = fopen(filename, "r");
   if (fp == NULL) return 0;
 
 
-  while ((read = getline(&line, &len, fp)) != -1) kb_assert(collec, line);    
+  while ((read = getline(&line, &len, fp)) != -1) kb_assert(collec, line, buf);
   fclose(fp);
   if (line) free(line);
-  
+
   return 1;
 }
 
@@ -192,76 +215,80 @@ static int idling_check(kb *collection, int new_clauses) {
 }
 
 // Step through the KB.  If singleton==1, only process the highest priority resolution task.
-void kb_step(kb *collection, int singleton) {
+void kb_step(kb *collection, int singleton, kb_str *buf) {
   collection->time++;
 
   if (!singleton) {
-    process_res_tasks(collection, &collection->res_tasks, &collection->new_clauses, NULL);
+    process_res_tasks(collection, &collection->res_tasks, &collection->new_clauses, NULL, buf);
   } else{
-    process_single_res_task(collection, &collection->res_tasks, &collection->new_clauses, NULL);
+    process_single_res_task(collection, &collection->res_tasks, &collection->new_clauses, NULL, buf);
   }
   process_fif_tasks(collection);
-  process_backsearch_tasks(collection);
+  process_backsearch_tasks(collection, buf);
 
   int newc = tommy_array_size(&collection->new_clauses) > 0;
-  process_new_clauses(collection);
+  process_new_clauses(collection, buf);
 
   // New clock rules go last
+  //collection->now = now(collection->time);
+  //assert_formula(collection, collection->now, 0);
   collection->now = now(collection->time);
-  assert_formula(collection, collection->now, 0);
+  assert_formula(collection, collection->now, 0, buf);
   collection->wallnow = walltime();
-  assert_formula(collection, collection->wallnow, 0);
-  delete_formula(collection, collection->prev, 0);
+  assert_formula(collection, collection->wallnow, 0, buf);
+  delete_formula(collection, collection->prev, 0, buf);
   free(collection->prev);
   collection->prev = collection->now;
-  delete_formula(collection, collection->wallprev, 0);
+  delete_formula(collection, collection->wallprev, 0, buf);
   free(collection->wallprev);
   collection->wallprev = collection->wallnow;
-  process_new_clauses(collection);
+  process_new_clauses(collection, buf);
 
+  // Generate new backsearch tasks
   tommy_node *i = tommy_list_head(&collection->backsearch_tasks);
   while (i) {
-    generate_backsearch_tasks(collection, i->data);
+    generate_backsearch_tasks(collection, i->data, buf);
     i = i->next;
   }
 
   collection->idling = idling_check(collection, newc);
   if (collection->idling)
-    tee("-a: Idling...\n");
+    tee_alt("-a: Idling...\n", buf);
+
+  tommy_array_done(&collection->new_clauses);
+  tommy_array_init(&collection->new_clauses);
 }
 
-void kb_print(kb *collection) {
+void kb_print(kb *collection, kb_str *buf) {
   tommy_node *i = tommy_list_head(&collection->clauses);
   while (i) {
     index_mapping *data = i->data;
-    tee("%ld: ", data->key);
-    clause_print(data->value);
-    tee("\n");
+    tee_alt("%ld: ", buf, data->key);
+    clause_print(data->value, buf);
+    tee_alt("\n", buf);
     i = i->next;
   }
 
   i = tommy_list_head(&collection->backsearch_tasks);
   if (i) {
-    tee("Back searches:\n");
+    tee_alt("Back searches:\n", buf);
     for (int count = 0; i != NULL; i = i->next, count++) {
-      tee("%d\n", count);
+      tee_alt("%d\n", buf, count);
       backsearch_task *t = i->data;
       for (tommy_size_t j = 0; j < tommy_array_size(&t->clauses); j++) {
         clause *c = tommy_array_get(&t->clauses, j);
-        tee("%ld: ", c->index);
-        clause_print(c);
+        tee_alt("%ld: ", buf, c->index);
+        clause_print(c, buf);
         binding_mapping *m = tommy_hashlin_search(&t->clause_bindings, bm_compare, &c->index, tommy_hash_u64(0, &c->index, sizeof(c->index)));
         if (m != NULL) {
-          tee(" (bindings: ");
-          print_bindings(m->bindings);
-          tee(")");
+          tee_alt(" (bindings: ", buf);
+          print_bindings(m->bindings, buf);
+          tee_alt(")", buf);
         }
-        tee("\n");
+        tee_alt("\n", buf);
       }
     }
   }
-  tee("\n");
-  fflush(almalog);
   res_task_heap *res_tasks = &collection->res_tasks;
   res_task_pri tp;
   res_task *t;
@@ -274,12 +301,16 @@ void kb_print(kb *collection) {
     tee("Pri\t\tx\t\ty\t\tPos\t\tNeg\n");
     for (j=0; j< res_tasks->count; j++) {
       tp = *res_task_heap_item(res_tasks, j);
-      tee("%g\t\t", tp.priority);
+      tee_alt("%g\t\t", buf, tp.priority);
       t = tp.res_task;
-      res_task_print(t);
-      tee("\n");
+      res_task_print(t, buf);
+      tee_alt("\n", buf);
     }
   tee("End RH---------------------------------------\n");
+  }
+  tee_alt("\n", buf);
+  if (logs_on) {
+    fflush(almalog);
   }
 }
 
@@ -336,29 +367,31 @@ void kb_halt(kb *collection) {
 
   parse_cleanup();
 
-  fclose(almalog);
+  if (logs_on) {
+    fclose(almalog);
+  }
 }
 
-void kb_assert(kb *collection, char *string) {
-  assert_formula(collection, string, 1);
+void kb_assert(kb *collection, char *string, kb_str *buf) {
+  assert_formula(collection, string, 1, buf);
 }
 
-void kb_remove(kb *collection, char *string) {
-  delete_formula(collection, string, 1);
+void kb_remove(kb *collection, char *string, kb_str *buf) {
+  delete_formula(collection, string, 1, buf);
 }
 
-void kb_update(kb *collection, char *string) {
-  update_formula(collection, string);
+void kb_update(kb *collection, char *string, kb_str *buf) {
+  update_formula(collection, string, buf);
 }
 
-void kb_observe(kb *collection, char *string) {
+void kb_observe(kb *collection, char *string, kb_str *buf) {
   // Parse string into clauses
   alma_node *formulas;
   int formula_count;
   if (formulas_from_source(string, 0, &formula_count, &formulas)) {
     tommy_array arr;
     tommy_array_init(&arr);
-    nodes_to_clauses(formulas, formula_count, &arr, 0);
+    nodes_to_clauses(formulas, formula_count, &arr, 0, buf);
 
     for (int i = 0; i < tommy_array_size(&arr); i++) {
       clause *c = tommy_array_get(&arr, i);
@@ -374,13 +407,13 @@ void kb_observe(kb *collection, char *string) {
         time_term.function->terms = NULL;
         lit->terms[lit->term_count-1] = time_term;
         tommy_array_insert(&collection->new_clauses, c);
-        tee("-a: ");
-        clause_print(c);
-        tee(" observed\n");
+        tee_alt("-a: ", buf);
+        clause_print(c, buf);
+        tee_alt(" observed\n", buf);
       }
       else {
-        clause_print(c);
-        tee(" has too many literals\n");
+        clause_print(c, buf);
+        tee_alt(" has too many literals\n", buf);
         free_clause(c);
       }
     }
@@ -388,14 +421,14 @@ void kb_observe(kb *collection, char *string) {
   }
 }
 
-void kb_backsearch(kb *collection, char *string) {
+void kb_backsearch(kb *collection, char *string, kb_str *buf) {
   // Parse string into clauses
   alma_node *formulas;
   int formula_count;
   if (formulas_from_source(string, 0, &formula_count, &formulas)) {
     tommy_array arr;
     tommy_array_init(&arr);
-    nodes_to_clauses(formulas, formula_count, &arr, 0);
+    nodes_to_clauses(formulas, formula_count, &arr, 0, buf);
 
     clause *c = tommy_array_get(&arr, 0);
     // Free all after first
@@ -404,15 +437,15 @@ void kb_backsearch(kb *collection, char *string) {
     tommy_array_done(&arr);
     if (c != NULL) {
       if (c->pos_count + c->neg_count > 1) {
-        tee("-a: query clause has too many literals\n");
+        tee_alt("-a: query clause has too many literals\n", buf);
         free_clause(c);
       }
       else {
         collection->idling = 0;
         backsearch_from_clause(collection, c);
-        tee("-a: Backsearch initiated for ");
-        clause_print(c);
-        tee("\n");
+        tee_alt("-a: Backsearch initiated for ", buf);
+        clause_print(c, buf);
+        tee_alt("\n", buf);
       }
     }
   }

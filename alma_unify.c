@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "alma_unify.h"
-#include "alma_kb.h"
+#include "clause.h"
 
 // Returns term variable is bound to if it's in the bindings, null otherwise
 alma_term* bindings_contain(binding_list *theta, alma_variable *var) {
