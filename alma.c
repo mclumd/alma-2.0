@@ -105,7 +105,7 @@ int main(int argc, char **argv) {
     int counter = 0;
     
     while (1) {
-      tee_alt("alma: ",NULL,counter);
+      tee_alt("alma: ",NULL,NULL,counter);
       //      tee_alt("about to fgets...\n",NULL);
       fflush(stdout);
       if (fgets(line, LINELEN, stdin) != NULL) {
@@ -165,10 +165,10 @@ int main(int argc, char **argv) {
           free(assertion);
         }
         else {
-          tee_alt("-a: Command '%s' not recognized\n", NULL, line);
+          tee_alt("-a: Command '%s' not recognized\n", NULL, NULL, line);
         }
       } else {
-	tee_alt("ALMA no more input\n", NULL);
+	tee_alt("ALMA no more input\n", NULL, NULL);
 	fflush(stdout);
       }
       counter++;
