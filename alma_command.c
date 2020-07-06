@@ -289,6 +289,15 @@ void kb_print(kb *collection, kb_str *buf) {
       }
     }
   }
+
+  if (logs_on) {
+    fflush(almalog);
+  }
+}
+
+
+void kb_print_res_heap(kb *collection, kb_str *buf) {
+
   res_task_heap *res_tasks = &collection->res_tasks;
   res_task_pri tp;
   res_task *t;
@@ -313,7 +322,6 @@ void kb_print(kb *collection, kb_str *buf) {
     fflush(almalog);
   }
 }
-
 void kb_halt(kb *collection) {
   // now and prev alias at this point, only free one
   free(collection->now);
