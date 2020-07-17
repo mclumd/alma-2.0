@@ -1,8 +1,13 @@
+#define PY_SSIZE_T_CLEAN
 #include <Python.h>
 #include "alma_command.h"
 #include "alma_kb.h"
 #include "alma_print.h"
 #include "tommy.h"
+
+#if PY_MAJOR_VERSION >= 3
+#define PY3
+#endif
 
 extern char python_mode;
 
@@ -38,17 +43,30 @@ static PyObject * alma_init(PyObject *self, PyObject *args) {
   tommy_array_init(collection_subjects);
   for (idx = 0; idx < subj_list_len; idx++) {
     list_item = PyList_GetItem(subject_name_list, idx);
+#ifndef PY3
     if (!PyString_Check(list_item)) {
       PyErr_SetString(PyExc_TypeError, "list items must be strings.");
+#else
+    if (!PyUnicode_Check(list_item)) {
+	PyErr_SetString(PyExc_TypeError, "list items must be strings.");
+#endif
     } else {
-      fprintf(stderr, "Got subject name %s\n", PyString_AsString(list_item));
+      fprintf(stderr, "Got subject name %s\n", PyUnicode_AS_DATA(list_item));
+#ifndef PY3
       subj_len = strlen(PyString_AsString(list_item)) + 1;
       subj_copy = malloc( subj_len * sizeof(char));
       strncpy(subj_copy, PyString_AsString(list_item), subj_len);
       subj_copy[subj_len-2] = '\0';
       tommy_array_insert(collection_subjects, subj_copy);
+#else
+      subj_len = strlen(PyUnicode_AS_DATA(list_item)) + 1;
+      subj_copy = malloc( subj_len * sizeof(char));
+      strncpy(subj_copy, PyUnicode_AS_DATA(list_item), subj_len);
+      subj_copy[subj_len-1] = '\0';
+      tommy_array_insert(collection_subjects, subj_copy);      
+#endif
     }
-  }
+    }
 
   assert(subj_list_len == PyList_Size(subject_priority_list));
   collection_priorities = malloc(sizeof(double)* subj_list_len);  
@@ -121,14 +139,13 @@ static PyObject *alma_set_priorities(PyObject *self, PyObject *args) {
   tommy_array_init(collection->subject_list);
   for (idx = 0; idx < list_len; idx++) {
     list_item = PyList_GetItem(subject_name_list, idx);
-    if (!PyString_Check(list_item)) {
+    if (!PyUnicode_Check(list_item)) {
       PyErr_SetString(PyExc_TypeError, "list items must be strings.");
     } else {
-      fprintf(stderr, "Got subject name %s\n", PyString_AsString(list_item));
-      subj_len = strlen(PyString_AsString(list_item)) + 1;
+      fprintf(stderr, "Got subject name %s\n", PyUnicode_AS_DATA(list_item));
+      subj_len = strlen(PyUnicode_AS_DATA(list_item)) + 1;
       subj_copy = malloc( subj_len * sizeof(char));
-      strncpy(subj_copy, PyString_AsString(list_item), subj_len);
-      subj_copy[subj_len] = '\0';
+      strcpy(subj_copy, PyUnicode_AS_DATA(list_item));
       tommy_array_insert(collection->subject_list, subj_copy);
     }
   }
@@ -172,9 +189,9 @@ static PyObject * alma_step(PyObject *self, PyObject *args) {
   
   kb_step((kb *)alma_kb, 0, &buf);
 
-  ret_val = malloc(buf.size + 1);
+  ret_val = malloc( (buf.size + 1) * sizeof(char));
   strcpy(ret_val,buf.buffer);
-  ret_val[buf.size] = '\0';
+  //ret_val[buf.size] = '\0';
   free(buf.buffer);
   
   return Py_BuildValue("s",ret_val);
@@ -199,7 +216,7 @@ static PyObject * alma_atomic_step(PyObject *self, PyObject *args) {
 
   ret_val = malloc(buf.size + 1);
   strcpy(ret_val,buf.buffer);
-  ret_val[buf.size] = '\0';
+  //ret_val[buf.size] = '\0';
   free(buf.buffer);
   
   return Py_BuildValue("s",ret_val);
@@ -226,7 +243,7 @@ static PyObject * alma_kbprint(PyObject *self, PyObject *args) {
   
   ret_val = malloc(buf.size + 1);
   fprintf(stderr, "D\n");
-  strncpy(ret_val,buf.buffer,buf.size);
+  strcpy(ret_val,buf.buffer);
   ret_val[buf.size] = '\0';
   free(buf.buffer);
   fprintf(stderr, "E\n");
@@ -270,10 +287,11 @@ static PyObject * alma_add(PyObject *self, PyObject *args) {
   
 
   assertion = malloc(len+1);
-  strncpy(assertion, input, len);
-  assertion[len] = '\0';
+  //strncpy(assertion, input, len);
+  strcpy(assertion, input);
+  //assertion[len] = '\0';
   kb_assert((kb *)alma_kb, assertion, &buf);
-  free(assertion);
+  //free(assertion);
 
   ret_val = malloc(buf.size + 1);
   strcpy(ret_val,buf.buffer);
@@ -376,7 +394,8 @@ static PyObject * alma_obs(PyObject *self, PyObject *args) {
 
   fprintf(stderr, "observing %s -- len==%d  ....   ", input, len);
   assertion = malloc(len + 1);
-  strncpy(assertion, input, len);
+  //strncpy(assertion, input, len);
+  strcpy(assertion, input);
   assertion[len] = '\0';
   kb_observe((kb *)alma_kb, assertion, &buf);
   free(assertion);
@@ -440,7 +459,8 @@ static PyMethodDef AlmaMethods[] = {
   {NULL, NULL, 0, NULL}
 };
 
-/*
+
+
 static struct PyModuleDef almamodule = {
   PyModuleDef_HEAD_INIT,
   "alma",
@@ -448,16 +468,22 @@ static struct PyModuleDef almamodule = {
   -1,
   AlmaMethods
 };
-*/
 
+
+PyMODINIT_FUNC PyInit_alma(void) {
+  return PyModule_Create(&almamodule);
+}
+
+
+ 
+/*
+
+// Python2
 PyMODINIT_FUNC
 initalma(void)
 {
   (void) Py_InitModule("alma", AlmaMethods);
 }
 
-/*
-PyMODINIT_FUNC PyInit_alma(void) {
-  (void) PyModule_Create(&almamodule);
-}
 */
+

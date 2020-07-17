@@ -13,7 +13,7 @@
 
 
 double compute_priority(kb *knowledge_base, res_task *t) {
-    /* The priority of a funciton will be the minimum of the priorities of any associated term in the task. */
+  /* The priority of a funciton will be the minimum of the priorities of any associated term in the task. */
   char *subject;
   double subject_priority;
   double priority = DBL_MAX;
@@ -21,12 +21,12 @@ double compute_priority(kb *knowledge_base, res_task *t) {
 
   /* For each subject, go through the positive and negative literals, and look for any terms that match */
   for (int subj_idx = 0; subj_idx < knowledge_base->num_subjects; subj_idx++) {
-      subject = tommy_array_get(knowledge_base->subject_list, subj_idx);
-      if ( (knowledge_base->subject_priorities[subj_idx] < priority) &&
-           ( alma_function_search(t->pos, subject) || alma_function_search(t->neg, subject)) ) {
-          priority = knowledge_base->subject_priorities[subj_idx];
-        }
+    subject = tommy_array_get(knowledge_base->subject_list, subj_idx);
+    if ( (knowledge_base->subject_priorities[subj_idx] < priority) &&
+	 ( alma_function_search(t->pos, subject) || alma_function_search(t->neg, subject)) ) {
+      priority = knowledge_base->subject_priorities[subj_idx];
     }
+  }
   return priority;
 }
 
