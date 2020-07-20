@@ -212,6 +212,7 @@ void flatten_node(kb *collection, alma_node *node, tommy_array *clauses, int pri
     c->fif = NULL;
     //    printf("RIGHT BEFORE DIRTY BIT\n");
     c->dirty_bit = (char) 1;
+    c->pyobject_bit = (char) 1;
     make_clause(node, c);
     set_variable_ids(c, 1, NULL, collection);
 
@@ -626,6 +627,7 @@ void add_clause(kb *collection, clause *c) {
   index_mapping *ientry = malloc(sizeof(*ientry));
   c->index = ientry->key = collection->next_index++;
   c->dirty_bit = (char) 1;
+  c->pyobject_bit = (char) 1;
   ientry->value = c;
   c->learned = collection->time;
   tommy_list_insert_tail(&collection->clauses, &ientry->list_node, ientry);
@@ -1061,6 +1063,7 @@ int update_formula(kb *collection, char *string, kb_str *buf) {
       t_dupe->neg_lits = update->neg_lits;
       update->neg_lits = lits_temp;
       t_dupe->dirty_bit = (char) 1;
+      t_dupe->pyobject_bit = (char) 1;
 
       // Generate new tasks with updated clause
       res_tasks_from_clause(collection, t_dupe, 1);

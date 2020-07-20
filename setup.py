@@ -9,6 +9,7 @@ def main():
           description="Python interface for the alma C library",
           ext_modules=[Extension("alma",
                                  sources = ["almamodule.c"],
+                                 include_dirs = ["/usr/lib/python2.7/dist-packages/numpy/core/include/numpy"],
 #                                 include_dirs = ["alma_command.h",
 #                                  "alma_kb.h",
 #                                  "alma_print.h"],

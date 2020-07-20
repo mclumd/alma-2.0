@@ -1,5 +1,7 @@
 CC = gcc
 CFLAGS = -std=c11 -pedantic-errors -Wall -Werror -Wshadow -Wpedantic -g -fPIC
+NUMPY_DIR_PY2 = /usr/lib/python2.7/dist-packages/numpy/core/include/numpy
+NUMPY_DIR_PY3 = /usr/local/lib/python3.6/dist-packages/numpy/core/include/numpy
 
 TOMMY = tommyds/tommyds/
 
