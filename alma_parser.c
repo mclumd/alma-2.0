@@ -64,8 +64,8 @@ void parse_init(void) {
     " predname     : <prologconst> ;                             "
     " constant     : <prologconst> ;                             "
     " funcname     : <prologconst> ;                             "
-    " variable     : /[A-Z_][a-zA-Z0-9_]*/ ;                     "
-    " prologconst  : /[a-z0-9][a-zA-Z0-9_]*/ ;                   ",
+    " variable     : /[A-Z][a-zA-Z0-9_]*/ ;                      "
+    " prologconst  : /[a-z0-9_][a-zA-Z0-9_]*/ ;                  ",
     Alma, Almacomment, Almaformula, Sentence, Formula, FFormula, FFormConc, BFormula, Conjform,
     Literal, Listofterms, Term, Predname, Constant, Funcname, Variable, Prologconst, NULL);
 }

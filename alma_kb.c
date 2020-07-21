@@ -11,7 +11,7 @@
 #include "alma_term_search.h"
 #include "res_task_heap.h"
 
-static long next_index;
+//static long next_index;
 
 
 void init_resolution_choices(int ***resolution_choices, int num_subjects, int num_timesteps) {
@@ -84,20 +84,20 @@ static void find_variable_names(tommy_array *list, alma_term *term, int id_from_
   }
 }
 
-static void set_variable_names(tommy_array *list, alma_term *term, int id_from_name) {
+static void set_variable_names(tommy_array *list, alma_term *term, int id_from_name, kb *collection) {
   if (term->type == VARIABLE) {
     for (tommy_size_t i = 0; i < tommy_array_size(list); i++) {
       if (id_from_name) {
         if (strcmp(term->variable->name, tommy_array_get(list, i)) == 0)
-          term->variable->id = variable_id_count + i;
+          term->variable->id = collection->variable_id_count + i;
       }
       else if (term->variable->id == *(long long *)tommy_array_get(list, i))
-        term->variable->id = variable_id_count + i;
+        term->variable->id = collection->variable_id_count + i;
     }
   }
   else if (term->type == FUNCTION) {
     for (int i = 0; i < term->function->term_count; i++)
-      set_variable_names(list, term->function->terms+i, id_from_name);
+      set_variable_names(list, term->function->terms+i, id_from_name, collection);
   }
   else {
     // TODO quote case
@@ -109,7 +109,7 @@ static void set_variable_names(tommy_array *list, alma_term *term, int id_from_n
 // 1) If clause is result of resolution, replace existing matching IDs with fresh values each
 // 2) Otherwise, give variables with the same name matching IDs
 // Fresh ID values drawn from variable_id_count global variable
-void set_variable_ids(clause *c, int id_from_name, binding_list *bs_bindings) {
+void set_variable_ids(clause *c, int id_from_name, binding_list *bs_bindings, kb *collection) {
   tommy_array vars;
   tommy_array_init(&vars);
 
@@ -122,17 +122,17 @@ void set_variable_ids(clause *c, int id_from_name, binding_list *bs_bindings) {
 
   for (int i = 0; i < c->pos_count; i++)
     for (int j = 0; j < c->pos_lits[i]->term_count; j++)
-      set_variable_names(&vars, c->pos_lits[i]->terms+j, id_from_name);
+      set_variable_names(&vars, c->pos_lits[i]->terms+j, id_from_name, collection);
   for (int i = 0; i < c->neg_count; i++)
     for (int j = 0; j < c->neg_lits[i]->term_count; j++)
-      set_variable_names(&vars, c->neg_lits[i]->terms+j, id_from_name);
+      set_variable_names(&vars, c->neg_lits[i]->terms+j, id_from_name, collection);
 
   // If bindings for a backsearch have been passed in, update variable names for them as well
   if (bs_bindings)
     for (int i = 0; i < bs_bindings->num_bindings; i++)
-      set_variable_names(&vars, bs_bindings->list[i].term, id_from_name);
+      set_variable_names(&vars, bs_bindings->list[i].term, id_from_name, collection);
 
-  variable_id_count += tommy_array_size(&vars);
+  collection->variable_id_count += tommy_array_size(&vars);
   if (!id_from_name) {
     for (int i = 0; i < tommy_array_size(&vars); i++)
       free(tommy_array_get(&vars, i));
@@ -202,14 +202,17 @@ void make_clause(alma_node *node, clause *c) {
 
 // Flattens a single alma node and adds its contents to collection
 // Recursively calls when an AND is found to separate conjunctions
-void flatten_node(alma_node *node, tommy_array *clauses, int print, kb_str *buf) {
+void flatten_node(kb *collection, alma_node *node, tommy_array *clauses, int print, kb_str *buf) {
+  //  printf("FLATTEN NODE FUNC: %p, %p, %p\n",(void *)node,(void *)clauses,(void *)buf);
+  //  printf("buf ptr and size: %p, %d\n",(void *)buf->buffer,(int)buf->limit);
+  //  printf("after BUF\n");
   if (node->type == FOL && node->fol->op == AND) {
     if (node->fol->arg1->type == FOL)
       node->fol->arg1->fol->tag = node->fol->tag;
-    flatten_node(node->fol->arg1, clauses, print, buf);
+    flatten_node(collection, node->fol->arg1, clauses, print, buf);
     if (node->fol->arg2->type == FOL)
       node->fol->arg2->fol->tag = node->fol->tag;
-    flatten_node(node->fol->arg2, clauses, print, buf);
+    flatten_node(collection, node->fol->arg2, clauses, print, buf);
   }
   else {
     clause *c = malloc(sizeof(*c));
@@ -220,13 +223,20 @@ void flatten_node(alma_node *node, tommy_array *clauses, int print, kb_str *buf)
     c->children = NULL;
     c->tag = NONE;
     c->fif = NULL;
+    //    printf("RIGHT BEFORE DIRTY BIT\n");
+    c->dirty_bit = (char) 1;
     make_clause(node, c);
-    set_variable_ids(c, 1, NULL);
+    set_variable_ids(c, 1, NULL, collection);
 
+    //    printf("ABOUT TO PRINT\n");
     if (print) {
-      tee_alt("-a: ", buf);
-      clause_print(c, buf);
-      tee_alt(" added\n", buf);
+      //      printf("STARTING PRINTING\n");
+      tee_alt("-a: ", collection, buf);
+      //      printf("PRINT MID 1\n");
+      clause_print(collection, c, buf);
+      //      printf("PRINT MID 2\n");
+      tee_alt(" added\n", collection, buf);
+      //      printf("DONE PRINTING\n");
     }
     tommy_array_insert(clauses, c);
   }
@@ -285,9 +295,11 @@ void copy_clause_structure(clause *original, clause *copy) {
 
 // Flattens trees into set of clauses (tommy_array must be initialized prior)
 // trees argument freed here
-void nodes_to_clauses(alma_node *trees, int num_trees, tommy_array *clauses, int print, kb_str *buf) {
+void nodes_to_clauses(kb *collection, alma_node *trees, int num_trees, tommy_array *clauses, int print, kb_str *buf) {
+  //  printf("NODES 2 CLAUSES: %d\n",num_trees);
   for (int i = 0; i < num_trees; i++) {
-    flatten_node(trees+i, clauses, print, buf);
+    //    printf("FLATTEN NODE: %d/%d",i,num_trees);
+    flatten_node(collection, trees+i, clauses, print, buf);
     free_alma_tree(trees+i);
   }
   free(trees);
@@ -711,7 +723,8 @@ static int dm_compare(const void *arg, const void *obj) {
 
 // Given a clause already existing in KB, remove from data structures
 // Note that fif removal, or removal of a singleton clause used in a fif rule, may be very expensive
-void remove_clause(kb *collection, clause *c) {
+void remove_clause(kb *collection, clause *c, kb_str *buf) {
+  //  printf("ALMA: IN REMOVE CLAUSE\n");
   if (c->tag == FIF) {
     // fif must be removed from fif_map and all fif tasks using it deleted
     char *name = c->fif->conclusion->name;
@@ -745,7 +758,7 @@ void remove_clause(kb *collection, clause *c) {
     if (d != NULL) {
       if(d->value == c) {
       tommy_hashlin_remove_existing(&collection->distrusted, &d->node);
-      // free(d);   // TODO:  bring free back; trying to resolve mem error quickly
+      free(d);
       }
     }
     else {
@@ -776,10 +789,18 @@ void remove_clause(kb *collection, clause *c) {
 
       //  If a parent set has a clause matching, remove match
       for (int j = 0; j < child->parent_set_count; j++) {
+	//	tee_alt("IN ALMA REMOVE_CLAUSE: NUM PARENT CLAUSES %d\n",buf,child->parents[j].count);
         for (int k = 0; k < child->parents[j].count; k++) {
+	  //	  tee_alt("IN ALMA REMOVE_CLAUSE: LOOP IN REMOVE CLAUSE: (i,j,k) => (%d,%d,%d)\n",buf,i,j,k);
+	  //	  tee_alt("IN ALMA REMOVE_CLAUSE: PARENT SET CLAUSE POINTER %p\n",buf,(void *)child->parents[j].clauses);
+	  //	  if (!child->parents[j].clauses) {
+	  //	    return 0;
+	  //	  }
           if (child->parents[j].clauses[k] == c) {
             // If last parent in set, deallocate
+	    //	    printf("ALMA: REMOVE CLAUSE: BEFORE PARENT COUNT\n");
             if (child->parents[j].count == 1) {
+	      //	      tee_alt("IN ALMA: REMOVE CLAUSE: PARENT COUNT IS ONE\n",buf);
               new_count--;
               child->parents[j].count = 0;
               free(child->parents[j].clauses);
@@ -945,7 +966,7 @@ clause* assert_formula(kb *collection, char *string, int print, kb_str *buf) {
   if (formulas_from_source(string, 0, &formula_count, &formulas)) {
     tommy_array temp;
     tommy_array_init(&temp);
-    nodes_to_clauses(formulas, formula_count, &temp, print, buf);
+    nodes_to_clauses(collection, formulas, formula_count, &temp, print, buf);
     clause *ret = tommy_array_size(&temp) > 0 ? tommy_array_get(&temp, 0) : NULL;
     for (tommy_size_t i = 0; i < tommy_array_size(&temp); i++)
       tommy_array_insert(&collection->new_clauses, tommy_array_get(&temp, i));
@@ -963,7 +984,7 @@ int delete_formula(kb *collection, char *string, int print, kb_str *buf) {
     tommy_array clauses;
     tommy_array_init(&clauses);
     for (int i = 0; i < formula_count; i++) {
-      flatten_node(formulas+i, &clauses, 0, buf);
+      flatten_node(collection, formulas+i, &clauses, 0, buf);
       free_alma_tree(formulas+i);
     }
     free(formulas);
@@ -976,16 +997,16 @@ int delete_formula(kb *collection, char *string, int print, kb_str *buf) {
         c = distrusted_dupe_check(collection, curr);
       if (c != NULL) {
         if (print) {
-          tee_alt("-a: ", buf);
-          clause_print(c, buf);
-          tee_alt(" removed\n", buf);
+          tee_alt("-a: ", collection, buf);
+          clause_print(collection, c, buf);
+          tee_alt(" removed\n", collection, buf);
         }
-        remove_clause(collection, c);
+        remove_clause(collection, c, buf);
       }
       else if (print) {
-        tee_alt("-a: ", buf);
-        clause_print(curr, buf);
-        tee_alt(" not found\n", buf);
+        tee_alt("-a: ", collection, buf);
+        clause_print(collection, curr, buf);
+        tee_alt(" not found\n", collection, buf);
       }
       free_clause(curr);
     }
@@ -1005,7 +1026,7 @@ int update_formula(kb *collection, char *string, kb_str *buf) {
       for (int i = 0; i < formula_count; i++)
         free_alma_tree(formulas+i);
       free(formulas);
-      tee_alt("-a: Incorrect number of arguments to update\n", buf);
+      tee_alt("-a: Incorrect number of arguments to update\n", collection, buf);
       return 0;
     }
 
@@ -1013,7 +1034,7 @@ int update_formula(kb *collection, char *string, kb_str *buf) {
     tommy_array clauses;
     tommy_array_init(&clauses);
     for (int i = 0; i < formula_count; i++) {
-      flatten_node(formulas+i, &clauses, 0, buf);
+      flatten_node(collection, formulas+i, &clauses, 0, buf);
       free_alma_tree(formulas+i);
     }
     free(formulas);
@@ -1025,17 +1046,17 @@ int update_formula(kb *collection, char *string, kb_str *buf) {
     clause *t_dupe;
     clause *u_dupe;
     if (target->tag == FIF || update->tag == FIF) {
-      tee_alt("-a: Cannot update with fif clause\n", buf);
+      tee_alt("-a: Cannot update with fif clause\n", collection, buf);
       update_fail = 1;
     }
     else if ((t_dupe = duplicate_check(collection, target)) == NULL) {
-      tee_alt("-a: Clause ", buf);
-      clause_print(target, buf);
-      tee_alt(" to update not present\n", buf);
+      tee_alt("-a: Clause ", collection, buf);
+      clause_print(collection, target, buf);
+      tee_alt(" to update not present\n", collection, buf);
       update_fail = 1;
     }
     else if ((u_dupe = duplicate_check(collection, update)) != NULL) {
-      tee_alt("-a: New version of clause already present\n", buf);
+      tee_alt("-a: New version of clause already present\n", collection, buf);
       update_fail = 1;
     }
 
@@ -1054,11 +1075,11 @@ int update_formula(kb *collection, char *string, kb_str *buf) {
       if (t_dupe->pos_count + t_dupe->neg_count == 1)
         remove_fif_singleton_tasks(collection, t_dupe);
 
-      tee_alt("-a: ", buf);
-      clause_print(target, buf);
-      tee_alt(" updated to ", buf);
-      clause_print(update, buf);
-      tee_alt("\n", buf);
+      tee_alt("-a: ", collection, buf);
+      clause_print(collection, target, buf);
+      tee_alt(" updated to ", collection, buf);
+      clause_print(collection, update, buf);
+      tee_alt("\n", collection, buf);
       free_clause(target);
 
       // Swap clause contents from update
@@ -1074,6 +1095,7 @@ int update_formula(kb *collection, char *string, kb_str *buf) {
       lits_temp = t_dupe->neg_lits;
       t_dupe->neg_lits = update->neg_lits;
       update->neg_lits = lits_temp;
+      t_dupe->dirty_bit = (char) 1;
 
       // Generate new tasks with updated clause
       res_tasks_from_clause(collection, t_dupe, 1);
@@ -1210,9 +1232,9 @@ void transfer_parent(kb *collection, clause *target, clause *source, int add_chi
         if (insert)
           add_child(source->parents[0].clauses[j], target);
       }
-      if (distrust && !is_distrusted(collection, target->index)) {
+      if (distrust && !is_distrusted(collection, target->index))
         distrust_recursive(collection, target, NULL, buf);
-      }
+
     }
   }
 }
@@ -1260,7 +1282,7 @@ void distrust_recursive(kb *collection, clause *c, clause *parent, kb_str *buf) 
   if (c->children != NULL) {
     for (int i = 0; i < c->children_count; i++) {
       if (!is_distrusted(collection, c->children[i]->index)) {
-        distrust_recursive(collection, c->children[i], parent, buf);
+	distrust_recursive(collection, c->children[i], parent, buf);
       }
     }
   }
@@ -1372,7 +1394,7 @@ void process_one_res_task(kb *collection, res_task_heap *tasks, tommy_array *new
 	  res_result->children_count = 0;
 	  res_result->children = NULL;
 
-	  set_variable_ids(res_result, 0, x_bindings);
+            set_variable_ids(res_result, 0, x_bindings, collection);
 
 	  tommy_array_insert(new_arr, res_result);
 	  if (collection->tracking_resolutions)
@@ -1429,7 +1451,7 @@ void process_one_res_task(kb *collection, res_task_heap *tasks, tommy_array *new
               strcpy(contra_str+loc, ").");
 
               // Assert contra and distrusted
-              clause *contra = assert_formula(collection, contra_str, 0, buf);
+	      clause *contra = assert_formula(collection, contra_str, 0, buf);
               free(contra_str);
               distrust_recursive(collection, current_task->x, contra, buf);
               distrust_recursive(collection, current_task->y, contra, buf);
@@ -1517,7 +1539,7 @@ static void handle_true(kb *collection, clause *truth, kb_str *buf) {
       alma_node *sentence_copy = malloc(sizeof(*sentence_copy));
       copy_alma_tree(quote->sentence, sentence_copy);
       make_cnf(sentence_copy);
-      flatten_node(sentence_copy, &unquoted, 0, buf);
+      flatten_node(collection, sentence_copy, &unquoted, 0, buf);
       free_alma_tree(sentence_copy);
       free(sentence_copy);
     }
@@ -1527,7 +1549,7 @@ static void handle_true(kb *collection, clause *truth, kb_str *buf) {
       clause *u = malloc(sizeof(*u));
       copy_clause_structure(quote->clause_quote, u);
       // TODO with quasiquotation, only set IDs for newly unquoted variables
-      set_variable_ids(u, 1, NULL);
+      set_variable_ids(u, 1, NULL, collection);
       tommy_array_insert(&unquoted, u);
     }
 
@@ -1649,6 +1671,7 @@ void process_new_clauses(kb *collection, kb_str *buf) {
     clause *dupe = duplicate_check(collection, c);
     int reinstate = c->pos_count == 1 && c->neg_count == 0 && strcmp(c->pos_lits[0]->name, "reinstate") == 0 && c->pos_lits[0]->term_count == 1;
     if (dupe == NULL || reinstate) {
+      //      c->dirty_bit = (char) 1;
       if (c->tag == FIF)
         fif_task_map_init(collection, c);
 
@@ -1685,7 +1708,7 @@ void process_new_clauses(kb *collection, kb_str *buf) {
                clause *to_reinstate = result->value;
                clause *reinstatement = malloc(sizeof(*reinstatement));
                copy_clause_structure(to_reinstate, reinstatement);
-               set_variable_ids(reinstatement, 1, NULL);
+               set_variable_ids(reinstatement, 1, NULL, collection);
                reinstatement->parent_set_count = to_reinstate->parent_set_count;
                if (reinstatement->parent_set_count > 0) {
                  reinstatement->parents = malloc(sizeof(*reinstatement->parents)*reinstatement->parent_set_count);
@@ -1738,9 +1761,9 @@ void process_new_clauses(kb *collection, kb_str *buf) {
     }
     else {
       if (collection->verbose) {
-        tee_alt("-a: Duplicate clause ", buf);
-        clause_print(c, buf);
-        tee_alt(" merged into %ld\n", buf, dupe->index);
+        tee_alt("-a: Duplicate clause ", collection, buf);
+        clause_print(collection, c, buf);
+        tee_alt(" merged into %ld\n", collection, buf, dupe->index);
       }
 
       if (c->parents != NULL)

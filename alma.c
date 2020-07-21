@@ -65,6 +65,7 @@ int main(int argc, char **argv) {
   int res_heap_size = 10000;
   char *file = NULL;
   char *agent = NULL;
+
   logs_on = (char) 1;
   python_mode = (char) 0;
 
@@ -160,7 +161,8 @@ int main(int argc, char **argv) {
   free(logname);
 
   kb *alma_kb;
-  kb_init(&alma_kb, file, agent, verbose, differential_priorities, res_heap_size, rip, NULL);
+  /* TODO:  Check this for merge issues. */
+  kb_init(&alma_kb, file, agent, verbose, differential_priorities, res_heap_size, rip, NULL, logs_on);
   kb_print(alma_kb,NULL);
 
   if (run) {
@@ -176,8 +178,8 @@ int main(int argc, char **argv) {
     int counter = 0;
 
     while (1) {
-      tee_alt("alma %d: ",NULL,counter);
-      tee_alt("about to fgets...\n",NULL);
+      tee_alt("alma: ",alma_kb,NULL,counter);
+      //      tee_alt("about to fgets...\n",NULL);
       fflush(stdout);
 
       if (fgets(line, LINELEN, stdin) == NULL) {
@@ -195,7 +197,7 @@ int main(int argc, char **argv) {
 	  line[len-1] = '\0';
 	  tee_alt("Command '%s' received at %d.\n", NULL, line, counter);
 	  //	tee_alt(line);
-	  
+
 	  char *pos;
 	  if (strcmp(line, "step") == 0) {
 	    tee_alt("ALMA %d step:\n",NULL, counter);
@@ -275,5 +277,3 @@ int main(int argc, char **argv) {
     return 0;
   }
 }
-
-

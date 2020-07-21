@@ -12,7 +12,7 @@ def main():
 #                                 include_dirs = ["alma_command.h",
 #                                  "alma_kb.h",
 #                                  "alma_print.h"],
-                                 library_dirs=[cwd],
+                                 library_dirs=["/usr/local/lib"],
                                  libraries=["alma"])])
 
 if __name__ == "__main__":

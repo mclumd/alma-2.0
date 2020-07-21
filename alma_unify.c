@@ -3,6 +3,10 @@
 #include "alma_unify.h"
 #include "clause.h"
 
+#include "alma_print.h"
+#include "alma_kb.h"
+
+
 // Returns term variable is bound to if it's in the bindings, null otherwise
 alma_term* bindings_contain(binding_list *theta, alma_variable *var) {
   if (theta != NULL) {
