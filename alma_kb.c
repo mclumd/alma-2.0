@@ -225,6 +225,7 @@ void flatten_node(kb *collection, alma_node *node, tommy_array *clauses, int pri
     c->fif = NULL;
     //    printf("RIGHT BEFORE DIRTY BIT\n");
     c->dirty_bit = (char) 1;
+    c->pyobject_bit = (char) 1;
     make_clause(node, c);
     set_variable_ids(c, 1, NULL, collection);
 
@@ -637,7 +638,9 @@ clause* duplicate_check(kb *collection, clause *c) {
 void add_clause(kb *collection, clause *c) {
   // Add clause to overall clause list and index map
   index_mapping *ientry = malloc(sizeof(*ientry));
-  c->index = ientry->key = next_index++;
+  c->index = ientry->key = collection->next_index++;
+  c->dirty_bit = (char) 1;
+  c->pyobject_bit = (char) 1;
   ientry->value = c;
   c->learned = collection->time;
   tommy_list_insert_tail(&collection->clauses, &ientry->list_node, ientry);
@@ -781,12 +784,18 @@ void remove_clause(kb *collection, clause *c, kb_str *buf) {
   tommy_hashlin_remove_existing(&collection->index_map, &result->hash_node);
   free(result);
 
+  //  printf("ALMA: MID WAY THROUGH REMOVE CLAUSE: CHILDREN COUNT %d\n",c->children_count);
+  
   // Remove clause from the parents list of each of its children
   for (int i = 0; i < c->children_count; i++) {
     clause *child = c->children[i];
     if (child != NULL) {
       int new_count = child->parent_set_count;
-
+      //      printf("ALMA: CHILD POS LITS POINTER: %p\n",(void *)child->pos_lits);
+      //      for (int z = 0; z < child->pos_count; z++) {
+      //      	tee_alt("IN ALMA REMOVE_CLAUSE: CHILD POS LITS NAME AND POINTER: %s : %p\n",buf,child->pos_lits[z]->name,(void *)child);	
+      //      }
+      //      tee_alt("IN ALMA REMOVE_CLAUSE: PARENT SET COUNT %d\n",buf,child->parent_set_count);
       //  If a parent set has a clause matching, remove match
       for (int j = 0; j < child->parent_set_count; j++) {
 	//	tee_alt("IN ALMA REMOVE_CLAUSE: NUM PARENT CLAUSES %d\n",buf,child->parents[j].count);
@@ -964,6 +973,8 @@ clause* assert_formula(kb *collection, char *string, int print, kb_str *buf) {
   alma_node *formulas;
   int formula_count;
   if (formulas_from_source(string, 0, &formula_count, &formulas)) {
+    //    printf("HEREEEE; %s\n",string);
+    //    printf("BUF: %p\n",(void *)buf);
     tommy_array temp;
     tommy_array_init(&temp);
     nodes_to_clauses(collection, formulas, formula_count, &temp, print, buf);
@@ -988,13 +999,18 @@ int delete_formula(kb *collection, char *string, int print, kb_str *buf) {
       free_alma_tree(formulas+i);
     }
     free(formulas);
-
+    
+    //    tee_alt("ALMA IN DELETE FORMULA: clause size %d\n",buf,tommy_array_size(&clauses));
     // Process and remove each clause
     for (tommy_size_t i = 0; i < tommy_array_size(&clauses); i++) {
       clause *curr = tommy_array_get(&clauses, i);
       clause *c = duplicate_check(collection, curr);
+
+      //      tee_alt("ALMA IN DELETE FORMULA LOOP: CLAUSE POINTER %p\n",buf,(void *)c);
+
       if (c == NULL && curr->tag != FIF)
         c = distrusted_dupe_check(collection, curr);
+
       if (c != NULL) {
         if (print) {
           tee_alt("-a: ", collection, buf);
@@ -1096,6 +1112,7 @@ int update_formula(kb *collection, char *string, kb_str *buf) {
       t_dupe->neg_lits = update->neg_lits;
       update->neg_lits = lits_temp;
       t_dupe->dirty_bit = (char) 1;
+      t_dupe->pyobject_bit = (char) 1;
 
       // Generate new tasks with updated clause
       res_tasks_from_clause(collection, t_dupe, 1);

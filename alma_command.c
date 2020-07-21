@@ -288,6 +288,12 @@ void kb_step(kb *collection, int singleton, kb_str *buf) {
 }
 
 void kb_print(kb *collection, kb_str *buf) {
+  //  char temp_buf[1000];
+  //  tee_alt("in kb_print:\n",buf);
+
+  //  sprintf(temp_buf," %p:%p",(void *)buf,(void *)temp);
+  //  strcpy(&(buf->buffer[buf->size]),temp_buf);
+  //  buf->size += strlen(temp_buf);
   tommy_node *i = tommy_list_head(&collection->clauses);
   while (i) {
     index_mapping *data = i->data;

@@ -38,6 +38,7 @@ typedef struct clause {
   long index; // Index of clause, used as key in index_map of KB
   long learned; // Time asserted to KB
   char dirty_bit;
+  char pyobject_bit;
 } clause;
 */
 typedef struct parent_set {
