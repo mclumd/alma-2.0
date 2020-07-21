@@ -9,6 +9,8 @@
 #define PY3
 #endif
 
+#define BUF_LIMIT 1000000
+
 extern char python_mode;
 
 static PyObject * alma_init(PyObject *self, PyObject *args) {
@@ -67,7 +69,7 @@ static PyObject * alma_init(PyObject *self, PyObject *args) {
 #endif
     }
     }
-
+    
   assert(subj_list_len == PyList_Size(subject_priority_list));
   collection_priorities = malloc(sizeof(double)* subj_list_len);  
   for (idx = 0; idx < subj_list_len; idx++) {
@@ -83,7 +85,7 @@ static PyObject * alma_init(PyObject *self, PyObject *args) {
 
   kb_str buf;
   buf.size = 0;
-  buf.limit = 1000;
+  buf.limit = BUF_LIMIT;
   buf.buffer = malloc(buf.limit);
   buf.buffer[0] = '\0';
   buf.curr = buf.buffer;
@@ -98,7 +100,7 @@ static PyObject * alma_init(PyObject *self, PyObject *args) {
     rip.tracking_priorities = collection_priorities;
     rip.use_lists = 1;
   } else {
-    fprintf(stderr, "Cannotly track resolution priorites using files; disabled.\n");
+    fprintf(stderr, "Cannot track resolution priorites using files; disabling resolution tracking.\n");
     rip.use_lists = 0;
   }
   
@@ -112,7 +114,9 @@ static PyObject * alma_init(PyObject *self, PyObject *args) {
   free(buf.buffer);
   
   return Py_BuildValue("(l,s),",(long)alma_kb,ret_val);
-}
+  }
+
+
 
 static PyObject *alma_set_priorities(PyObject *self, PyObject *args) {
   PyObject *subject_name_list;
@@ -179,10 +183,10 @@ static PyObject * alma_step(PyObject *self, PyObject *args) {
   if (!PyArg_ParseTuple(args, "l", &alma_kb))
     return NULL;
 
-  fprintf(stderr, "(full) stepping\n");
+  //fprintf(stderr, "(full) stepping\n");
   kb_str buf;
   buf.size = 0;
-  buf.limit = 1000;
+  buf.limit = BUF_LIMIT;
   buf.buffer = malloc(buf.limit);
   buf.buffer[0] = '\0';
   buf.curr = buf.buffer;
@@ -191,9 +195,10 @@ static PyObject * alma_step(PyObject *self, PyObject *args) {
 
   ret_val = malloc( (buf.size + 1) * sizeof(char));
   strcpy(ret_val,buf.buffer);
-  //ret_val[buf.size] = '\0';
+  ret_val[buf.size] = '\0';
   free(buf.buffer);
-  
+
+  //fprintf("Stepping result:  %s\n", ret_val);
   return Py_BuildValue("s",ret_val);
 }
 
@@ -207,7 +212,7 @@ static PyObject * alma_atomic_step(PyObject *self, PyObject *args) {
   fprintf(stderr, "atomic step\n");
   kb_str buf;
   buf.size = 0;
-  buf.limit = 1000;
+  buf.limit = BUF_LIMIT;
   buf.buffer = malloc(buf.limit);
   buf.buffer[0] = '\0';
   buf.curr = buf.buffer;
@@ -233,7 +238,7 @@ static PyObject * alma_kbprint(PyObject *self, PyObject *args) {
   
   kb_str buf;
   buf.size = 0;
-  buf.limit = 10000;
+  buf.limit = BUF_LIMIT;
   buf.buffer = malloc(buf.limit);
   buf.buffer[0] = '\0';
   buf.curr = buf.buffer;
@@ -277,13 +282,13 @@ static PyObject * alma_add(PyObject *self, PyObject *args) {
     
   kb_str buf;
   buf.size = 0;
-  buf.limit = 1000;
+  buf.limit = BUF_LIMIT;
   buf.buffer = malloc(buf.limit);
   buf.buffer[0] = '\0';
   buf.curr = buf.buffer;
   
   len = strlen(input);
-  fprintf(stderr, "adding %s -- len==%d  ....   ", input, len);
+  //fprintf(stderr, "adding %s -- len==%d  ....   ", input, len);
   
 
   assertion = malloc(len+1);
@@ -291,14 +296,14 @@ static PyObject * alma_add(PyObject *self, PyObject *args) {
   strcpy(assertion, input);
   //assertion[len] = '\0';
   kb_assert((kb *)alma_kb, assertion, &buf);
-  //free(assertion);
+  free(assertion);
 
   ret_val = malloc(buf.size + 1);
   strcpy(ret_val,buf.buffer);
   ret_val[buf.size] = '\0';
   free(buf.buffer);
 
-  fprintf(stderr, "done.\n");
+  //fprintf(stderr, "done.\n");
   return Py_BuildValue("s",ret_val);
 }
 
@@ -315,7 +320,7 @@ static PyObject * alma_del(PyObject *self, PyObject *args) {
 
   kb_str buf;
   buf.size = 0;
-  buf.limit = 1000;
+  buf.limit = BUF_LIMIT;
   buf.buffer = malloc(buf.limit);
   buf.buffer[0] = '\0';
   buf.curr = buf.buffer;
@@ -350,7 +355,7 @@ static PyObject * alma_update(PyObject *self, PyObject *args) {
 
   kb_str buf;
   buf.size = 0;
-  buf.limit = 1000;
+  buf.limit = BUF_LIMIT;
   buf.buffer = malloc(buf.limit);
   buf.buffer[0] = '\0';
   buf.curr = buf.buffer;
@@ -385,7 +390,7 @@ static PyObject * alma_obs(PyObject *self, PyObject *args) {
 
   kb_str buf;
   buf.size = 0;
-  buf.limit = 1000;
+  buf.limit = BUF_LIMIT;
   buf.buffer = malloc(buf.limit);
   buf.buffer[0] = '\0';
   buf.curr = buf.buffer;
@@ -421,7 +426,7 @@ static PyObject * alma_bs(PyObject *self, PyObject *args) {
 
   kb_str buf;
   buf.size = 0;
-  buf.limit = 1000;
+  buf.limit = BUF_LIMIT;
   buf.buffer = malloc(buf.limit);
   buf.buffer[0] = '\0';
   buf.curr = buf.buffer;
