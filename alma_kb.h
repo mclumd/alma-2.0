@@ -23,7 +23,7 @@ typedef struct kb_str {
   char *curr;
 } kb_str;
 
-/*  TODO:  add dirty bit where clause is actually defined.
+/*  
 typedef struct clause {
   int pos_count;
   int neg_count;
@@ -80,7 +80,8 @@ typedef struct kb {
   double (*calc_priority)(struct kb*, res_task *);
 
   long time;
-  int size;
+  long size;
+  
   char *now; // String representation of now(time).
   char *prev; // String representation of now(time-1).
   char *wallnow;
@@ -117,7 +118,7 @@ typedef struct kb {
 
   tommy_hashlin distrusted; // Stores distrusted items by clause index
 
-  long size;
+
 
   FILE *almalog;
 
@@ -138,7 +139,6 @@ void process_single_res_task(kb *collection, res_task_heap *tasks, tommy_array *
 void make_single_task(kb *collection, clause *c, alma_function *c_lit, clause *other, res_task_heap *tasks, int use_bif, int pos);
 void make_res_tasks(kb *collection, clause *c, int count, alma_function **c_lits, tommy_hashlin *map, res_task_heap *tasks, int use_bif, int pos);
 void process_new_clauses(kb *collection, kb_str *buf);
-clause* assert_formula(kb *collection, char *string, int print);
 /*void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr, struct backsearch_task *bs, kb_str *buf);
 void make_single_task(kb *collection, clause *c, alma_function *c_lit, clause *other, tommy_array *tasks, int use_bif, int pos);
 void make_res_tasks(kb *collection, clause *c, int count, alma_function **c_lits, tommy_hashlin *map, tommy_array *tasks, int use_bif, int pos);

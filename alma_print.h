@@ -8,7 +8,7 @@
 void tee(char const *content, ...);
 //void alma_fol_print(alma_node *node);
 //void clause_print(clause *c);
-void res_task_print(res_task *t, kb_str *buf);
+void res_task_print(kb *collection, res_task *t, kb_str *buf);
 //void print_bindings(binding_list *theta);
 void enable_logs(void);
 void enable_python_mode(void);

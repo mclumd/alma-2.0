@@ -149,9 +149,8 @@ void kb_init(kb **collection, char *file, char *agent, int verbose, int differen
     assert_formula(collec, sentence, 0, buf);
     free(sentence);
   }
-<<<<<<<<< Temporary merge branch 1
   assert_formula(collec, "now(1).", 0, buf);
-=========
+
 
   collec->prev = now(collec->time);
   assert_formula(collec, collec->prev, 0, buf);
@@ -349,7 +348,7 @@ void kb_print_res_heap(kb *collection, kb_str *buf) {
       tp = *res_task_heap_item(res_tasks, j);
       tee_alt("%g\t\t", buf, tp.priority);
       t = tp.res_task;
-      res_task_print(t, buf);
+      res_task_print(collection, t, buf);
       tee_alt("\n", buf);
     }
   tee("End RH---------------------------------------\n");

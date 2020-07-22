@@ -16,10 +16,10 @@ typedef struct rl_init_params {
 } rl_init_params;
 
 /* TODO:  Resolve these. */
-void kb_init(kb **collection, char *file, char *agent, int verbose, int differential_priorities, int res_heap_size, rl_init_params rip, kb_str *buf);
+void kb_init(kb **collection, char *file, char *agent, int verbose, int differential_priorities, int res_heap_size, rl_init_params rip, kb_str *buf, int logon);
+
 void kb_step(kb *collection, int singleton, kb_str *buf);
-void kb_init(kb **collection, char *file, char *agent, int verbose, kb_str *buf, int logon);
-void kb_step(kb *collection, kb_str *buf);
+
 void kb_print(kb *collection, kb_str *buf);
 void kb_halt(kb *collection);
 void kb_assert(kb *collection, char *string, kb_str *buf);

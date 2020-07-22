@@ -75,12 +75,12 @@ compute_priority.o: compute_priority.c
 clean:
 	rm -f *.x *.o *.so build/lib.linux-x86_64-2.7/alma.so
 
-shared: alma.o tommyarray.o tommyhashlin.o tommyhash.o tommylist.o mpc.o alma_parser.o alma_formula.o alma_kb.o alma_unify.o alma_command.o alma_print.o alma_proc.o alma_fif.o alma_backsearch.o
-	$(CC) -shared -o libalma.so tommyarray.o tommyhashlin.o tommyhash.o tommylist.o mpc.o alma_parser.o alma_formula.o alma_kb.o alma_unify.o alma_command.o alma_print.o alma_proc.o alma_fif.o alma_backsearch.o alma.o
-	sudo cp libalma.so /usr/local/lib/libalma.so
+shared: alma.o tommyarray.o tommyhashlin.o tommyhash.o tommylist.o mpc.o alma_parser.o alma_formula.o alma_kb.o alma_unify.o alma_command.o alma_print.o alma_proc.o alma_fif.o alma_backsearch.o compute_priority.o res_task_heap.o alma_term_search.o
+	$(CC) -shared -o libalma.so tommyarray.o tommyhashlin.o tommyhash.o tommylist.o mpc.o alma_parser.o alma_formula.o alma_kb.o alma_unify.o alma_command.o alma_print.o alma_proc.o alma_fif.o alma_backsearch.o compute_priority.o res_task_heap.o alma_term_search.o alma.o
+	#sudo cp libalma.so /usr/local/lib/libalma.so
 
 python:
-	sudo python2 setup.py install
+	python setup.py install --user
 	echo "\n\nMake sure to add /usr/local/lib to your library linking path: e.g. adding \"export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib\" to ~/.bashrc file"
 run:
 	./alma.x demo/fc-test.pl

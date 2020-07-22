@@ -323,7 +323,7 @@ static PyObject * alma_init(PyObject *self, PyObject *args) {
 
 
   
-  kb_init(&alma_kb,file,agent,verbose, differential_priorities, res_heap_size, rip,  &buf);
+  kb_init(&alma_kb,file,agent,verbose, differential_priorities, res_heap_size, rip,  &buf, 0);
 
   ret_val = malloc(buf.size + 1);
   strcpy(ret_val,buf.buffer);

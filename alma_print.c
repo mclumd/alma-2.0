@@ -22,14 +22,14 @@ static void alma_function_print(alma_function *func, kb_str *buf );
 static void alma_quote_print(alma_quote *quote, kb_str *buf);
 */
 
-void res_task_print(res_task *t, kb_str *buf) {
-  clause_print(t->x, buf);
+void res_task_print(kb *collection, res_task *t, kb_str *buf) {
+  clause_print(collection, t->x, buf);
   tee_alt("\t", buf);
-  clause_print(t->y, buf);
+  clause_print(collection, t->y, buf);
   tee_alt("\t", buf);
-  alma_function_print(t->pos, buf);
+  alma_function_print(collection, t->pos, buf);
   tee_alt("\t", buf);
-  alma_function_print(t->neg, buf);
+  alma_function_print(collection, t->neg, buf);
 }
 
 
