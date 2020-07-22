@@ -78,7 +78,7 @@ static PyObject *alma_fol_to_pyobject(kb *collection, alma_node *node) {
         else if (node->fol->tag == BIF)
           op = "bif";
         else
-          op = "f";
+          op = "if";
         break;
     }
 
@@ -112,7 +112,10 @@ static PyObject *alma_fol_to_pyobject(kb *collection, alma_node *node) {
 static PyObject *lits_to_pyobject(kb *collection, alma_function **lits, int count, char *delimiter, int negate) {
   PyObject *retval, *temp1, *temp2;
 
-  retval = Py_BuildValue("[s]",delimiter);
+  if (count > 1)
+    retval = Py_BuildValue("[s]",delimiter);
+  else
+    retval = NULL;
   temp1 = Py_BuildValue("[]");
   for (int i = 0; i < count; i++) {
     //    if (negate)
@@ -124,7 +127,10 @@ static PyObject *lits_to_pyobject(kb *collection, alma_function **lits, int coun
     //  tee_alt(" %s ", collection, buf, delimiter);
     PyList_Append(temp1,temp2);
   }
-  PyList_Append(retval,temp1);
+  if (retval)
+    PyList_Append(retval,temp1);
+  else
+    retval = temp2;
   return retval;
 }
 
@@ -182,40 +188,10 @@ static PyObject * clause_to_pyobject(kb *collection, clause *c) {
       temp1 = lits_to_pyobject(collection, c->neg_lits, c->neg_count, "and", 0); //"/\\", 0);
       //tee_alt(" -%c-> ", collection, buf, c->tag == BIF ? 'b' : '-');
       temp2 = lits_to_pyobject(collection, c->pos_lits, c->pos_count, "or", 0); //"\\/", 0);
-      ret_val = Py_BuildValue("[s,O,O]",c->tag == BIF? "bif" : "f",temp1,temp2);
+      ret_val = Py_BuildValue("[s,O,O]",c->tag == BIF? "bif" : "if",temp1,temp2);
     }
   }
 
-  /*
-  if (c->parents != NULL || c->children != NULL) {
-    tee_alt(" (", collection, buf);
-    if (c->parents != NULL) {
-      tee_alt("parents: ", collection, buf);
-      for (int i = 0; i < c->parent_set_count; i++) {
-        tee_alt("[", collection, buf);
-        for (int j = 0; j < c->parents[i].count; j++) {
-          tee_alt("%ld", collection, buf, c->parents[i].clauses[j]->index);
-          if (j < c->parents[i].count-1)
-            tee_alt(", ", collection, buf);
-        }
-        tee_alt("]", collection, buf);
-        if (i < c->parent_set_count-1)
-          tee_alt(", ", collection, buf);
-      }
-      if (c->children != NULL)
-        tee_alt(", ", collection, buf);
-    }
-    if (c->children != NULL) {
-      tee_alt("children: ", collection, buf);
-      for (int i = 0; i < c->children_count; i++) {
-        tee_alt("%ld",collection, buf, c->children[i]->index);
-        if (i < c->children_count-1)
-          tee_alt(", ", collection, buf);
-      }
-    }
-    tee_alt(")", collection, buf);
-  }
-  */
   c->pyobject_bit = (char) 0;
 
   return ret_val;
