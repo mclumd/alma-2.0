@@ -100,12 +100,14 @@ void kb_init(kb **collection, char *file, char *agent, int verbose, int differen
         {
           collec->subject_list = rip.tracking_subjects;
           collec->num_subjects = rip.tracking_subjects->count;
+	  
         }
       else
         {
           parse_subjects_file (collec->subject_list, &(collec->num_subjects), rip.subjects_file);
         }
       init_resolution_choices (&(collec->resolution_choices), collec->num_subjects, rip.resolutions_horizon);
+
       if (rip.use_lists)
         {
           collec->subject_priorities = rip.tracking_priorities;
@@ -124,6 +126,13 @@ void kb_init(kb **collection, char *file, char *agent, int verbose, int differen
         }
     }
 
+  if (rip.use_res_pre_buffer) {
+    tommy_list_init(&(collec->pre_res_task_buffer));
+    collec->use_pre_rtb = 1;
+  } else {
+    collec->use_pre_rtb = 0;
+  }
+  
 
   // Given a file argument, obtain other initial clauses from
   if (file != NULL) {
@@ -246,7 +255,6 @@ static int idling_check(kb *collection, int new_clauses) {
 // Step through the KB.  If singleton==1, only process the highest priority resolution task.
 void kb_step(kb *collection, int singleton, kb_str *buf) {
   collection->time++;
-
   if (!singleton) {
     process_res_tasks(collection, &collection->res_tasks, &collection->new_clauses, NULL, buf);
   } else{
@@ -277,10 +285,9 @@ void kb_step(kb *collection, int singleton, kb_str *buf) {
     generate_backsearch_tasks(collection, i->data, buf);
     i = i->next;
   }
-
   collection->idling = idling_check(collection, newc);
   if (collection->idling)
-    tee_alt("-a: Idling...\n", buf);
+    tee_alt("-a: Idling...\n", collection, buf);
 
   tommy_array_done(&collection->new_clauses);
   tommy_array_init(&collection->new_clauses);
@@ -333,7 +340,6 @@ void kb_print(kb *collection, kb_str *buf) {
 
 
 void kb_print_res_heap(kb *collection, kb_str *buf) {
-
   res_task_heap *res_tasks = &collection->res_tasks;
   res_task_pri tp;
   res_task *t;
@@ -358,6 +364,20 @@ void kb_print_res_heap(kb *collection, kb_str *buf) {
     fflush(collection->almalog);
   }
 }
+
+void kb_print_pre_res_buf(kb *collection, kb_str *buf) {
+  res_task *t;
+  tommy_node *i = tommy_list_head(&collection->pre_res_task_buffer);
+  while (i) {
+    pre_res_task *data = i->data;
+    t = data->t;
+    res_task_print(collection, t, buf);
+    i = i->next;
+  }
+}
+
+
+
 void kb_halt(kb *collection) {
   // now and prev alias at this point, only free one
   free(collection->now);

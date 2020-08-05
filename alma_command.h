@@ -13,6 +13,10 @@ typedef struct rl_init_params {
   tommy_array *tracking_subjects;
   double *tracking_priorities;
   int use_lists;   // Use lists instead of files
+  int use_res_pre_buffer;   // Use a prebuffer for resolutions;
+			    // designed to allow a Python-defined
+			    // neural-network to determine priorites
+			    // for the resolution heap.  Implies use_lists.
 } rl_init_params;
 
 /* TODO:  Resolve these. */
@@ -28,4 +32,5 @@ void kb_update(kb *collection, char *string, kb_str *buf);
 void kb_observe(kb *collection, char *string, kb_str *buf);
 void kb_backsearch(kb *collection, char *string, kb_str *buf);
 int load_file(kb *collec, char *filename, kb_str *buf);
+void kb_print_pre_res_buf(kb *collection, kb_str *buf);
 #endif

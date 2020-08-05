@@ -55,5 +55,6 @@ add_library(alma SHARED
 		priority_function.cpp
 		compute_priority.c
 		alma_term_search.c
-		almamodule.c
 		)
+
+add_library(alma_module almamodule.c)

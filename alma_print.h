@@ -18,6 +18,6 @@ void tee_alt(char const *content, ...);
 void alma_fol_print(kb *collection, alma_node *node, kb_str *buf);
 void clause_print(kb *collection, clause *c, kb_str *buf);
 void print_bindings(kb *collection, binding_list *theta, kb_str *buf);
-
+void alma_function_print(kb *collection, alma_function *func, kb_str *buf);
 
 #endif

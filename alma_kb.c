@@ -11,6 +11,11 @@
 #include "alma_term_search.h"
 #include "res_task_heap.h"
 
+
+// Forward declaration, "private" function.
+static void pre_res_task_buffer_add(tommy_list *pre_res_task_buffer, res_task *t, res_task_heap *tasks);
+
+
 //static long next_index;
 
 
@@ -894,6 +899,8 @@ int is_distrusted(kb *collection, long index) {
 int obviously_wont_unify(res_task *t) {
   return 0;
 }
+
+
 void make_single_task(kb *collection, clause *c, alma_function *c_lit, clause *other, res_task_heap *tasks, int use_bif, int pos) {
   if (c != other && (other->tag != BIF || use_bif)) {
     alma_function *other_lit = literal_by_name(other, c_lit->name, pos);
@@ -911,7 +918,9 @@ void make_single_task(kb *collection, clause *c, alma_function *c_lit, clause *o
         t->y = c;
         t->neg = c_lit;
       }
-      if (!obviously_wont_unify(t)) {
+      if (collection->use_pre_rtb) {
+	pre_res_task_buffer_add(&(collection->pre_res_task_buffer), t, tasks);
+      } else if (!obviously_wont_unify(t)) {
 	res_task_pri *rtask = malloc(sizeof(*rtask));
 	rtask->res_task = t;
 	double pri;
@@ -925,6 +934,26 @@ void make_single_task(kb *collection, clause *c, alma_function *c_lit, clause *o
   }
 }
 
+
+// TODO:  Make this more general than just now()-tasks.
+static int res_task_now(res_task *t) {
+  if ( !strcmp(t->pos->name, "now")  || !strcmp(t->neg->name, "now")) return 1;
+  else return 0;
+}
+
+static void pre_res_task_buffer_add(tommy_list *pre_res_task_buffer, res_task *t, res_task_heap *tasks) {
+  struct pre_res_task *PT = malloc(sizeof(struct pre_res_task));
+  if ( res_task_now(t) ) {   // If this is a now() resolution, push it on with priority 0.
+    res_task_pri *rtask = malloc(sizeof(*rtask));
+    rtask->res_task = t;
+    rtask->priority = 0;
+    res_task_heap_push(tasks, rtask);
+  } else {
+    PT->t = t;
+    PT->priority = -1;
+    tommy_list_insert_tail(pre_res_task_buffer, &PT->node, PT);
+  }
+}
 // Helper of res_tasks_from_clause
 /* void make_res_tasks(kb *collection, clause *c, int count, alma_function **c_lits, tommy_hashlin *map, tommy_array *tasks, int use_bif, int pos) {
   for (int i = 0; i < count; i++) {
@@ -949,7 +978,6 @@ void make_res_tasks(kb *collection, clause *c, int count, alma_function **c_lits
     if (result != NULL)
       for (int j = 0; j < result->num_clauses; j++)
         make_single_task(collection, c, c_lits[i], result->clauses[j], tasks, use_bif, pos);
-
     free(name);
   }
 }
@@ -1792,4 +1820,18 @@ void process_new_clauses(kb *collection, kb_str *buf) {
 
   tommy_array_done(&collection->new_clauses);
   tommy_array_init(&collection->new_clauses);
+}
+
+/* Take all the resolution tasks from the pre_resolution buffer and push them onto the resolution task heap. */
+void pre_res_buffer_to_heap(kb *collection) {
+  tommy_node *i = tommy_list_head(&collection->pre_res_task_buffer);
+  while (i) {
+    pre_res_task *data = i->data;
+    res_task *t = data->t;
+    res_task_pri *rtask = malloc(sizeof(*rtask));
+    rtask->res_task = t;
+    rtask->priority = data->priority;
+    res_task_heap_push(&collection->res_tasks, rtask);   
+    i = i->next;
+  }
 }

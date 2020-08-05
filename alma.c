@@ -76,6 +76,10 @@ int main(int argc, char **argv) {
   rip.resolutions_file = NULL;
   rip.rl_priority_file = NULL;
 
+  // TODO:  switch these back; just for debugging
+  rip.use_lists = 1;
+  rip.use_res_pre_buffer = 1;
+
 
   int c;
   while ((c = getopt (argc, argv, "PH:rxvf:a:hR:M:T:S:")) != -1)
@@ -171,15 +175,13 @@ int main(int argc, char **argv) {
       kb_print(alma_kb, NULL);
     }
     kb_halt(alma_kb);
-  }
-  else {
+  } else {
     char line[LINELEN];
-
+    
     int counter = 0;
 
     while (1) {
       tee_alt("alma: ",alma_kb,NULL,counter);
-      //      tee_alt("about to fgets...\n",NULL);
       fflush(stdout);
 
       if (fgets(line, LINELEN, stdin) == NULL) {
@@ -192,88 +194,78 @@ int main(int argc, char **argv) {
 	kb_halt(alma_kb);
 	break;
       } else {
-	if (fgets(line, LINELEN, stdin) != NULL) {
-	  int len = strlen(line);
-	  line[len-1] = '\0';
-	  tee_alt("Command '%s' received at %d.\n", NULL, line, counter);
-	  //	tee_alt(line);
-
-	  char *pos;
-	  if (strcmp(line, "step") == 0) {
-	    tee_alt("ALMA %d step:\n",NULL, counter);
-	    kb_step(alma_kb, 0, NULL);
+	int len = strlen(line);
+	line[len-1] = '\0';
+	tee_alt("Command '%s' received at %d.\n", alma_kb, NULL, line, counter);
+	
+	char *pos;
+	if (strcmp(line, "step") == 0) {
+	  tee_alt("ALMA %d step:\n",alma_kb, NULL, counter);
+	  kb_step(alma_kb, 0, NULL);
+	} else if (strcmp(line, "astep") == 0) {
+	  tee_alt("ALMA %d step:\n",alma_kb, NULL, counter);
+	  kb_step(alma_kb, 1, NULL);
+	} else if (strcmp(line, "print") == 0) {
+	  kb_print(alma_kb, NULL);
+	  fflush(stdout);
+	} else  if (strcmp(line, "prb_print") == 0) {
+	  kb_print_pre_res_buf(alma_kb, NULL);
+	} else if (strcmp(line, "halt") == 0) {
+	  tee("\nTracking resolutions is %d.  Line 190.\n", rip.tracking_resolutions); fflush(stdout);
+	  if (rip.tracking_resolutions == 1) {
+	    tee("\nWriting resolution matrix ... "); fflush(stdout);
+	    tee("\nWriting resolution matrix (%d subjects, horizon==%d) ... ", alma_kb->num_subjects, rip.resolutions_horizon); fflush(stdout);
+	    write_resolution_matrix(alma_kb, alma_kb->num_subjects, rip.resolutions_horizon, rip.resolutions_file);
+	    tee("\ndone!\n"); fflush(stdout);
 	  }
-	  else if (strcmp(line, "astep") == 0) {
-	    tee_alt("ALMA %d step:\n",NULL, counter);
-	    kb_step(alma_kb, 1, NULL);
-	  } else if (strcmp(line, "print") == 0) {
-	    kb_print(alma_kb, NULL);
-	    fflush(stdout);
-	  }
-	  else if (strcmp(line, "halt") == 0) {
-	    tee("\nTracking resolutions is %d.  Line 190.\n", rip.tracking_resolutions); fflush(stdout);
-	    if (rip.tracking_resolutions == 1) {
-	      tee("\nWriting resolution matrix ... "); fflush(stdout);
-	      tee("\nWriting resolution matrix (%d subjects, horizon==%d) ... ", alma_kb->num_subjects, rip.resolutions_horizon); fflush(stdout);
-	      write_resolution_matrix(alma_kb, alma_kb->num_subjects, rip.resolutions_horizon, rip.resolutions_file);
-	      tee("\ndone!\n"); fflush(stdout);
-	    }
-	    kb_halt(alma_kb);
-	    break;
-	  }
-	  else if ((pos = strstr(line, "add ")) != NULL && pos == line) {
-	    tee_alt("ALMA %d add:\n",NULL,counter);
-	    char *assertion = malloc(len - 4);
-	    strncpy(assertion, line+4, len-4);
-	    kb_assert(alma_kb, assertion, NULL);
-	    free(assertion);
-	  }
-	  else if  ((pos = strstr(line, "load ")) != NULL && pos == line) {
-	    char *filename = malloc(len - 5);
-	    strncpy(filename, line+5, len-5);
-	    if (!load_file(alma_kb, filename, NULL))
-	      tee_alt("Error loading %s.\n", NULL, filename);
-	    free(filename);
-
-	  }
-	  else if ((pos = strstr(line, "del ")) != NULL && pos == line) {
-	    tee_alt("ALMA %d del:\n",NULL,counter);
-	    char *assertion = malloc(len - 4);
-	    strncpy(assertion, line+4, len-4);
-	    kb_remove(alma_kb, assertion, NULL);
-	    free(assertion);
-	  }
-	  else if ((pos = strstr(line, "update ")) != NULL && pos == line) {
-	    tee_alt("ALMA %d update:\n",NULL,counter);
-	    char *assertion = malloc(len - 7);
-	    strncpy(assertion, line+7, len-7);
-	    kb_update(alma_kb, assertion, NULL);
-	    free(assertion);
-	  }
-	  else if ((pos = strstr(line, "obs ")) != NULL && pos == line) {
-	    tee_alt("ALMA %d obs:\n",NULL,counter);
+	  kb_halt(alma_kb);
+	  break;
+	} else if ((pos = strstr(line, "add ")) != NULL && pos == line) {
+	  tee_alt("ALMA %d add:\n",alma_kb, NULL,counter);
+	  char *assertion = malloc(len - 4);
+	  strncpy(assertion, line+4, len-4);
+	  kb_assert(alma_kb, assertion, NULL);
+	  free(assertion);
+	} else if  ((pos = strstr(line, "load ")) != NULL && pos == line) {
+	  char *filename = malloc(len - 5);
+	  strncpy(filename, line+5, len-5);
+	  if (!load_file(alma_kb, filename, NULL))
+	    tee_alt("Error loading %s.\n", alma_kb, NULL, filename);
+	  free(filename);
+	} else if ((pos = strstr(line, "del ")) != NULL && pos == line) {
+	  tee_alt("ALMA %d del:\n",alma_kb, NULL,counter);
+	  char *assertion = malloc(len - 4);
+	  strncpy(assertion, line+4, len-4);
+	  kb_remove(alma_kb, assertion, NULL);
+	  free(assertion);
+	} else if ((pos = strstr(line, "update ")) != NULL && pos == line) {
+	  tee_alt("ALMA %d update:\n",alma_kb, NULL,counter);
+	  char *assertion = malloc(len - 7);
+	  strncpy(assertion, line+7, len-7);
+	  kb_update(alma_kb, assertion, NULL);
+	  free(assertion);
+	} else if ((pos = strstr(line, "obs ")) != NULL && pos == line) {
+	    tee_alt("ALMA %d obs:\n",alma_kb, NULL,counter);
 	    char *assertion = malloc(len - 4);
 	    strncpy(assertion, line+4, len-4);
 	    kb_observe(alma_kb, assertion, NULL);
 	    free(assertion);
-	  }
-	  else if ((pos = strstr(line, "bs ")) != NULL && pos == line) {
-	    tee_alt("ALMA %d bs:\n",NULL,counter);
-	    char *assertion = malloc(len - 3);
-	    strncpy(assertion, line+3, len-3);
-	    kb_backsearch(alma_kb, assertion, NULL);
-	    free(assertion);
-	  }
-	  else {
-	    tee_alt("-a: Command '%s' not recognized\n", NULL, line);
-	  }
+	} else if ((pos = strstr(line, "bs ")) != NULL && pos == line) {
+	  tee_alt("ALMA %d bs:\n",alma_kb, NULL,counter);
+	  char *assertion = malloc(len - 3);
+	  strncpy(assertion, line+3, len-3);
+	  kb_backsearch(alma_kb, assertion, NULL);
+	  free(assertion);
 	} else {
-	  tee_alt("ALMA no more input\n", NULL);
-	  fflush(stdout);
+	  tee_alt("-a: Command '%s' not recognized\n", alma_kb, NULL, line);
 	}
-	counter++;
       }
+      tee_alt("ALMA no more input\n", alma_kb, NULL);
+      fflush(stdout);
     }
-    return 0;
+    counter++;
   }
+  return 0;
 }
+
+

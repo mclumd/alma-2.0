@@ -72,6 +72,11 @@ typedef struct distrust_mapping {
   tommy_node node;
 } distrust_mapping;
 
+typedef struct pre_res_task {
+    double priority;
+    res_task *t;
+    tommy_node node;
+} pre_res_task;
 
 
 typedef struct kb {
@@ -110,6 +115,8 @@ typedef struct kb {
   //tommy_array res_tasks; // Stores tasks for resolution (non-tagged clauses) in next step
   res_task_heap res_tasks;
   int res_heap_size;
+  tommy_list pre_res_task_buffer;
+  int use_pre_rtb;
 
   // If grow to have many fifs, having pos and neg versions may help
   tommy_hashlin fif_tasks; // Stores tasks for fif rules
@@ -126,6 +133,8 @@ typedef struct kb {
 
   long next_index;
 } kb;
+
+
 
 void make_clause(alma_node *node, clause *c);
 int clauses_differ(clause *x, clause *y);
@@ -169,4 +178,5 @@ int im_compare(const void *arg, const void *obj);
 int pm_compare(const void *arg, const void *obj);
 char* name_with_arity(char *name, int arity);
 void init_resolution_choices(int ***resolution_choices, int num_subjects, int num_timesteps);
+void pre_res_buffer_to_heap(kb *collection);
 #endif

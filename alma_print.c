@@ -7,11 +7,10 @@
 char logs_on;
 char python_mode;
 
-static void alma_function_print(kb *collection, alma_function *func, kb_str *buf);
 static void alma_quote_print(kb *collection, alma_quote *quote, kb_str *buf);
 
 
-static void alma_function_print(kb *collection, alma_function *func, kb_str *buf);
+
 
 void enable_logs() {
   logs_on = 1;
@@ -24,7 +23,7 @@ static void alma_quote_print(alma_quote *quote, kb_str *buf);
 
 void res_task_print(kb *collection, res_task *t, kb_str *buf) {
   clause_print(collection, t->x, buf);
-  tee_alt("\t", buf);
+  tee_alt("\t", collection, buf);
   clause_print(collection, t->y, buf);
   tee_alt("\t", buf);
   alma_function_print(collection, t->pos, buf);
@@ -51,7 +50,7 @@ static void alma_term_print(kb *collection, alma_term *term, kb_str *buf) {
     alma_quote_print(collection, term->quote, buf);
 }
 
-static void alma_function_print(kb *collection, alma_function *func, kb_str *buf) {
+void alma_function_print(kb *collection, alma_function *func, kb_str *buf) {
   tee_alt("%s", collection, buf, func->name);
   if (func->term_count > 0) {
     tee_alt("(", collection, buf);
