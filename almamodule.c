@@ -31,12 +31,11 @@ static PyObject *alma_term_to_pyobject(kb *collection, alma_term *term) {
 
 static PyObject *alma_function_to_pyobject(kb *collection, alma_function *func) {
   PyObject *ret_val, *temp;
-  int i;
   //  tee_alt("%s", collection, buf, func->name);
   temp = Py_BuildValue("[]");
   if (func->term_count > 0) {
     //tee_alt("(", collection, buf);
-    for (i = 0; i < func->term_count; i++) {
+    for (int i = 0; i < func->term_count; i++) {
       //      if (i > 0)
       //        tee_alt(", ", collection, buf);
       PyList_Append(temp,alma_term_to_pyobject(collection, func->terms + i));
