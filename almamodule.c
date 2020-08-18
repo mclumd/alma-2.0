@@ -73,6 +73,7 @@ static PyObject *alma_fol_to_pyobject(kb *collection, alma_node *node) {
       case AND:
         op = "and"; break;
       case IF:
+      default:
         if (node->fol->tag == FIF)
           op = "fif";
         else if (node->fol->tag == BIF)
@@ -110,7 +111,7 @@ static PyObject *alma_fol_to_pyobject(kb *collection, alma_node *node) {
 }
 
 static PyObject *lits_to_pyobject(kb *collection, alma_function **lits, int count, char *delimiter, int negate) {
-  PyObject *retval, *temp1, *temp2;
+  PyObject *retval, *temp1, *temp2 = NULL;
   int i;
   
   if (count > 1)
