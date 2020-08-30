@@ -72,7 +72,7 @@ static clause* backsearch_duplicate_check(kb *collection, backsearch_task *task,
 }
 
 // Given particular task, populate to_resolve based on each clause
-void generate_backsearch_tasks(kb *collection, backsearch_task *bt) {
+void generate_backsearch_tasks(kb *collection, backsearch_task *bt, kb_str *buf) {
   for (int i = 0; i < tommy_array_size(&bt->new_clauses); i++) {
     clause *c = tommy_array_get(&bt->new_clauses, i);
     clause *dupe = duplicate_check(collection, c);
@@ -110,7 +110,7 @@ void generate_backsearch_tasks(kb *collection, backsearch_task *bt) {
     }
     else {
       if (bs_dupe)
-        transfer_parent(collection, dupe, c, 0);
+        transfer_parent(collection, dupe, c, 0, buf);
       cleanup_bindings(tommy_array_get(&bt->new_clause_bindings, i));
       free_clause(c);
     }
@@ -122,11 +122,11 @@ void generate_backsearch_tasks(kb *collection, backsearch_task *bt) {
 }
 
 // Advances by resolving available tasks
-void process_backsearch_tasks(kb *collection) {
+void process_backsearch_tasks(kb *collection, kb_str *buf) {
   tommy_node *curr = tommy_list_head(&collection->backsearch_tasks);
   while (curr) {
     backsearch_task *t = curr->data;
-    process_res_tasks(collection, &t->to_resolve, &t->new_clauses, t);
+    process_res_tasks(collection, &t->to_resolve, &t->new_clauses, t, buf);
     curr = curr->next;
   }
 }

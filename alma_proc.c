@@ -361,7 +361,7 @@ static int idx_to_form(alma_term *index_term, alma_term *result, binding_list *b
     clause *formula = map_res->value;
     clause *quote_form = malloc(sizeof(*quote_form));
     copy_clause_structure(formula, quote_form);
-    set_variable_ids(quote_form, 1, NULL);
+    set_variable_ids(quote_form, 1, NULL, alma);
 
     alma_term *quoted = malloc(sizeof(*quoted));
     quoted->type = QUOTE;
