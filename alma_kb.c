@@ -251,7 +251,7 @@ void free_clause(clause *c) {
 }
 
 // Space for copy must be allocated before call
-// Does not copy parents/children/index/learned
+// Does not copy parents/children/index/acquired
 void copy_clause_structure(clause *original, clause *copy) {
   copy->pos_count = original->pos_count;
   copy->neg_count = original->neg_count;
@@ -629,7 +629,7 @@ void add_clause(kb *collection, clause *c) {
   c->dirty_bit = (char) 1;
   c->pyobject_bit = (char) 1;
   ientry->value = c;
-  c->learned = collection->time;
+  c->acquired = collection->time;
   tommy_list_insert_tail(&collection->clauses, &ientry->list_node, ientry);
   tommy_hashlin_insert(&collection->index_map, &ientry->hash_node, ientry, tommy_hash_u64(0, &ientry->key, sizeof(ientry->key)));
 

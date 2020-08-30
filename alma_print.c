@@ -172,7 +172,7 @@ void clause_print(kb *collection, clause *c, kb_str *buf) {
     tee_alt(")", collection, buf);
   }
   c->dirty_bit = (char) 0;
-  //tee_alt(" (L%ld)", c->learned);
+  //tee_alt(" (L%ld)", c->acquired);
 }
 
 void print_bindings(kb *collection, binding_list *theta, kb_str *buf) {
