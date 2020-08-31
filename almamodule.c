@@ -309,6 +309,7 @@ static PyObject *prb_to_resolutions(PyObject *self, PyObject *args) {
   long alma_kb;
   kb *collection;
 
+  fprintf(stderr, "In prb_to_resolutions\n");
   if (!PyArg_ParseTuple(args, "l", &alma_kb )) {
     return NULL;
   }
@@ -329,6 +330,7 @@ static PyObject * alma_to_pyobject(PyObject *self, PyObject *args) {
   long alma_kb;
   kb *collection;
 
+  fprintf(stderr, "In alma_to_pyobject\n");
   if (!PyArg_ParseTuple(args, "l", &alma_kb))
     return NULL;
 
@@ -352,7 +354,8 @@ static PyObject * alma_to_pyobject(PyObject *self, PyObject *args) {
 static PyObject * alma_step(PyObject *self, PyObject *args) {
   long alma_kb;
   char *ret_val;
-  
+
+  fprintf(stderr, "In alma_step\n");
   if (!PyArg_ParseTuple(args, "l", &alma_kb))
     return NULL;
 
@@ -379,10 +382,11 @@ static PyObject * alma_atomic_step(PyObject *self, PyObject *args) {
   long alma_kb;
   char *ret_val;
 
+  fprintf(stderr, "In alma_atomic_step\n");
   if (!PyArg_ParseTuple(args, "l", &alma_kb))
     return NULL;
 
-  fprintf(stderr, "atomic step\n");
+  //fprintf(stderr, "atomic step\n");
   kb_str buf;
   buf.size = 0;
   buf.limit = BUF_LIMIT;
@@ -462,6 +466,7 @@ static PyObject * alma_kbprint(PyObject *self, PyObject *args) {
   char *ret_val;
   long alma_kb;
   
+  fprintf(stderr, "In alma_kbprint\n");  
   if (!PyArg_ParseTuple(args, "l", &alma_kb))
     return NULL;
 
@@ -502,6 +507,7 @@ static PyObject * alma_add(PyObject *self, PyObject *args) {
   int len;
   long alma_kb;
 
+    fprintf(stderr, "In alma_add\n");  
   if (!PyArg_ParseTuple(args, "ls", &alma_kb, &input))
     return NULL;
 
@@ -539,7 +545,7 @@ static PyObject * alma_del(PyObject *self, PyObject *args) {
   char *assertion;
   int len;
   long alma_kb;
-  
+
   if (!PyArg_ParseTuple(args, "ls", &alma_kb, &input))
     return NULL;
 
@@ -683,6 +689,7 @@ static PyMethodDef AlmaMethods[] = {
   {"astep", alma_atomic_step, METH_VARARGS,"Step an alma kb, atomically."},
   {"prebuf", alma_get_pre_res_task_buffer, METH_VARARGS,"Retrieve pre-resolution task list."},
   {"set_priors_prb", set_prb_priorities, METH_VARARGS,"Set pre-resolution task list priorities."},
+  {"prb_to_res_task", prb_to_resolutions, METH_VARARGS,"Flush pre-resolution task list to resolution task heap."},
   {"kbprint", alma_kbprint, METH_VARARGS,"Print out entire alma kb."},
   {"halt", alma_halt, METH_VARARGS,"Stop an alma kb."},
   {"add", alma_add, METH_VARARGS,"Add a clause or formula to an alma kb."},

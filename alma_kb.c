@@ -12,8 +12,9 @@
 #include "res_task_heap.h"
 
 
-// Forward declaration, "private" function.
+// Forward declarations for "private" function.
 static void pre_res_task_buffer_add(tommy_list *pre_res_task_buffer, res_task *t, res_task_heap *tasks);
+static void process_one_res_task(kb *collection, res_task_heap *tasks, tommy_array *new_arr, backsearch_task *bs, res_task_pri c, kb_str *buf);
 
 
 //static long next_index;
@@ -1015,6 +1016,7 @@ clause* assert_formula(kb *collection, char *string, int print, kb_str *buf) {
   return NULL;
 }
 
+
 int delete_formula(kb *collection, char *string, int print, kb_str *buf) {
   alma_node *formulas;
   int formula_count;
@@ -1024,16 +1026,19 @@ int delete_formula(kb *collection, char *string, int print, kb_str *buf) {
     tommy_array_init(&clauses);
     for (int i = 0; i < formula_count; i++) {
       flatten_node(collection, formulas+i, &clauses, 0, buf);
-      free_alma_tree(formulas+i);
+      free_alma_tree(formulas+i);   
     }
-    free(formulas);
+    free(formulas);    
     
     //    tee_alt("ALMA IN DELETE FORMULA: clause size %d\n",buf,tommy_array_size(&clauses));
+
     // Process and remove each clause
     for (tommy_size_t i = 0; i < tommy_array_size(&clauses); i++) {
       clause *curr = tommy_array_get(&clauses, i);
       clause *c = duplicate_check(collection, curr);
 
+
+      
       //      tee_alt("ALMA IN DELETE FORMULA LOOP: CLAUSE POINTER %p\n",buf,(void *)c);
 
       if (c == NULL && curr->tag != FIF)
@@ -1045,6 +1050,26 @@ int delete_formula(kb *collection, char *string, int print, kb_str *buf) {
           clause_print(collection, c, buf);
           tee_alt(" removed\n", collection, buf);
         }
+
+	// If the clause is in the pre_res_buf, resolve it immediately.
+	tommy_node *curr_pt;
+	struct pre_res_task *PT;
+	curr_pt = tommy_list_head(&(collection->pre_res_task_buffer));
+	while(curr_pt) {
+	  PT = (struct pre_res_task *) curr_pt->data;
+	  if ( (PT != NULL) && ((PT->t->x == c) || (PT->t->y == c)) ) {
+	    // Resolve PT
+	    res_task_pri rt;
+	    rt.priority = -1;
+	    rt.res_task = PT->t;
+	    process_one_res_task(collection, &collection->res_tasks, &collection->new_clauses, NULL, rt, buf);
+	    process_new_clauses(collection, buf);
+
+	    tommy_list_remove_existing(&(collection->pre_res_task_buffer), &PT->node);
+	  }
+	  curr_pt = curr_pt->next;
+      }
+	
         remove_clause(collection, c, buf);
       }
       else if (print) {
@@ -1791,7 +1816,7 @@ void process_new_clauses(kb *collection, kb_str *buf) {
 
       add_clause(collection, c);
 
-      if (c->parents != NULL) {
+      if (c->parents != NULL && 0) {    // TODO:  Re-enable (remove &&0)
         int distrust = 0;
         // Update child info for parents of new clause, check for distrusted parents
         for (int j = 0; j < c->parents[0].count; j++) {
