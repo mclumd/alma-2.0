@@ -3,6 +3,8 @@ import os
 
 cwd = os.getcwd()
 
+compile_args = ['-std=c11', '-pedantic-errors', '-Wall', '-Werror', '-Wshadow', '-Wpedantic', '-g', '-fPIC']
+
 def main():
     setup(name="alma",
           version="2.0.0",
@@ -13,6 +15,7 @@ def main():
 #                                 include_dirs = ["alma_command.h",
 #                                  "alma_kb.h",
 #                                  "alma_print.h"],
+                                 extra_compile_args=compile_args,
                                  library_dirs=["/usr/local/lib"],
                                  libraries=["alma"])])
 

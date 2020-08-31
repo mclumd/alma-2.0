@@ -468,7 +468,7 @@ void kb_observe(kb *collection, char *string, kb_str *buf) {
         alma_term time_term;
         time_term.type = FUNCTION;
         time_term.function = malloc(sizeof(*time_term.function));
-        time_term.function->name = long_to_str(collection->time);
+        time_term.function->name = long_to_str(collection->time+1);
         time_term.function->term_count = 0;
         time_term.function->terms = NULL;
         lit->terms[lit->term_count-1] = time_term;

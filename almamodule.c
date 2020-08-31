@@ -82,6 +82,7 @@ static PyObject *alma_fol_to_pyobject(kb *collection, alma_node *node) {
       case AND:
         op = "and"; break;
       case IF:
+      default:
         if (node->fol->tag == FIF)
           op = "fif";
         else if (node->fol->tag == BIF)
@@ -119,14 +120,15 @@ static PyObject *alma_fol_to_pyobject(kb *collection, alma_node *node) {
 }
 
 static PyObject *lits_to_pyobject(kb *collection, alma_function **lits, int count, char *delimiter, int negate) {
-  PyObject *retval, *temp1, *temp2;
-
+  PyObject *retval, *temp1, *temp2 = NULL;
+  int i;
+  
   if (count > 1)
     retval = Py_BuildValue("[s]",delimiter);
   else
     retval = NULL;
   temp1 = Py_BuildValue("[]");
-  for (int i = 0; i < count; i++) {
+  for (i = 0; i < count; i++) {
     //    if (negate)
     //  tee_alt("~", collection, buf);
     temp2 = alma_function_to_pyobject(collection, lits[i]);
@@ -147,10 +149,12 @@ static PyObject * clause_to_pyobject(kb *collection, clause *c) {
   // Print fif in original format
   PyObject *ret_val = NULL;
   PyObject *temp1, *temp2;
+  int i;
+  
   if (c->tag == FIF) {
     ret_val = Py_BuildValue("[s]","fif");
     temp1 = Py_BuildValue("[]");
-    for (int i = 0; i < c->fif->premise_count; i++) {
+    for (i = 0; i < c->fif->premise_count; i++) {
       alma_function *f = fif_access(c, i);
       if (c->fif->ordering[i] < 0) {
         temp2 = alma_function_to_pyobject(collection, f);
@@ -326,7 +330,7 @@ static PyObject * alma_mode(PyObject *self, PyObject *args) {
 }
 
 static PyObject * alma_to_pyobject(PyObject *self, PyObject *args) {
-  PyObject *dict1, *dict2, *lst;
+  PyObject *lst;
   long alma_kb;
   kb *collection;
 

@@ -5,7 +5,7 @@
 
 #define run_pos_int 0
 #define run_neg_int 1
-#define run_learned 2
+#define run_acquired 2
 
 // Returns a boolean value for if proc matches the procedure schema (binary function proc, first arg function)
 int proc_valid(alma_function *proc) {
@@ -88,16 +88,16 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *collection
             swap_bindings(bindings, copy);
           cleanup_bindings(copy);
 
-          if (kind == run_learned) {
-            // If they unify, create term out of learned answer
+          if (kind == run_acquired) {
+            // If they unify, create term out of acquired answer
             alma_term *time_term = malloc(sizeof(*time_term));
             time_term->type = FUNCTION;
             time_term->function = malloc(sizeof(*time_term->function));
-            time_term->function->name = long_to_str(result->clauses[i]->learned);
+            time_term->function->name = long_to_str(result->clauses[i]->acquired);
             time_term->function->term_count = 0;
             time_term->function->terms = NULL;
 
-            // Insert answer of learned query into binding set
+            // Insert answer of acquired query into binding set
             bindings->num_bindings++;
             bindings->list = realloc(bindings->list, sizeof(*bindings->list) * bindings->num_bindings);
             bindings->list[bindings->num_bindings-1].var = malloc(sizeof(alma_variable));
@@ -388,10 +388,10 @@ int proc_run(alma_function *proc, binding_list *bindings, kb *alma) {
     if (func->term_count == 1)
       return introspect(func, bindings, alma, run_pos_int);
   }
-  else if (strcmp(func->name, "learned") == 0) {
-    // Must match (given bindings) the schema learned(literal(...), Var) OR learned(not(literal(...)), Var) and Var unbound
+  else if (strcmp(func->name, "acquired") == 0) {
+    // Must match (given bindings) the schema acquired(literal(...), Var) OR acquired(not(literal(...)), Var) and Var unbound
     if (func->term_count == 2 && func->terms[1].type == VARIABLE && !bindings_contain(bindings, func->terms[1].variable))
-      return introspect(func, bindings, alma, run_learned);
+      return introspect(func, bindings, alma, run_acquired);
   }
   else if (strcmp(func->name, "ancestor") == 0) {
     if (func->term_count == 2)
