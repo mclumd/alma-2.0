@@ -20,7 +20,7 @@ void kb_init(kb **collection, char *file, char *agent, int verbose, kb_str *buf,
   collec->verbose = verbose;
 
   collec->size = 0;
-  collec->time = 1;
+  collec->time = 0;
   collec->prev = collec->now = NULL;
   collec->wallnow = collec->wallprev = NULL;
   collec->idling = 0;
