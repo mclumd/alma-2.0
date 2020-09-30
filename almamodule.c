@@ -145,7 +145,7 @@ static PyObject *lits_to_pyobject(kb *collection, alma_function **lits, int coun
   return retval;
 }
 
-static PyObject * clause_to_pyobject(kb *collection, clause *c) {
+static PyObject *clause_to_pyobject(kb *collection, clause *c) {
   // Print fif in original format
   PyObject *ret_val = NULL;
   PyObject *temp1, *temp2;
@@ -222,8 +222,8 @@ static PyObject *alma_set_priorities(PyObject *self, PyObject *args) {
   int idx;
   long alma_kb;
   kb *collection;
-  tommy_array *collection_subjects;
-  double *collection_priorities;
+  //tommy_array *collection_subjects;
+  //double *collection_priorities;
   char *subj_copy;
   int subj_len;
 
@@ -232,8 +232,8 @@ static PyObject *alma_set_priorities(PyObject *self, PyObject *args) {
   }
 
   collection = (kb *) alma_kb;
-  collection_subjects = collection->subject_list;
-  collection_priorities = collection->subject_priorities;
+  //collection_subjects = collection->subject_list;
+  //collection_priorities = collection->subject_priorities;
 
   list_len = PyList_Size(subject_name_list);
   tommy_array_init(collection->subject_list);
@@ -257,7 +257,7 @@ static PyObject *alma_set_priorities(PyObject *self, PyObject *args) {
     if (!PyFloat_Check(list_item)) {
       PyErr_SetString(PyExc_TypeError, "list items must be doubles.");
     } else {
-      fprintf(stderr, "Got priority %f\n", PyFloat_AsDouble(list_item));
+      //fprintf(stderr, "Got priority %f\n", PyFloat_AsDouble(list_item));
       collection->subject_priorities[idx] =  PyFloat_AsDouble(list_item);
       }
   }
@@ -277,8 +277,8 @@ static PyObject *set_prb_priorities(PyObject *self, PyObject *args) {
   kb *collection;
   tommy_list *collection_prb;
   PyObject *priority_list;
-  char *subj_copy;
-  int subj_len;
+  //char *subj_copy;
+  //int subj_len;
   double priority;
   tommy_node *prb_elmnt;
   
@@ -299,7 +299,7 @@ static PyObject *set_prb_priorities(PyObject *self, PyObject *args) {
     if (!PyFloat_Check(list_item)) {
       PyErr_SetString(PyExc_TypeError, "list items must be double.");
     } else {
-      fprintf(stderr, "Got priority %f\n", PyFloat_AsDouble(list_item));
+      //fprintf(stderr, "Got priority %f\n", PyFloat_AsDouble(list_item));
       priority = PyFloat_AsDouble(list_item);
       pre_res_task *data = prb_elmnt->data;
       data->priority = priority;
@@ -313,7 +313,7 @@ static PyObject *prb_to_resolutions(PyObject *self, PyObject *args) {
   long alma_kb;
   kb *collection;
 
-  fprintf(stderr, "In prb_to_resolutions\n");
+  //fprintf(stderr, "In prb_to_resolutions\n");
   if (!PyArg_ParseTuple(args, "l", &alma_kb )) {
     return NULL;
   }
@@ -334,7 +334,7 @@ static PyObject * alma_to_pyobject(PyObject *self, PyObject *args) {
   long alma_kb;
   kb *collection;
 
-  fprintf(stderr, "In alma_to_pyobject\n");
+  //fprintf(stderr, "In alma_to_pyobject\n");
   if (!PyArg_ParseTuple(args, "l", &alma_kb))
     return NULL;
 
@@ -359,7 +359,7 @@ static PyObject * alma_step(PyObject *self, PyObject *args) {
   long alma_kb;
   char *ret_val;
 
-  fprintf(stderr, "In alma_step\n");
+  //fprintf(stderr, "In alma_step\n");
   if (!PyArg_ParseTuple(args, "l", &alma_kb))
     return NULL;
 
@@ -386,7 +386,7 @@ static PyObject * alma_atomic_step(PyObject *self, PyObject *args) {
   long alma_kb;
   char *ret_val;
 
-  fprintf(stderr, "In alma_atomic_step\n");
+  //fprintf(stderr, "In alma_atomic_step\n");
   if (!PyArg_ParseTuple(args, "l", &alma_kb))
     return NULL;
 
@@ -409,8 +409,10 @@ static PyObject * alma_atomic_step(PyObject *self, PyObject *args) {
 }
 
 
-static PyObject *alma_get_pre_res_task_buffer( PyObject *self, PyObject *args) {
-  char *ret_val;
+
+static PyObject *get_res_buf( PyObject *self, PyObject *args) {
+  //Get resolution task heap.
+
   long alma_kb;
   PyObject *py_lst;
   kb *collection;
@@ -423,10 +425,63 @@ static PyObject *alma_get_pre_res_task_buffer( PyObject *self, PyObject *args) {
 
 
   res_task_heap *res_tasks = &collection->res_tasks;
-  res_task_pri tp;
+  res_task_pri *element;
   res_task *t;
   char *clauses_string;
-  int j = 0;
+
+  kb_str buf;
+  buf.size = 0;
+  buf.limit = BUF_LIMIT;
+  buf.buffer = malloc(buf.limit);
+  buf.buffer[0] = '\0';
+  buf.curr = buf.buffer;
+  
+
+  
+  for ( size_t i=0; i < res_tasks->count; i++) {
+    element = res_task_heap_item(res_tasks, i);   // Type (res_task_pri *)
+    t = element->res_task;
+
+    alma_function_print(collection, t->pos, &buf);
+    tee_alt("\t", collection, &buf);
+    alma_function_print(collection, t->neg, &buf);
+    tee_alt("\n", collection, &buf);
+
+    PyList_Append(py_lst, Py_BuildValue("OOd",
+					clause_to_pyobject(collection, t->x),
+					clause_to_pyobject(collection, t->y),
+					element->priority));
+  }
+  
+
+  clauses_string = malloc(buf.size + 1);
+  strcpy(clauses_string, buf.buffer);
+  clauses_string[buf.size] = '\0';
+  free(buf.buffer);
+  return Py_BuildValue("(O,s)",py_lst, clauses_string);
+}
+
+
+// Returns the clauses and priorities in the pre-resolution-task
+// buffer and a separate list of the positive/negative pairs within
+// them.
+
+static PyObject *alma_get_pre_res_task_buffer( PyObject *self, PyObject *args) {
+  long alma_kb;
+  PyObject *py_lst;
+  PyObject *resolvent_lst;
+  kb *collection;
+  
+  if (!PyArg_ParseTuple(args, "l", &alma_kb))
+    return NULL;
+
+  py_lst = Py_BuildValue("[]");
+  resolvent_lst  = Py_BuildValue("[]");
+  collection = (kb *)alma_kb;
+
+
+  res_task *t;
+  char *clauses_string;
 
   kb_str buf;
   buf.size = 0;
@@ -442,11 +497,16 @@ static PyObject *alma_get_pre_res_task_buffer( PyObject *self, PyObject *args) {
     pre_res_task *data = i->data;
     t = data->t;
 
+    /*
     alma_function_print(collection, t->pos, &buf);
     tee_alt("\t", collection, &buf);
     alma_function_print(collection, t->neg, &buf);
     tee_alt("\n", collection, &buf);
-
+    */
+    
+    PyList_Append(resolvent_lst, Py_BuildValue("OO",
+					       alma_function_to_pyobject(collection, t->pos),
+					       alma_function_to_pyobject(collection, t->neg)));
     PyList_Append(py_lst, Py_BuildValue("OOd",
 					clause_to_pyobject(collection, t->x),
 					clause_to_pyobject(collection, t->y),
@@ -460,7 +520,7 @@ static PyObject *alma_get_pre_res_task_buffer( PyObject *self, PyObject *args) {
   strcpy(clauses_string, buf.buffer);
   clauses_string[buf.size] = '\0';
   free(buf.buffer);
-  return Py_BuildValue("(O,s)",py_lst, clauses_string);
+  return Py_BuildValue("(O,O)",py_lst, resolvent_lst);
 }
   
 
@@ -470,7 +530,7 @@ static PyObject * alma_kbprint(PyObject *self, PyObject *args) {
   char *ret_val;
   long alma_kb;
   
-  fprintf(stderr, "In alma_kbprint\n");  
+  //fprintf(stderr, "In alma_kbprint\n");  
   if (!PyArg_ParseTuple(args, "l", &alma_kb))
     return NULL;
 
@@ -511,7 +571,7 @@ static PyObject * alma_add(PyObject *self, PyObject *args) {
   int len;
   long alma_kb;
 
-    fprintf(stderr, "In alma_add\n");  
+  //fprintf(stderr, "In alma_add\n");  
   if (!PyArg_ParseTuple(args, "ls", &alma_kb, &input))
     return NULL;
 
@@ -694,6 +754,7 @@ static PyMethodDef AlmaMethods[] = {
   {"prebuf", alma_get_pre_res_task_buffer, METH_VARARGS,"Retrieve pre-resolution task list."},
   {"set_priors_prb", set_prb_priorities, METH_VARARGS,"Set pre-resolution task list priorities."},
   {"prb_to_res_task", prb_to_resolutions, METH_VARARGS,"Flush pre-resolution task list to resolution task heap."},
+  {"res_task_buf", get_res_buf, METH_VARARGS,"Get resolution task heap."},
   {"kbprint", alma_kbprint, METH_VARARGS,"Print out entire alma kb."},
   {"halt", alma_halt, METH_VARARGS,"Stop an alma kb."},
   {"add", alma_add, METH_VARARGS,"Add a clause or formula to an alma kb."},
@@ -786,7 +847,7 @@ static PyObject * alma_init(PyObject *self, PyObject *args) {
       if (!PyFloat_Check(list_item)) {
 	PyErr_SetString(PyExc_TypeError, "list items must be doubles.");
       } else {
-	fprintf(stderr, "Got priority %f\n", PyFloat_AsDouble(list_item));
+	//fprintf(stderr, "Got priority %f\n", PyFloat_AsDouble(list_item));
 	collection_priorities[idx] =  PyFloat_AsDouble(list_item);
       }
     }
