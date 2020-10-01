@@ -14,7 +14,7 @@ typedef struct clause {
   if_tag tag;
   struct fif_info *fif; // Data used to store additional fif information; non-null only if FIF tagged
   long index; // Index of clause, used as key in index_map of KB
-  long learned; // Time asserted to KB
+  long acquired; // Time asserted to KB
   char dirty_bit;
   char pyobject_bit;
 } clause;

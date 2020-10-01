@@ -43,7 +43,10 @@ void disable_python_mode() {
 
 static void alma_term_print(kb *collection, alma_term *term, kb_str *buf) {
   if (term->type == VARIABLE)
-    tee_alt("%s%lld", collection, buf, term->variable->name, term->variable->id);
+
+    //TODO:  JB removign id name for RL training; this should ultimatley be handled more systemtically.
+    //tee_alt("%s%lld", collection, buf, term->variable->name, term->variable->id);
+    tee_alt("%s", collection, buf, term->variable->name);
   else if (term->type == FUNCTION)
     alma_function_print(collection, term->function, buf);
   else
@@ -212,6 +215,10 @@ void tee_alt(char const *content, ...) {
   if (python_mode) {
     //    va_copy(copy_ap, ap);
     size = dest->limit - dest->size;
+    if ( (size + dest->size) > dest->limit) {
+      fprintf(stderr, "buffer overflow in kbstr at %p\n.", (void *) dest);
+      exit(1);
+    };
     //    bytes = vsnprintf(fake_str, size, content, copy_ap);
     va_copy(copy_ap, ap);
     bytes = vsnprintf(&(dest->buffer[dest->size]), size, content, copy_ap);

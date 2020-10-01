@@ -497,12 +497,12 @@ static PyObject *alma_get_pre_res_task_buffer( PyObject *self, PyObject *args) {
     pre_res_task *data = i->data;
     t = data->t;
 
-    /*
+
     alma_function_print(collection, t->pos, &buf);
     tee_alt("\t", collection, &buf);
     alma_function_print(collection, t->neg, &buf);
     tee_alt("\n", collection, &buf);
-    */
+
     
     PyList_Append(resolvent_lst, Py_BuildValue("OO",
 					       alma_function_to_pyobject(collection, t->pos),
@@ -520,7 +520,7 @@ static PyObject *alma_get_pre_res_task_buffer( PyObject *self, PyObject *args) {
   strcpy(clauses_string, buf.buffer);
   clauses_string[buf.size] = '\0';
   free(buf.buffer);
-  return Py_BuildValue("(O,O)",py_lst, resolvent_lst);
+  return Py_BuildValue("(O,O, s)",py_lst, resolvent_lst, clauses_string);
 }
   
 

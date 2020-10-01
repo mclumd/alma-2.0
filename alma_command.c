@@ -440,10 +440,8 @@ void kb_assert(kb *collection, char *string, kb_str *buf) {
   assert_formula(collection, string, 1, buf);
 }
 
-// temporarily disabled.  TODO:  reinstatiate when there's more time.  
 void kb_remove(kb *collection, char *string, kb_str *buf) {
-  return;   
-  //delete_formula(collection, string, 1, buf);
+  delete_formula(collection, string, 1, buf);
 }
 
 void kb_update(kb *collection, char *string, kb_str *buf) {

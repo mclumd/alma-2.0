@@ -210,6 +210,9 @@ int main(int argc, char **argv) {
 	  fflush(stdout);
 	} else  if (strcmp(line, "prb_print") == 0) {
 	  kb_print_pre_res_buf(alma_kb, NULL);
+	} else  if (strcmp(line, "prb_flush") == 0) {
+	  pre_res_buffer_to_heap(alma_kb);
+	  tee_alt("Flushed pre resolution task buffer\n",alma_kb, NULL,counter);
 	} else if (strcmp(line, "halt") == 0) {
 	  tee("\nTracking resolutions is %d.  Line 190.\n", rip.tracking_resolutions); fflush(stdout);
 	  if (rip.tracking_resolutions == 1) {

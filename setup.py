@@ -3,7 +3,8 @@ import os
 
 cwd = os.getcwd()
 
-compile_args = ['-std=c11', '-pedantic-errors', '-Wall', '-Werror', '-Wshadow', '-Wpedantic', '-g', '-fPIC']
+#compile_args = ['-std=c11', '-pedantic-errors', '-Wall', '-Werror', '-Wshadow', '-Wpedantic', '-g', '-fPIC']
+compile_args = ['-std=c11', '-pedantic-errors', '-Wall', '-Wshadow', '-Wpedantic', '-g', '-fPIC', '-O0']
 
 def main():
     setup(name="alma",
@@ -16,7 +17,8 @@ def main():
 #                                  "alma_kb.h",
 #                                  "alma_print.h"],
                                  extra_compile_args=compile_args,
-                                 library_dirs=["/usr/local/lib"],
+                                 library_dirs=["/home/justin/alma-2.0"],
+#                                 library_dirs=["/usr/local/lib"],
                                  libraries=["alma"])])
 
 if __name__ == "__main__":

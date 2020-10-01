@@ -951,7 +951,7 @@ static void pre_res_task_buffer_add(tommy_list *pre_res_task_buffer, res_task *t
     res_task_heap_push(tasks, rtask);
   } else {
     PT->t = t;
-    PT->priority = -1;
+    PT->priority = 1;
     tommy_list_insert_tail(pre_res_task_buffer, &PT->node, PT);
   }
 }
@@ -1057,7 +1057,10 @@ int delete_formula(kb *collection, char *string, int print, kb_str *buf) {
 	curr_pt = tommy_list_head(&(collection->pre_res_task_buffer));
 	while(curr_pt) {
 	  PT = (struct pre_res_task *) curr_pt->data;
-	  if ( (PT != NULL) && ((PT->t->x == c) || (PT->t->y == c)) ) {
+	  if ( 0 && (PT != NULL) && ((PT->t->x == c) || (PT->t->y == c)) ) { // TODO: re-enable; disabled as hack
+	    fprintf(stderr, "Emergency resolution of clause being deleted.\n");
+	    fprintf(stderr, "Printing clause:\n");
+	    clause_print(collection, c, NULL);
 	    // Resolve PT
 	    res_task_pri rt;
 	    rt.priority = -1;
@@ -1850,6 +1853,7 @@ void process_new_clauses(kb *collection, kb_str *buf) {
 /* Take all the resolution tasks from the pre_resolution buffer and push them onto the resolution task heap. */
 void pre_res_buffer_to_heap(kb *collection) {
   tommy_node *i = tommy_list_head(&collection->pre_res_task_buffer);
+  tommy_node *next;
   while (i) {
     pre_res_task *data = i->data;
     res_task *t = data->t;
@@ -1857,6 +1861,8 @@ void pre_res_buffer_to_heap(kb *collection) {
     rtask->res_task = t;
     rtask->priority = data->priority;
     res_task_heap_push(&collection->res_tasks, rtask);   
-    i = i->next;
+    next = i->next;
+    tommy_list_remove_existing(&collection->pre_res_task_buffer, i);
+    i = next;
   }
 }
