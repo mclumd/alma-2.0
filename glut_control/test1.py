@@ -11,6 +11,7 @@ import os
 import rl_functions
 import numpy as np
 import itertools
+import pickle
 
 #os.environ["LD_LIBRARY_PATH"] = "/home/justin/alma-2.0/"
 test_params = {
@@ -67,8 +68,11 @@ def train(explosion_steps=50, num_steps=500):
 
 def test(network_priors=False, exp_size=10, num_steps=500, alma_heap_print_size=100):
     global alma_inst,res
+    dbb_instances = []
     exp = explosion(exp_size)
     res_tasks = exp[0]
+    if len(res_tasks) == 0:
+        return []
     res_lits = res_task_lits(exp[2])
     subjects = ['a0', 'a1', 'b0', 'b1']
     res_task_input = [ x[:2] for x in res_tasks]
@@ -94,6 +98,8 @@ def test(network_priors=False, exp_size=10, num_steps=500, alma_heap_print_size=
             print("KB:")
             for fmla in alma.kbprint(alma_inst)[0].split('\n'):
                 print(fmla)
+                if ': distanceBetweenBoundedBy' in fmla:
+                    dbb_instances.append(fmla)
 
             rth = alma.res_task_buf(alma_inst)
             print("Heap:")
@@ -111,9 +117,43 @@ def test(network_priors=False, exp_size=10, num_steps=500, alma_heap_print_size=
             alma.prb_to_res_task(alma_inst)
         #alma.add(alma_inst, "distanceAt(a, {}, {}).".format(idx, idx))
         alma.astep(alma_inst)
+    return dbb_instances
 
-
+def data_collect(esteps_max=100, esteps_step=5, rsteps_max=20000, rsteps_step=500):
+    total_dict = {}
+    num_esteps = esteps_max // esteps_step
+    num_rsteps = rsteps_max // rsteps_step
+    results = np.zeros((num_esteps, num_rsteps, 2))
+    for exp_steps in range(0,esteps_max, esteps_step):
+        for reasoning_steps in range(0, rsteps_max, rsteps_step):
+            for condition in [False, True]:
+                if exp_steps == 0 or reasoning_steps == 0:
+                    tr = []
+                else:
+                    print("Running with condition={}, exp_steps={}, reasoning_steps={}\n".format(condition, exp_steps, reasoning_steps))
+                    tr = test(condition, exp_steps, reasoning_steps, alma_heap_print_size=10)
+                total_dict[exp_steps, reasoning_steps, condition] = tr
+                results[ exp_steps // esteps_step, reasoning_steps // rsteps_step, 1 if condition else 0] = len(tr)
+    return total_dict, results
 
 #main()
 #train(20, 500)
-test(False, 50, 7000, alma_heap_print_size=10)
+#print("results:", test(False, 50, 7000, alma_heap_print_size=10))
+max_esteps=100
+estep_skip = 5
+max_rsteps=10000
+rstep_skip= 250
+D, R = data_collect(max_esteps, estep_skip, max_rsteps, rstep_skip)
+
+res_dict = {
+    'max_esteps': max_esteps,
+    'estep_skip': estep_skip,
+    'max_rsteps': max_rsteps,
+    'rstep_skip': rstep_skip,
+    'dbb_results': D,
+    'num_dbb': R}
+
+with open("test1_results.pkl", "wb") as run_save:
+    pickle.dump(res_dict, run_save)
+
+
