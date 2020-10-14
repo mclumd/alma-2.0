@@ -72,7 +72,7 @@ def train(explosion_steps=50, num_steps=500):
 
     network.model_save('test1')
 
-def test(network_priors, exp_size=10, num_steps=500, alma_heap_print_size=100):
+def test(network_priors, exp_size=10, num_steps=500, alma_heap_print_size=100, prb_print_size=30):
     global alma_inst,res
     dbb_instances = []
     exp = explosion(exp_size)
@@ -101,6 +101,9 @@ def test(network_priors, exp_size=10, num_steps=500, alma_heap_print_size=100):
         if (idx % 10 == 0):
             print("Step: ", idx)
             print("prb size: ", len(prb))
+            for fmla in prb:
+                print(fmla)
+            print("\n"*3)
             print("KB:")
             for fmla in alma.kbprint(alma_inst)[0].split('\n'):
                 print(fmla)
@@ -130,12 +133,14 @@ if __name__ == "__main__":
     parser.add_argument("use_network", type=str)
     parser.add_argument("explosion_steps", type=int, default=10)
     parser.add_argument("reasoning_steps", type=int, default=500)
+    parser.add_argument("heap_print_size", type=int, default=0)
+    parser.add_argument("prb_print_size", type=int, default=0)
 
     args = parser.parse_args()
     use_net = True if args.use_network == "True" else False
     assert(type(use_net) == type(True))
     print("Read network {}, expsteps {}   rsteps {}".format(use_net, args.explosion_steps, args.reasoning_steps))
-    res = test(use_net, args.explosion_steps, args.reasoning_steps, 0)
+    res = test(use_net, args.explosion_steps, args.reasoning_steps, args.heap_print_size, args.prb_print_size)
     print("Final result is", res)
     print("Final number is", len(res))
 
