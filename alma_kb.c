@@ -1470,8 +1470,8 @@ void process_one_res_task(kb *collection, res_task_heap *tasks, tommy_array *new
             set_variable_ids(res_result, 0, x_bindings, collection);
 
 	  tommy_array_insert(new_arr, res_result);
-	  if (collection->tracking_resolutions)
-            note_resolution_subjects(collection, res_result);
+	  /* if (collection->tracking_resolutions)
+	     note_resolution_subjects(collection, res_result); */
 	  if (bs)
 	    tommy_array_insert(&bs->new_clause_bindings, x_bindings);
 	}
