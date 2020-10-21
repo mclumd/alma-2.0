@@ -135,11 +135,16 @@ if __name__ == "__main__":
     parser.add_argument("reasoning_steps", type=int, default=500)
     parser.add_argument("heap_print_size", type=int, default=0)
     parser.add_argument("prb_print_size", type=int, default=0)
+    parser.add_argument("retrain", type=bool, default=False)
 
     args = parser.parse_args()
     use_net = True if args.use_network == "True" else False
     assert(type(use_net) == type(True))
     print("Read network {}, expsteps {}   rsteps {}".format(use_net, args.explosion_steps, args.reasoning_steps))
+
+    if args.retrain:
+        print('Retraining')
+        train(100, 1000)
     res = test(use_net, args.explosion_steps, args.reasoning_steps, args.heap_print_size, args.prb_print_size)
     print("Final result is", res)
     print("Final number is", len(res))

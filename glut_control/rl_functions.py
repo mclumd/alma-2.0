@@ -70,7 +70,7 @@ class res_prefilter:
             return np.array([ (un.unify(un.parse_term(x), un.parse_term(y), {}) is not None) for x,y in inputs  ], dtype='float32')
 
     # For now, simple many-hot representation of a bag-of-words, just on the subjects
-    def vectorize(self, inputs):
+    def vectorize_bow1(self, inputs):
         X = []
         for inp0, inp1 in inputs:
             #print("inp0: {} \t inp1: {}\n".format(inp0, inp1))
@@ -88,6 +88,32 @@ class res_prefilter:
         #return np.array(X)
         return np.array(X, dtype=np.float32)
 
+    # Use word2vec for the embeddings
+    def vectorize_w2vec(self, inputs):
+        X = []
+        for inp0, inp1 in inputs:
+            #print("inp0: {} \t inp1: {}\n".format(inp0, inp1))
+            #print("inp0 constants:", aw.alma_constants([inp0]))
+            #print("inp1 constants:", aw.alma_constants([inp1]))
+            x = np.zeros( (2, self.num_subjects + 1))
+            for idx, inp in enumerate([inp0, inp1]):
+                for subj in aw.alma_constants([inp], True):
+                    try:
+                        x[idx, self.subjects_dict[subj]] = 1
+                    except KeyError:
+                        x[idx, 0] = 1
+            X.append(x.flatten())
+        #print('Vectorized inputs: ', X)
+        #return np.array(X)
+        return np.array(X, dtype=np.float32)
+
+
+    def vectorize(self, inputs):
+        if self.vectorize_alg == 'bow1':
+            return self.vectorize_bow1(inputs)
+        elif self.vectorize_alg == 'word2vec':
+            return self.vectorize_w2vec(inputs)
+        
     #@tf.function
     def train_batch(self, inputs, prb_strings):
         #print("inputs=", inputs)
