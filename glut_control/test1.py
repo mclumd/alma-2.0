@@ -46,8 +46,13 @@ def explosion(size=1000):
     print("="*80)
     return r
 
-def train(explosion_steps=50, num_steps=500):
-    subjects = ['a0', 'a1', 'b0', 'b1']
+def train(explosion_steps=50, num_steps=500, numeric_bits=10):
+    subjects = []
+    for place in range(3):
+        for cat_subj in ['a', 'b']:
+            subjects.append("{}/{}".format(cat_subj, place))
+        for num_subj in range(2**numeric_bits):
+            subjects.append("{}/{}".format(num_subj, place))
     network = rl_functions.res_prefilter(subjects, [])
     for b in range(2):
         exp = explosion(explosion_steps)
@@ -72,7 +77,7 @@ def train(explosion_steps=50, num_steps=500):
 
     network.model_save('test1')
 
-def test(network_priors, exp_size=10, num_steps=500, alma_heap_print_size=100, prb_print_size=30):
+def test(network_priors, exp_size=10, num_steps=500, alma_heap_print_size=100, prb_print_size=30, numeric_bits=10):
     global alma_inst,res
     dbb_instances = []
     exp = explosion(exp_size)
@@ -80,7 +85,14 @@ def test(network_priors, exp_size=10, num_steps=500, alma_heap_print_size=100, p
     if len(res_tasks) == 0:
         return []
     res_lits = res_task_lits(exp[2])
-    subjects = ['a0', 'a1', 'b0', 'b1']
+    #subjects = ['a0', 'a1', 'b0', 'b1']
+    # Compute initial subjects.  We want 'a','b' and first 8K integers in each of three places
+    subjects = []
+    for place in range(3):
+        for cat_subj in ['a', 'b']:
+            subjects.append("{}/{}".format(cat_subj, place))
+        for num_subj in range(2**numeric_bits):
+            subjects.append("{}/{}".format(num_subj, place))
     res_task_input = [ x[:2] for x in res_tasks]
     if network_priors:
         network = rl_functions.rpf_load('test1')
@@ -135,12 +147,18 @@ if __name__ == "__main__":
     parser.add_argument("reasoning_steps", type=int, default=500)
     parser.add_argument("heap_print_size", type=int, default=0)
     parser.add_argument("prb_print_size", type=int, default=0)
+    parser.add_argument("numeric_bits", type=int, default=10)
+    parser.add_argument("--retrain", action='store_true')
 
     args = parser.parse_args()
     use_net = True if args.use_network == "True" else False
     assert(type(use_net) == type(True))
     print("Read network {}, expsteps {}   rsteps {}".format(use_net, args.explosion_steps, args.reasoning_steps))
-    res = test(use_net, args.explosion_steps, args.reasoning_steps, args.heap_print_size, args.prb_print_size)
+
+    if args.retrain:
+        print('Retraining')
+        train(100, 1000, args.numeric_bits)
+    res = test(use_net, args.explosion_steps, args.reasoning_steps, args.heap_print_size, args.prb_print_size, args.numeric_bits)
     print("Final result is", res)
     print("Final number is", len(res))
 
