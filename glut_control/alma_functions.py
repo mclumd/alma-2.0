@@ -52,7 +52,7 @@ def clause_constants(clause_tree, note_place=False):
       if not note_place:
         return pass1
       else:
-        pass2 = [ ''.join(x + ( [] if x == [] else [str(i)]))  for i,x in enumerate(pass1)]
+        pass2 = [ ''.join(x + ( [] if x == [] else ['/'+str(i)]))  for i,x in enumerate(pass1)]
         return pass2
   elif clause_tree[0] == 'var':
     return []

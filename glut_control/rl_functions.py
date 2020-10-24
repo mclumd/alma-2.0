@@ -16,7 +16,7 @@ import pickle
 import alma_functions as aw
 
 class res_prefilter:
-    def __init__(self, subjects, words, use_tf=False):
+    def __init__(self, subjects, words, use_tf=False, vectorize_alg='bow1'):
         self.use_tf = use_tf
         if use_tf:
             import tensorflow as tf
@@ -53,6 +53,7 @@ class res_prefilter:
         for idx, word in enumerate(self.words):
             self.words_dict[word] = idx+1
         self.batch_size = 32
+        self.vectorize_alg = vectorize_alg
 
 
         print("Subjects dictionary:", self.subjects_dict)
@@ -71,6 +72,36 @@ class res_prefilter:
 
     # For now, simple many-hot representation of a bag-of-words, just on the subjects
     def vectorize_bow1(self, inputs):
+        X = []
+        for inp0, inp1 in inputs:
+            #print("inp0: {} \t inp1: {}\n".format(inp0, inp1))
+            #print("inp0 constants:", aw.alma_constants([inp0]))
+            #print("inp1 constants:", aw.alma_constants([inp1]))
+            x = np.zeros( (2, self.num_subjects + 1))
+            for idx, inp in enumerate([inp0, inp1]):
+                for subj in aw.alma_constants([inp], True):
+                    try:
+                        x[idx, self.subjects_dict[subj]] = 1
+                    except KeyError:
+                        x[idx, 0] = 1
+            X.append(x.flatten())
+        #print('Vectorized inputs: ', X)
+        #return np.array(X)
+        return np.array(X, dtype=np.float32)
+
+    # More complex bag of words.   Now, rather than a 1 hot encoding we encode subjects as follows:
+    # We now want subjects to come in without place identifiers.
+    # We fix a number of potential place values (say 4).
+    #
+    # Each place then gets 16 bits.  If the first bit is 1 the remaining 15 bits represent an integer
+    # between 0 and 32768.  Otherwise the 15 bits code the subject.
+    
+    # This basically boils down to an explicit coding of 2^15 integers plus however many subjects are involved.
+
+    # So perhaps this is a better way to go; it would probably allow us to use libraries more easily.   
+    
+ 
+    def vectorize_bow2(self, inputs):
         X = []
         for inp0, inp1 in inputs:
             #print("inp0: {} \t inp1: {}\n".format(inp0, inp1))
@@ -118,12 +149,12 @@ class res_prefilter:
     def train_batch(self, inputs, prb_strings):
         #print("inputs=", inputs)
         X = self.vectorize(inputs)
-        print("X=", X)
+        #print("X=", X)
         if self.use_tf:
             y = tf.reshape(self.unifies(prb_strings), (-1, 1))
         else:
             y = np.reshape(self.unifies(prb_strings), (-1, 1))
-            print("y=", y)
+            #print("y=", y)
         preds = []
         if self.use_tf:
             num_batches = X.shape[0] // self.batch_size
