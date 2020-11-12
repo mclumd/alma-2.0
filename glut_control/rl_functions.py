@@ -233,7 +233,7 @@ class res_prefilter:
             return pred
         else:
             # TODO:  make sure this continues training rather than reinitializing
-            self.model.fit(X, y, batch_size=self.batch_size, verbose=True)           
+            return self.model.fit(X, y, batch_size=self.batch_size, verbose=True)
 
     #@tf.function
     def train_batch(self, inputs, prb_strings):
@@ -278,9 +278,9 @@ class res_prefilter:
         preds = self.model.predict(X)
         return preds
 
-    def model_save(self, id_str):
+    def model_save(self, id_str, numeric_bits):
         pkl_file = open("rl_model_{}.pkl".format(id_str), "wb")
-        pickle.dump((self.subjects, self.words, self.num_subjects, self.num_words, self.subjects_dict, self.words_dict, self.batch_size, self.use_tf), pkl_file)
+        pickle.dump((self.subjects, self.words, self.num_subjects, self.num_words, self.subjects_dict, self.words_dict, self.batch_size, self.use_tf, numeric_bits), pkl_file)
         self.model.save("rl_model_{}".format(id_str))
 
     def model_load(self, id_str):
@@ -293,7 +293,7 @@ class res_prefilter:
 
 def rpf_load(id_str):
     pkl_file = open("rl_model_{}.pkl".format(id_str), "rb")
-    subjects, words, num_subjects, num_words, subjects_dict, words_dict, batch_size, use_tf = pickle.load(pkl_file)
+    subjects, words, num_subjects, num_words, subjects_dict, words_dict, batch_size, use_tf, num_bits = pickle.load(pkl_file)
     rpf = res_prefilter(subjects, words, use_tf)
     rpf.num_subjects = num_subjects
     rpf.num_words = num_words
@@ -301,5 +301,6 @@ def rpf_load(id_str):
     rpf.words_dict = words_dict
     rpf.batch_size = batch_size
     rpf.model_load(id_str)
+    rpf.num_bits = num_bits
     return rpf
 

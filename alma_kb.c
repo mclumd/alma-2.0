@@ -1856,11 +1856,14 @@ void pre_res_buffer_to_heap(kb *collection) {
   tommy_node *next;
   while (i) {
     pre_res_task *data = i->data;
-    res_task *t = data->t;
-    res_task_pri *rtask = malloc(sizeof(*rtask));
-    rtask->res_task = t;
-    rtask->priority = data->priority;
-    res_task_heap_push(&collection->res_tasks, rtask);   
+
+    if ((collection->prb_threshold > 0) && (data->priority < collection->prb_threshold)) {
+      res_task *t = data->t;
+      res_task_pri *rtask = malloc(sizeof(*rtask));
+      rtask->res_task = t;
+      rtask->priority = data->priority;
+      res_task_heap_push(&collection->res_tasks, rtask);
+    }
     next = i->next;
     tommy_list_remove_existing(&collection->pre_res_task_buffer, i);
     i = next;

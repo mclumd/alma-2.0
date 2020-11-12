@@ -242,7 +242,7 @@ static PyObject *alma_set_priorities(PyObject *self, PyObject *args) {
     if (!PyUnicode_Check(list_item)) {
       PyErr_SetString(PyExc_TypeError, "list items must be strings.");
     } else {
-      fprintf(stderr, "Got subject name %s\n", PyUnicode_AS_DATA(list_item));
+      //fprintf(stderr, "Got subject name %s\n", PyUnicode_AS_DATA(list_item));
       subj_len = strlen(PyUnicode_AS_DATA(list_item)) + 1;
       subj_copy = malloc( subj_len * sizeof(char));
       strcpy(subj_copy, PyUnicode_AS_DATA(list_item));
@@ -312,12 +312,14 @@ static PyObject *set_prb_priorities(PyObject *self, PyObject *args) {
 static PyObject *prb_to_resolutions(PyObject *self, PyObject *args) {
   long alma_kb;
   kb *collection;
+  double threshold;
 
   //fprintf(stderr, "In prb_to_resolutions\n");
-  if (!PyArg_ParseTuple(args, "l", &alma_kb )) {
+  if (!PyArg_ParseTuple(args, "ld", &alma_kb, &threshold )) {
     return NULL;
   }
   collection = (kb *)alma_kb;
+  collection->prb_threshold = threshold;
   pre_res_buffer_to_heap(collection);
   return Py_None;
 }

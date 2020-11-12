@@ -46,7 +46,7 @@ def explosion(size=1000):
     print("="*80)
     return r
 
-def train(explosion_steps=50, num_steps=500, numeric_bits=10):
+def train(explosion_steps=50, num_steps=500, numeric_bits=10, model_name="test1"):
     global alma_inst,res
     subjects = []
     for place in range(3):
@@ -84,16 +84,20 @@ def train(explosion_steps=50, num_steps=500, numeric_bits=10):
             if idx > 0 and idx % 500 == 0:
                 print("Network has {} samples, {} of which are positive".format(len(network.ybuffer), network.ypos_count))
                 if network.ypos_count > (network.batch_size  / 2):
-                    network.train_buffered_batch()
+                    H = network.train_buffered_batch()
+                    if H.history['accuracy'][0] > 0.999 and H.history['loss'][0] < 1e-5:
+                        print("Good model; ending early")
+                        network.model_save(model_name, numeric_bits)
+                        return
                 else:
                     print("Breaking...")
                     break
 
             alma.astep(alma_inst)
 
-    network.model_save('test1')
+    network.model_save(model_name, numeric_bits)
 
-def test(network_priors, exp_size=10, num_steps=500, alma_heap_print_size=100, prb_print_size=30, numeric_bits=10, heap_print_freq=10):
+def test(network_priors, exp_size=10, num_steps=500, alma_heap_print_size=100, prb_print_size=30, numeric_bits=10, heap_print_freq=10, model_name='test1', prb_threshold=-1):
     global alma_inst,res
     dbb_instances = []
     exp = explosion(exp_size)
@@ -111,13 +115,13 @@ def test(network_priors, exp_size=10, num_steps=500, alma_heap_print_size=100, p
             subjects.append("{}/{}".format(num_subj, place))
     res_task_input = [ x[:2] for x in res_tasks]
     if network_priors:
-        network = rl_functions.rpf_load('test1')
+        network = rl_functions.rpf_load(model_name)
         priorities = 1 - network.get_priorities(res_task_input)
     else:
         priorities = np.random.uniform(size=len(res_task_input))
 
     alma.set_priors_prb(alma_inst, priorities.flatten().tolist())
-    alma.prb_to_res_task(alma_inst)
+    alma.prb_to_res_task(alma_inst, prb_threshold)
 
     print("prb: ", alma.prebuf(alma_inst))
     kb = alma.kbprint(alma_inst)[0]
@@ -137,9 +141,11 @@ def test(network_priors, exp_size=10, num_steps=500, alma_heap_print_size=100, p
                 print(fmla)
                 if ': distanceBetweenBoundedBy' in fmla:
                     dbb_instances.append(fmla)
+            print("DBB {}: {}".format(idx, len(dbb_instances)))
 
             rth = alma.res_task_buf(alma_inst)
             print("Heap:")
+            print("HEAP size {}: {} ".format(idx, len(rth[1].split('\n')[:-1])))
             for i, fmla in enumerate(rth[1].split('\n')[:-1]):
                 pri = rth[0][i][-1]
                 print("i={}:\t{}\tpri={}".format(i, fmla, pri))
@@ -151,7 +157,7 @@ def test(network_priors, exp_size=10, num_steps=500, alma_heap_print_size=100, p
             res_task_input = [x[:2] for x in prb]
             priorities = 1 - network.get_priorities(res_task_input)  if network_priors else   np.random.uniform(size=len(res_task_input))
             alma.set_priors_prb(alma_inst, priorities.flatten().tolist())
-            alma.prb_to_res_task(alma_inst)
+            alma.prb_to_res_task(alma_inst, prb_threshold)
         #alma.add(alma_inst, "distanceAt(a, {}, {}).".format(idx, idx))
         alma.astep(alma_inst)
     return dbb_instances
@@ -164,17 +170,27 @@ if __name__ == "__main__":
     parser.add_argument("heap_print_size", type=int, default=0)
     parser.add_argument("prb_print_size", type=int, default=0)
     parser.add_argument("numeric_bits", type=int, default=10)
-    parser.add_argument("--retrain", action='store_true')
+    parser.add_argument("prb_threshold", type=float, default=1.0)
+    parser.add_argument("--retrain", action='store', required=False, default="NONE")
+    parser.add_argument("--reload", action='store', required=False, default="NONE")
 
     args = parser.parse_args()
     use_net = True if args.use_network == "True" else False
     assert(type(use_net) == type(True))
-    print("Read network {}, expsteps {}   rsteps {}".format(use_net, args.explosion_steps, args.reasoning_steps))
+    if args.retrain != "NONE":
+        model_name = args.retrain
+        assert(args.reload == "NONE")
+        print("Read network {}, expsteps {}   rsteps {}    model_name {}".format(use_net, args.explosion_steps, args.reasoning_steps, model_name))
+        print('Retraining; model name is ', args.retrain)
+        train(args.explosion_steps, args.reasoning_steps, args.numeric_bits, model_name)
+    if args.reload != "NONE":
+        assert(args.retrain == "NONE")
+        model_name = args.reload
+        print("Read network {}, expsteps {}   rsteps {}    model_name {}".format(use_net, args.explosion_steps, args.reasoning_steps, model_name))
+    
 
-    if args.retrain:
-        print('Retraining')
-        train(args.explosion_steps, args.reasoning_steps, args.numeric_bits)
-    res = test(use_net, args.explosion_steps, args.reasoning_steps, args.heap_print_size, args.prb_print_size, args.numeric_bits, heap_print_freq=1)
+    #res = test(use_net, args.explosion_steps, args.reasoning_steps, args.heap_print_size, args.prb_print_size, args.numeric_bits, heap_print_freq=10, model_name = model_name, prb_threshold=0.25)
+    res = test(use_net, args.explosion_steps, args.reasoning_steps, args.heap_print_size, args.prb_print_size, args.numeric_bits, heap_print_freq=1, model_name = model_name, prb_threshold=args.prb_threshold)
     print("Final result is", res)
     print("Final number is", len(res))
 

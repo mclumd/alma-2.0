@@ -117,6 +117,7 @@ typedef struct kb {
   int res_heap_size;
   tommy_list pre_res_task_buffer;
   int use_pre_rtb;
+  double prb_threshold;
 
   // If grow to have many fifs, having pos and neg versions may help
   tommy_hashlin fif_tasks; // Stores tasks for fif rules

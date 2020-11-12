@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import time
 import subprocess
 import seaborn as sb
+import math
 
 """ 
 Read in pickle file and show heatmaps.  Some notes:
@@ -123,8 +124,13 @@ def data_collect(esteps_max=100, esteps_step=5, rsteps_max=20000, rsteps_step=50
 
 def test_subprocess(condition, exp_steps, reasoning_steps):
     start = time.time()
-    cmd = subprocess.run("python ./test1.py {} {} {}".format(condition, exp_steps, reasoning_steps), shell=True, stdout=subprocess.PIPE)
-    #print("cmd=", cmd)
+    num_bits = int(math.ceil(math.log2(reasoning_steps)))
+    model_name = "halloween{}-{}-{}".format(exp_steps, reasoning_steps, num_bits)
+    if condition:
+        cmd = subprocess.run("python ./test1.py {} {} {} 0 0 {} --retrain {}".format(condition, exp_steps, reasoning_steps, num_bits, model_name), shell=True, stdout=subprocess.PIPE)
+    else:
+        cmd = subprocess.run("python ./test1.py {} {} {} 0 0 {}".format(condition, exp_steps, reasoning_steps, num_bits), shell=True, stdout=subprocess.PIPE)
+    print("cmd=", cmd)
     #print("cmd_stdout=", cmd.stdout)
     stdout = cmd.stdout.decode('UTF-8')
     for outline in stdout.split('\n'):
@@ -155,12 +161,12 @@ def main():
         'dbb_results': D,
         'num_dbb': R}
 
-    with open("test2_results.pkl", "wb") as run_save:
+    with open("test1031_results.pkl", "wb") as run_save:
         pickle.dump(res_dict, run_save)
 
-#main()
+main()
 #analyze("test1_results.pkl")
-analyze("test2_results.pkl")
+#analyze("test2_results.pkl")
 
 
 

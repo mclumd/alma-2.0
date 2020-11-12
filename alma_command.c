@@ -68,6 +68,7 @@ void kb_init(kb **collection, char *file, char *agent, int verbose, int differen
   collec->calc_priority = differential_priorities ? (compute_priority) : (base_priority);
   collec->tracking_resolutions = rip.tracking_resolutions;
   collec->subject_list = malloc(sizeof(tommy_array));
+  collec->prb_threshold = -1;
 
   collec->size = 0;
   collec->time = 1;
