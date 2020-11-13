@@ -5,6 +5,72 @@
 #include "alma_print.h"
 #include "alma_kb.h"
 
+void var_match_init(var_match_set *v) {
+  v->levels = 1;
+  v->match_levels = malloc(sizeof(*v->match_levels));
+  v->match_levels[0].count = 0;
+  v->match_levels[0].x = v->match_levels[0].y = NULL;
+}
+
+// Returns true if x is matched with y, or no match of x or y exists (which makes new match of them)
+int var_match_check(var_match_set *v, int depth, alma_variable *x, alma_variable *y) {
+  // Search existing level of depth
+  if (depth < v->levels) {
+    for (int i = 0; i < v->match_levels[depth].count; i++) {
+      if (x->id == v->match_levels[depth].x[i] && y->id == v->match_levels[depth].y[i])
+        return 1;
+      else if ((x->id == v->match_levels[depth].x[i] && y->id != v->match_levels[depth].y[i]) || (x->id != v->match_levels[depth].x[i] && y->id == v->match_levels[depth].y[i]))
+        return 0;
+    }
+    var_match_add(v, depth, x, y);
+    return 1;
+  }
+  // New level of depth, increase match levels
+  else if (depth == v->levels+1) {
+    var_match_new_level(v);
+    var_match_add(v, depth, x, y);
+    return 1;
+  }
+  return 0;
+}
+
+void var_match_new_level(var_match_set *v) {
+  v->levels++;
+  v->match_levels = realloc(v->match_levels, sizeof(*v->match_levels) * v->levels);
+  v->match_levels[v->levels-1].count = 0;
+  v->match_levels[v->levels-1].x = v->match_levels[v->levels-1].y = NULL;
+}
+
+void var_match_add(var_match_set *v, int depth, alma_variable *x, alma_variable *y) {
+  v->match_levels[depth].count++;
+  v->match_levels[depth].x = realloc(v->match_levels[depth].x, sizeof(*v->match_levels[depth].x) * v->match_levels[depth].count);
+  v->match_levels[depth].x[v->match_levels[depth].count - 1] = x->id;
+  v->match_levels[depth].y = realloc(v->match_levels[depth].y, sizeof(*v->match_levels[depth].y) * v->match_levels[depth].count);
+  v->match_levels[depth].y[v->match_levels[depth].count - 1] = y->id;
+}
+
+/*static void print_matches(var_match_set *v) {
+  for (int i = 0; i < v->levels; i++) {
+    printf("Level %d:\n", i);
+    if ( v->match_levels[i].count == 0)
+      printf("None\n");
+    for (int j = 0; j < v->match_levels[i].count; j++) {
+      printf("%lld, %lld\n", v->match_levels[i].x[j], v->match_levels[i].y[j]);
+    }
+  }
+}*/
+
+// Function to call when short-circuiting function using them, to properly free var_matching instance
+int release_matches(var_match_set *v, int retval) {
+  //print_matches(v);
+  for (int i = 0; i < v->levels; i++) {
+    free(v->match_levels[i].x);
+    free(v->match_levels[i].y);
+  }
+  free(v->match_levels);
+  return retval;
+}
+
 
 // Returns term variable is bound to if it's in the bindings, null otherwise
 alma_term* bindings_contain(binding_list *theta, alma_variable *var) {

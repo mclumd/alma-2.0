@@ -3,6 +3,23 @@
 
 #include "alma_formula.h"
 
+typedef struct var_matching {
+  int count;
+  long long *x;
+  long long *y;
+} var_matching;
+
+typedef struct var_match_set {
+  int levels;
+  var_matching *match_levels;
+} var_match_set;
+
+void var_match_init(var_match_set *v);
+int var_match_check(var_match_set *v, int depth, alma_variable *x, alma_variable *y);
+void var_match_new_level(var_match_set *v);
+void var_match_add(var_match_set *v, int depth, alma_variable *x, alma_variable *y);
+int release_matches(var_match_set *v, int retval);
+
 typedef struct binding {
   alma_variable *var;
   alma_term *term;
@@ -18,7 +35,6 @@ void subst(binding_list *theta, alma_term *term);
 int unify(alma_term *x, alma_term *y, binding_list *theta);
 int unify_quotes(alma_quote *x, alma_quote *y, binding_list *theta);
 int pred_unify(alma_function *x, alma_function *y, binding_list *theta);
-
 
 void add_binding(binding_list *theta, alma_variable *var, alma_term *term, int copy_term);
 //void print_bindings(binding_list *theta, kb_str *buf);
