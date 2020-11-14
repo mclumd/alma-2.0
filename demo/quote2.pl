@@ -11,4 +11,10 @@ true(bar).
 true(quote(test)).
 true(quote(test)).
 true(quote(test)).
-true(quote(a), not(b)).
+
+true(quote(foo(A)), not(b)).
+true(quote(foo(X)), not(X)).
+true(quote(foo(X)), not(Y)).
+
+foo(quote(or(a(X), a(quote(b(quote(c(X)))))))).
+foo(quote(or(a(Z), a(quote(b(quote(c(Y)))))))).

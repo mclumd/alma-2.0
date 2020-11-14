@@ -51,19 +51,22 @@ typedef struct name_record {
   };
 } name_record;
 
-static void find_variable_names(tommy_array *list, alma_term *term, int id_from_name) {
+static void find_clause_variable_names(tommy_array *list, clause *c, int id_from_name, int quote_level);
+static void set_variable_ids_rec(tommy_array *list, clause *c, int id_from_name, int quote_level, kb *collection);
+
+static void find_variable_names(tommy_array *list, alma_term *term, int id_from_name, int quote_level) {
   if (term->type == VARIABLE) {
     for (tommy_size_t i = 0; i < tommy_array_size(list); i++) {
       name_record *rec = tommy_array_get(list, i);
       if (id_from_name) {
-        if (strcmp(term->variable->name, rec->name) == 0)
+        if (strcmp(term->variable->name, rec->name) == 0 && rec->level == quote_level)
           return;
       }
-      else if (term->variable->id == rec->id)
+      else if (term->variable->id == rec->id && rec->level == quote_level)
         return;
     }
     name_record *new_rec = malloc(sizeof(*new_rec));
-    // new_rec->level =
+    new_rec->level = quote_level;
     if (id_from_name)
       new_rec->name = term->variable->name;
     else
@@ -73,32 +76,52 @@ static void find_variable_names(tommy_array *list, alma_term *term, int id_from_
   }
   else if (term->type == FUNCTION) {
     for (int i = 0; i < term->function->term_count; i++)
-      find_variable_names(list, term->function->terms+i, id_from_name);
+      find_variable_names(list, term->function->terms+i, id_from_name, quote_level);
   }
   else {
-    // TODO quote case
+    if (term->quote->type == CLAUSE)
+      find_clause_variable_names(list, term->quote->clause_quote, id_from_name, quote_level+1);
   }
 }
 
-static void set_variable_names(tommy_array *list, alma_term *term, int id_from_name, kb *collection) {
+static void set_variable_names(tommy_array *list, alma_term *term, int id_from_name, int quote_level, kb *collection) {
   if (term->type == VARIABLE) {
     for (tommy_size_t i = 0; i < tommy_array_size(list); i++) {
       name_record *rec = tommy_array_get(list, i);
       if (id_from_name) {
-        if (strcmp(term->variable->name, rec->name) == 0)
+        if (strcmp(term->variable->name, rec->name) == 0 && rec->level == quote_level)
           term->variable->id = collection->variable_id_count + i;
       }
-      else if (term->variable->id == rec->id)
+      else if (term->variable->id == rec->id && rec->level == quote_level)
         term->variable->id = collection->variable_id_count + i;
     }
   }
   else if (term->type == FUNCTION) {
     for (int i = 0; i < term->function->term_count; i++)
-      set_variable_names(list, term->function->terms+i, id_from_name, collection);
+      set_variable_names(list, term->function->terms+i, id_from_name, quote_level, collection);
   }
   else {
-    // TODO quote case
+    if (term->quote->type == CLAUSE)
+      set_variable_ids_rec(list, term->quote->clause_quote, id_from_name, quote_level+1, collection);
   }
+}
+
+static void find_clause_variable_names(tommy_array *list, clause *c, int id_from_name, int quote_level) {
+  for (int i = 0; i < c->pos_count; i++)
+    for (int j = 0; j < c->pos_lits[i]->term_count; j++)
+      find_variable_names(list, c->pos_lits[i]->terms+j, id_from_name, quote_level);
+  for (int i = 0; i < c->neg_count; i++)
+    for (int j = 0; j < c->neg_lits[i]->term_count; j++)
+      find_variable_names(list, c->neg_lits[i]->terms+j, id_from_name, quote_level);
+}
+
+static void set_variable_ids_rec(tommy_array *list, clause *c, int id_from_name, int quote_level, kb *collection) {
+    for (int i = 0; i < c->pos_count; i++)
+      for (int j = 0; j < c->pos_lits[i]->term_count; j++)
+        set_variable_names(list, c->pos_lits[i]->terms+j, id_from_name, quote_level, collection);
+    for (int i = 0; i < c->neg_count; i++)
+      for (int j = 0; j < c->neg_lits[i]->term_count; j++)
+        set_variable_names(list, c->neg_lits[i]->terms+j, id_from_name, quote_level, collection);
 }
 
 // Given a clause, assign the ID fields of each variable
@@ -110,24 +133,14 @@ void set_variable_ids(clause *c, int id_from_name, binding_list *bs_bindings, kb
   tommy_array records;
   tommy_array_init(&records);
 
-  for (int i = 0; i < c->pos_count; i++)
-    for (int j = 0; j < c->pos_lits[i]->term_count; j++)
-      find_variable_names(&records, c->pos_lits[i]->terms+j, id_from_name);
-  for (int i = 0; i < c->neg_count; i++)
-    for (int j = 0; j < c->neg_lits[i]->term_count; j++)
-      find_variable_names(&records, c->neg_lits[i]->terms+j, id_from_name);
-
-  for (int i = 0; i < c->pos_count; i++)
-    for (int j = 0; j < c->pos_lits[i]->term_count; j++)
-      set_variable_names(&records, c->pos_lits[i]->terms+j, id_from_name, collection);
-  for (int i = 0; i < c->neg_count; i++)
-    for (int j = 0; j < c->neg_lits[i]->term_count; j++)
-      set_variable_names(&records, c->neg_lits[i]->terms+j, id_from_name, collection);
+  find_clause_variable_names(&records, c, id_from_name, 0);
+  set_variable_ids_rec(&records, c, id_from_name, 0, collection);
 
   // If bindings for a backsearch have been passed in, update variable names for them as well
   if (bs_bindings)
     for (int i = 0; i < bs_bindings->num_bindings; i++)
-      set_variable_names(&records, bs_bindings->list[i].term, id_from_name, collection);
+      // TODO: eventually needs to get quote_level out based on binding?
+      set_variable_names(&records, bs_bindings->list[i].term, id_from_name, 0, collection);
 
   collection->variable_id_count += tommy_array_size(&records);
   for (int i = 0; i < tommy_array_size(&records); i++)
@@ -402,17 +415,13 @@ static alma_function* literal_by_name(clause *c, char *name, int pos) {
 
 // Returns 0 if variable pair respects x and y matchings in matches arg outside of quotes
 static int variables_differ(alma_variable *x, alma_variable *y, var_match_set *matches, int quote_level) {
-  if (quote_level == 0) {
-    return !var_match_check(matches, quote_level, x, y);
-  }
-  else
-    return strcmp(x->name, y->name) != 0;
+  return !var_match_check(matches, quote_level, x, y);
 }
 
 static int functions_differ(alma_function *x, alma_function *y, var_match_set *matches, int quote_level);
 
-// Returns 0 if functions are equal while respecting x and y matchings based on matches arg; otherwise returns 1
-// Pairs of variables quasiquoted to escape quotation must match according to var_matching arg
+// Returns 0 if quotation terms are equal while respecting x and y matchings based on matches arg; otherwise returns 1
+// Pairs of variables according to var_match_set arg corresponding to their level of quotation
 static int quotes_differ(alma_quote *x, alma_quote *y, var_match_set *matches, int quote_level) {
   if (x->type == y->type) {
     if (x->type == SENTENCE) {
@@ -424,10 +433,10 @@ static int quotes_differ(alma_quote *x, alma_quote *y, var_match_set *matches, i
       if (c_x->pos_count != c_y->pos_count || c_x->neg_count != c_y->neg_count)
         return 1;
       for (int i = 0; i < c_x->pos_count; i++)
-        if (functions_differ(c_x->pos_lits[i], c_y->pos_lits[i], matches, quote_level+1))
+        if (functions_differ(c_x->pos_lits[i], c_y->pos_lits[i], matches, quote_level))
           return 1;
       for (int i = 0; i < c_x->neg_count; i++)
-        if (functions_differ(c_x->neg_lits[i], c_y->neg_lits[i], matches, quote_level+1))
+        if (functions_differ(c_x->neg_lits[i], c_y->neg_lits[i], matches, quote_level))
           return 1;
     }
     return 0;
@@ -443,7 +452,7 @@ static int functions_differ(alma_function *x, alma_function *y, var_match_set *m
       if (x->terms[i].type != y->terms[i].type
           || (x->terms[i].type == VARIABLE && variables_differ(x->terms[i].variable, y->terms[i].variable, matches, quote_level))
           || (x->terms[i].type == FUNCTION && functions_differ(x->terms[i].function, y->terms[i].function, matches, quote_level))
-          || (x->terms[i].type == QUOTE && quotes_differ(x->terms[i].quote, y->terms[i].quote, matches, quote_level)))
+          || (x->terms[i].type == QUOTE && quotes_differ(x->terms[i].quote, y->terms[i].quote, matches, quote_level+1)))
         return 1;
 
     // All arguments compared as equal; return 0
