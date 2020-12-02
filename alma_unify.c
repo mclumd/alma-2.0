@@ -50,7 +50,7 @@ void var_match_add(var_match_set *v, int depth, alma_variable *x, alma_variable 
   v->match_levels[depth].y[v->match_levels[depth].count - 1] = y->id;
 }
 
-static void print_matches(var_match_set *v) {
+/*static void print_matches(var_match_set *v) {
   for (int i = 0; i < v->levels; i++) {
     printf("Level %d:\n", i);
     if ( v->match_levels[i].count == 0)
@@ -59,11 +59,11 @@ static void print_matches(var_match_set *v) {
       printf("%lld, %lld\n", v->match_levels[i].x[j], v->match_levels[i].y[j]);
     }
   }
-}
+}*/
 
 // Function to call when short-circuiting function using them, to properly free var_matching instance
 int release_matches(var_match_set *v, int retval) {
-  print_matches(v);
+  //print_matches(v);
   for (int i = 0; i < v->levels; i++) {
     free(v->match_levels[i].x);
     free(v->match_levels[i].y);

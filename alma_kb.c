@@ -44,108 +44,169 @@ static void make_clause_rec(alma_node *node, clause *c) {
 
 // Struct for a tracking name/ID record; for purposes of managing variable names/IDs
 typedef struct name_record {
-  int level;
+  long long new_id;
   union {
-    long long id;
+    long long old_id;
     char *name;
   };
 } name_record;
 
-static void find_clause_variable_names(tommy_array *list, clause *c, int id_from_name, int quote_level);
-static void set_variable_ids_rec(tommy_array *list, clause *c, int id_from_name, int quote_level, kb *collection);
+// Tree for recursively tracking name_records across different quotations and levels of quotation
+// Next_level list represents each quotation nested further inside of the clause
+typedef struct record_tree {
+  int quote_level;
 
-static void find_variable_names(tommy_array *list, alma_term *term, int id_from_name, int quote_level) {
+  int next_level_count;
+  struct record_tree **next_level;
+
+  int variable_count;
+  name_record **variables;
+
+  // May need parent pointer to trace back for quasi-quote
+} record_tree;
+
+static void init_record_tree(record_tree *records, int quote_level) {
+  records->quote_level = quote_level;
+  records->next_level_count = 0;
+  records->next_level = NULL;
+  records->variable_count = 0;
+  records->variables = NULL;
+}
+
+static void free_record_tree(record_tree *records) {
+  for (int i = 0; i < records->next_level_count; i++) {
+    free_record_tree(records->next_level[i]);
+    free(records->next_level[i]);
+  }
+  free(records->next_level);
+
+  for (int i = 0; i < records->variable_count; i++)
+    free(records->variables[i]);
+  free(records->variables);
+}
+
+static name_record* records_retrieve(record_tree *records, int quote_level, long long query_id) {
+  if (quote_level == records->quote_level) {
+    for (int i = 0; i < records->variable_count; i++)
+      if (records->variables[i]->old_id == query_id)
+        return records->variables[i];
+  }
+  // Otherwise, records->quote_level is less than query quote level
+  else {
+    for (int i = 0; i < records->next_level_count; i++) {
+      name_record *rec = records_retrieve(records->next_level[i], quote_level, query_id);
+      if (rec != NULL)
+        return rec;
+    }
+  }
+  return NULL;
+}
+
+
+static void set_variable_ids_rec(record_tree *records, clause *c, int id_from_name, int quote_level, kb *collection);
+
+static void set_variable_names(record_tree *records, alma_term *term, int id_from_name, int quote_level, kb *collection) {
   if (term->type == VARIABLE) {
-    for (tommy_size_t i = 0; i < tommy_array_size(list); i++) {
-      name_record *rec = tommy_array_get(list, i);
-      if (id_from_name) {
-        if (strcmp(term->variable->name, rec->name) == 0 && rec->level == quote_level)
-          return;
-      }
-      else if (term->variable->id == rec->id && rec->level == quote_level)
+    // If a match for the variable is found in the record tree, set ID using new field
+    for (int i = 0; i < records->variable_count; i++) {
+      name_record *rec = records->variables[i];
+      if ((!id_from_name && term->variable->id == rec->old_id) ||
+          (id_from_name && strcmp(term->variable->name, rec->name) == 0)) {
+        term->variable->id = rec->new_id;
         return;
-    }
-    name_record *new_rec = malloc(sizeof(*new_rec));
-    new_rec->level = quote_level;
-    if (id_from_name)
-      new_rec->name = term->variable->name;
-    else
-      new_rec->id = term->variable->id;
-    tommy_array_insert(list, new_rec);
-
-  }
-  else if (term->type == FUNCTION) {
-    for (int i = 0; i < term->function->term_count; i++)
-      find_variable_names(list, term->function->terms+i, id_from_name, quote_level);
-  }
-  else {
-    if (term->quote->type == CLAUSE)
-      find_clause_variable_names(list, term->quote->clause_quote, id_from_name, quote_level+1);
-  }
-}
-
-static void set_variable_names(tommy_array *list, alma_term *term, int id_from_name, int quote_level, kb *collection) {
-  if (term->type == VARIABLE) {
-    for (tommy_size_t i = 0; i < tommy_array_size(list); i++) {
-      name_record *rec = tommy_array_get(list, i);
-      if (id_from_name) {
-        if (strcmp(term->variable->name, rec->name) == 0 && rec->level == quote_level)
-          term->variable->id = collection->variable_id_count + i;
       }
-      else if (term->variable->id == rec->id && rec->level == quote_level)
-        term->variable->id = collection->variable_id_count + i;
     }
+    // If did not find match from records, create a new one
+    records->variable_count++;
+    records->variables = realloc(records->variables, sizeof(*records->variables) * records->variable_count);
+    records->variables[records->variable_count-1] = malloc(sizeof(*records->variables[records->variable_count-1]));
+    if (id_from_name)
+      records->variables[records->variable_count-1]->name = term->variable->name;
+    else
+      records->variables[records->variable_count-1]->old_id = term->variable->id;
+    term->variable->id = records->variables[records->variable_count-1]->new_id = collection->variable_id_count;
+    collection->variable_id_count++;
   }
   else if (term->type == FUNCTION) {
     for (int i = 0; i < term->function->term_count; i++)
-      set_variable_names(list, term->function->terms+i, id_from_name, quote_level, collection);
+      set_variable_names(records, term->function->terms+i, id_from_name, quote_level, collection);
   }
   else {
-    if (term->quote->type == CLAUSE)
-      set_variable_ids_rec(list, term->quote->clause_quote, id_from_name, quote_level+1, collection);
+    if (term->quote->type == CLAUSE) {
+      // Create new child record_tree for further nested quotation
+      records->next_level_count++;
+      records->next_level = realloc(records->next_level, sizeof(*records->next_level) * records->next_level_count);
+      records->next_level[records->next_level_count-1] = malloc(sizeof(*records->next_level[records->next_level_count-1]));
+      init_record_tree(records->next_level[records->next_level_count-1], quote_level+1);
+
+      set_variable_ids_rec(records->next_level[records->next_level_count-1], term->quote->clause_quote, id_from_name, quote_level+1, collection);
+    }
   }
+  // Quasi-quote case TODO when added
 }
 
-static void find_clause_variable_names(tommy_array *list, clause *c, int id_from_name, int quote_level) {
+static void set_variable_ids_rec(record_tree *records, clause *c, int id_from_name, int quote_level, kb *collection) {
   for (int i = 0; i < c->pos_count; i++)
     for (int j = 0; j < c->pos_lits[i]->term_count; j++)
-      find_variable_names(list, c->pos_lits[i]->terms+j, id_from_name, quote_level);
+      set_variable_names(records, c->pos_lits[i]->terms+j, id_from_name, quote_level, collection);
   for (int i = 0; i < c->neg_count; i++)
     for (int j = 0; j < c->neg_lits[i]->term_count; j++)
-      find_variable_names(list, c->neg_lits[i]->terms+j, id_from_name, quote_level);
+      set_variable_names(records, c->neg_lits[i]->terms+j, id_from_name, quote_level, collection);
 }
 
-static void set_variable_ids_rec(tommy_array *list, clause *c, int id_from_name, int quote_level, kb *collection) {
-    for (int i = 0; i < c->pos_count; i++)
-      for (int j = 0; j < c->pos_lits[i]->term_count; j++)
-        set_variable_names(list, c->pos_lits[i]->terms+j, id_from_name, quote_level, collection);
-    for (int i = 0; i < c->neg_count; i++)
-      for (int j = 0; j < c->neg_lits[i]->term_count; j++)
-        set_variable_names(list, c->neg_lits[i]->terms+j, id_from_name, quote_level, collection);
+
+static void set_clause_from_records(record_tree *records, clause *c, int quote_level, kb *collection);
+
+// Use existing assembled record_tree to update ID values from old_id to new_id in the argument term
+static void set_term_from_records(record_tree *records, alma_term *term, int quote_level, kb *collection) {
+  if (term->type == VARIABLE) {
+    name_record *rec = records_retrieve(records, quote_level, term->variable->id);
+    if (rec != NULL)
+      term->variable->id = rec->new_id;
+  }
+  else if (term->type == FUNCTION) {
+    for (int i = 0; i < term->function->term_count; i++)
+      set_term_from_records(records, term->function->terms+i, quote_level, collection);
+  }
+  else {
+    if (term->quote->type == CLAUSE) {
+      set_clause_from_records(records, term->quote->clause_quote, quote_level+1, collection);
+    }
+  }
+}
+
+static void set_clause_from_records(record_tree *records, clause *c, int quote_level, kb *collection) {
+  for (int i = 0; i < c->pos_count; i++)
+    for (int j = 0; j < c->pos_lits[i]->term_count; j++)
+      set_term_from_records(records, c->pos_lits[i]->terms+j, quote_level, collection);
+  for (int i = 0; i < c->neg_count; i++)
+    for (int j = 0; j < c->neg_lits[i]->term_count; j++)
+      set_term_from_records(records, c->neg_lits[i]->terms+j, quote_level, collection);
 }
 
 // Given a clause, assign the ID fields of each variable
 // Two cases:
 // 1) If clause is result of resolution, replace existing matching IDs with fresh values each
+// id_from_name is false in this case; distinct variables are tracked using ID given names may not be unique
 // 2) Otherwise, give variables with the same name matching IDs
+// id_from_name is true in this case; distinct variables are tracked by name
 // Fresh ID values drawn from variable_id_count global variable
 void set_variable_ids(clause *c, int id_from_name, binding_list *bs_bindings, kb *collection) {
-  tommy_array records;
-  tommy_array_init(&records);
+  record_tree *records;
+  records = malloc(sizeof(*records));
+  init_record_tree(records, 0);
 
-  find_clause_variable_names(&records, c, id_from_name, 0);
-  set_variable_ids_rec(&records, c, id_from_name, 0, collection);
+  set_variable_ids_rec(records, c, id_from_name, 0, collection);
 
   // If bindings for a backsearch have been passed in, update variable names for them as well
+  // Id_from_name always false in this case; omits that parameter
   if (bs_bindings)
     for (int i = 0; i < bs_bindings->num_bindings; i++)
       // TODO: eventually needs to get quote_level out based on binding?
-      set_variable_names(&records, bs_bindings->list[i].term, id_from_name, 0, collection);
+      set_term_from_records(records, bs_bindings->list[i].term, 0, collection);
 
-  collection->variable_id_count += tommy_array_size(&records);
-  for (int i = 0; i < tommy_array_size(&records); i++)
-    free(tommy_array_get(&records, i));
-  tommy_array_done(&records);
+  free_record_tree(records);
+  free(records);
 }
 
 static void init_ordering_rec(fif_info *info, alma_node *node, int *next, int *pos, int *neg) {

@@ -18,3 +18,6 @@ true(quote(foo(X)), not(Y)).
 
 foo(quote(or(a(X), a(quote(b(quote(c(X)))))))).
 foo(quote(or(a(Z), a(quote(b(quote(c(Y)))))))).
+
+test(quote(or(foo(X), bar(quote(secondlevel(X, quote(thirdlevel(X))))))),
+     quote(or(foo(X), bar(quote(secondlevel(X, quote(thirdlevel(X)))))))).
