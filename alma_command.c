@@ -103,7 +103,7 @@ void kb_init(kb **collection, char *file, char *agent, int verbose, kb_str *buf,
     int timelen = strlen(time)-1;
     for (int idx = 0; idx < timelen; idx++)
       if (time[idx] == ' ' || time[idx] == ':')
-	time[idx] = '-';
+        time[idx] = '-';
     int agentlen = agent != NULL ? strlen(agent) : 0;
     char *logname = malloc(4 + agentlen + 1 + timelen + 9);
     strcpy(logname, "alma");
@@ -112,7 +112,7 @@ void kb_init(kb **collection, char *file, char *agent, int verbose, kb_str *buf,
     logname[4+agentlen] = '-';
     strncpy(logname+5+agentlen, time, 24);
     strcpy(logname+5+agentlen+timelen, "-log.txt");
-    
+
     collec->almalog = fopen(logname, "w");
     free(logname);
   } else {
@@ -171,7 +171,7 @@ void kb_step(kb *collection, kb_str *buf) {
     tee_alt("-a: Idling...\n", collection, buf);
 }
 
-void kb_print(kb *collection, kb_str *buf) { 
+void kb_print(kb *collection, kb_str *buf) {
   //  char temp_buf[1000];
   //  tee_alt("in kb_print:\n",buf);
 
