@@ -1430,7 +1430,7 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
             if (bs) {
               clause *answer = malloc(sizeof(*answer));
               memcpy(answer, bs->target, sizeof(*answer));
-              if (bs->target->pos_count == 1){
+              if (bs->target->pos_count == 1) {
                 answer->pos_lits = malloc(sizeof(*answer->pos_lits));
                 answer->pos_lits[0] = malloc(sizeof(*answer->pos_lits[0]));
                 copy_alma_function(bs->target->pos_lits[0], answer->pos_lits[0]);
@@ -1444,6 +1444,7 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
                 for (int j = 0; j < answer->neg_lits[0]->term_count; j++)
                   subst(x_bindings, answer->neg_lits[0]->terms+j);
               }
+              set_variable_ids(answer, 0, NULL, collection);
 
               // TODO: parent setup for answer?
               tommy_array_insert(&collection->new_clauses, answer);

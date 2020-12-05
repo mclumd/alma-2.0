@@ -21,3 +21,8 @@ foo(quote(or(a(Z), a(quote(b(quote(c(Y)))))))).
 
 test(quote(or(foo(X), bar(quote(secondlevel(X, quote(thirdlevel(X))))))),
      quote(or(foo(X), bar(quote(secondlevel(X, quote(thirdlevel(X)))))))).
+
+if(a,
+   test2(quote(or(foo(X), bar(quote(secondlevel(X, quote(thirdlevel(X))))))),
+         quote(or(foo(X), bar(quote(secondlevel(X, quote(thirdlevel(X))))))))).
+a.
