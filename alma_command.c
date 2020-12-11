@@ -12,7 +12,7 @@ extern char logs_on;
 extern char python_mode;
 
 // Caller will need to free collection with kb_halt
-void kb_init(kb **collection, char *file, char *agent, int verbose, kb_str *buf, int logon) {
+void kb_init(kb **collection, char *file, char *agent, char *trialnum, int verbose, kb_str *buf, int logon) {
   // Allocate and initialize
   *collection = malloc(sizeof(**collection));
   kb *collec = *collection;
@@ -105,13 +105,17 @@ void kb_init(kb **collection, char *file, char *agent, int verbose, kb_str *buf,
       if (time[idx] == ' ' || time[idx] == ':')
 	time[idx] = '-';
     int agentlen = agent != NULL ? strlen(agent) : 0;
-    char *logname = malloc(4 + agentlen + 1 + timelen + 9);
+    int triallen = trialnum != NULL ? strlen(trialnum) : 0;
+    char *logname = malloc(4 + agentlen + 1 + triallen + 1 + timelen + 9);
     strcpy(logname, "alma");
     if (agent != NULL)
       strcpy(logname+4, agent);
     logname[4+agentlen] = '-';
-    strncpy(logname+5+agentlen, time, 24);
-    strcpy(logname+5+agentlen+timelen, "-log.txt");
+    if (trialnum != NULL)
+      strcpy(logname+4+agentlen+1,trialnum);
+    logname[4+agentlen+1+triallen] = '-';
+    strncpy(logname+6+agentlen+triallen, time, 24);
+    strcpy(logname+6+agentlen+triallen+timelen, "-log.txt");
     
     collec->almalog = fopen(logname, "w");
     free(logname);
