@@ -12,7 +12,7 @@ extern char logs_on;
 extern char python_mode;
 
 // Caller will need to free collection with kb_halt
-void kb_init(kb **collection, char *file, char *agent, char *trialnum, int verbose, kb_str *buf, int logon) {
+void kb_init(kb **collection, char *file, char *agent, char *trialnum, char *log_dir,  int verbose, kb_str *buf, int logon) {
   // Allocate and initialize
   *collection = malloc(sizeof(**collection));
   kb *collec = *collection;
@@ -106,16 +106,23 @@ void kb_init(kb **collection, char *file, char *agent, char *trialnum, int verbo
 	time[idx] = '-';
     int agentlen = agent != NULL ? strlen(agent) : 0;
     int triallen = trialnum != NULL ? strlen(trialnum) : 0;
-    char *logname = malloc(4 + agentlen + 1 + triallen + 1 + timelen + 9);
-    strcpy(logname, "alma");
+    int log_dir_len = log_dir != NULL ? strlen(log_dir) : 0;
+    char *logname = malloc(log_dir_len + 1 + 4 + agentlen + 1 + triallen + 1 + timelen + 9);
+    if (log_dir != NULL) {
+      strcpy(logname, log_dir);
+      logname[log_dir_len] = '/';
+      log_dir_len += 1;
+    }
+    
+    strcpy(logname+log_dir_len, "alma");
     if (agent != NULL)
-      strcpy(logname+4, agent);
-    logname[4+agentlen] = '-';
+      strcpy(logname+log_dir_len+4, agent);
+    logname[log_dir_len+4+agentlen] = '-';
     if (trialnum != NULL)
-      strcpy(logname+4+agentlen+1,trialnum);
-    logname[4+agentlen+1+triallen] = '-';
-    strncpy(logname+6+agentlen+triallen, time, 24);
-    strcpy(logname+6+agentlen+triallen+timelen, "-log.txt");
+      strcpy(logname+log_dir_len+4+agentlen+1,trialnum);
+    logname[log_dir_len+4+agentlen+1+triallen] = '-';
+    strncpy(logname+log_dir_len+6+agentlen+triallen, time, 24);
+    strcpy(logname+log_dir_len+6+agentlen+triallen+timelen, "-log.txt");
     
     collec->almalog = fopen(logname, "w");
     free(logname);

@@ -4,7 +4,7 @@
 #include "alma_kb.h"
 #include "alma_print.h"
 
-void kb_init(kb **collection, char *file, char *agent, char *trialnum, int verbose, kb_str *buf, int logon);
+void kb_init(kb **collection, char *file, char *agent, char *trialnum, char *log_dir, int verbose, kb_str *buf, int logon);
 void kb_step(kb *collection, kb_str *buf);
 void kb_print(kb *collection, kb_str *buf);
 void kb_halt(kb *collection);
