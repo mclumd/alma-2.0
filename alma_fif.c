@@ -30,8 +30,8 @@ void fif_task_map_init(kb *collection, clause *c) {
         fif_task *task = malloc(sizeof(*task));
         task->fif = c;
         task->bindings = malloc(sizeof(*task->bindings));
-        task->bindings->list = NULL;
-        task->bindings->num_bindings = task->premises_done = task->num_unified = 0;
+        init_bindings(task->bindings);
+        task->premises_done = task->num_unified = 0;
         task->unified_clauses = NULL;
         task->num_to_unify = 0;
         task->to_unify = NULL;
@@ -99,7 +99,7 @@ static clause* fif_conclude(kb *collection, fif_task *task, binding_list *bindin
   alma_function *conc_func = malloc(sizeof(*conc_func));
   copy_alma_function(task->fif->fif->conclusion, conc_func);
   for (int k = 0; k < conc_func->term_count; k++)
-    subst(bindings, conc_func->terms+k);
+    subst(bindings, conc_func->terms+k, 0);
 
   if (task->fif->fif->neg_conc) {
     conclusion->pos_count = 0;

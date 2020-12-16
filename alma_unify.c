@@ -7,19 +7,20 @@
 
 void var_match_init(var_match_set *v) {
   v->levels = 1;
-  v->match_levels = malloc(sizeof(*v->match_levels));
-  v->match_levels[0].count = 0;
-  v->match_levels[0].x = v->match_levels[0].y = NULL;
+  v->level_counts = malloc(sizeof(*v->level_counts));
+  v->level_counts[0] = 0;
+  v->matches = malloc(sizeof(*v->matches));
+  v->matches[0] = NULL;
 }
 
 // Returns true if x is matched with y, or no match of x or y exists (which makes new match of them)
 int var_match_check(var_match_set *v, int depth, alma_variable *x, alma_variable *y) {
   // Search existing level of depth
   if (depth < v->levels) {
-    for (int i = 0; i < v->match_levels[depth].count; i++) {
-      if (x->id == v->match_levels[depth].x[i] && y->id == v->match_levels[depth].y[i])
+    for (int i = 0; i < v->level_counts[depth]; i++) {
+      if (x->id == v->matches[depth][i].x && y->id == v->matches[depth][i].y)
         return 1;
-      else if ((x->id == v->match_levels[depth].x[i] && y->id != v->match_levels[depth].y[i]) || (x->id != v->match_levels[depth].x[i] && y->id == v->match_levels[depth].y[i]))
+      else if ((x->id == v->matches[depth][i].x && y->id != v->matches[depth][i].y) || (x->id != v->matches[depth][i].x && y->id == v->matches[depth][i].y))
         return 0;
     }
     var_match_add(v, depth, x, y);
@@ -37,26 +38,29 @@ int var_match_check(var_match_set *v, int depth, alma_variable *x, alma_variable
 
 void var_match_new_level(var_match_set *v) {
   v->levels++;
-  v->match_levels = realloc(v->match_levels, sizeof(*v->match_levels) * v->levels);
-  v->match_levels[v->levels-1].count = 0;
-  v->match_levels[v->levels-1].x = v->match_levels[v->levels-1].y = NULL;
+  v->matches = realloc(v->matches, sizeof(*v->matches) * v->levels);
+  v->matches[v->levels-1] = NULL;
+  v->level_counts = realloc(v->level_counts, sizeof(*v->level_counts) * v->levels);
+  v->level_counts[v->levels-1] = 0;
 }
 
 void var_match_add(var_match_set *v, int depth, alma_variable *x, alma_variable *y) {
-  v->match_levels[depth].count++;
-  v->match_levels[depth].x = realloc(v->match_levels[depth].x, sizeof(*v->match_levels[depth].x) * v->match_levels[depth].count);
-  v->match_levels[depth].x[v->match_levels[depth].count - 1] = x->id;
-  v->match_levels[depth].y = realloc(v->match_levels[depth].y, sizeof(*v->match_levels[depth].y) * v->match_levels[depth].count);
-  v->match_levels[depth].y[v->match_levels[depth].count - 1] = y->id;
+  v->level_counts[depth]++;
+  v->matches[depth] = realloc(v->matches[depth], sizeof(*v->matches[depth]) * v->level_counts[depth]);
+  var_matching latest;
+  latest.x_parent = latest.y_parent = NULL;
+  latest.x = x->id;
+  latest.y = y->id;
+  v->matches[depth][v->level_counts[depth]-1] = latest;
 }
 
 /*static void print_matches(var_match_set *v) {
   for (int i = 0; i < v->levels; i++) {
     printf("Level %d:\n", i);
-    if ( v->match_levels[i].count == 0)
+    if (v->level_counts[i] == 0)
       printf("None\n");
-    for (int j = 0; j < v->match_levels[i].count; j++) {
-      printf("%lld, %lld\n", v->match_levels[i].x[j], v->match_levels[i].y[j]);
+    for (int j = 0; j < v->level_counts[i]; j++) {
+      printf("%lld, %lld\n", v->matches[i][j].x, v->matches[i][j].y);
     }
   }
 }*/
@@ -64,11 +68,10 @@ void var_match_add(var_match_set *v, int depth, alma_variable *x, alma_variable 
 // Function to call when short-circuiting function using them, to properly free var_matching instance
 int release_matches(var_match_set *v, int retval) {
   //print_matches(v);
-  for (int i = 0; i < v->levels; i++) {
-    free(v->match_levels[i].x);
-    free(v->match_levels[i].y);
-  }
-  free(v->match_levels);
+  for (int i = 0; i < v->levels; i++)
+    free(v->matches[i]);
+  free(v->matches);
+  free(v->level_counts);
   return retval;
 }
 
@@ -84,6 +87,16 @@ alma_term* bindings_contain(binding_list *theta, alma_variable *var) {
   return NULL;
 }
 
+static int occurs_check(binding_list *theta, alma_variable *var, alma_term *x);
+
+static int occurs_check_func(binding_list *theta, alma_variable *var, alma_function *func) {
+  for (int i = 0; i < func->term_count; i++) {
+    if (occurs_check(theta, var, func->terms + i))
+      return 1;
+  }
+  return 0;
+}
+
 static int occurs_check(binding_list *theta, alma_variable *var, alma_term *x) {
   // If x is a bound variable, occurs-check what it's bound to
   if (x->type == VARIABLE) {
@@ -95,21 +108,30 @@ static int occurs_check(binding_list *theta, alma_variable *var, alma_term *x) {
   }
   // In function case occurs-check each argument
   else if (x->type == FUNCTION) {
-    for (int i = 0; i < x->function->term_count; i++) {
-      if (occurs_check(theta, var, x->function->terms + i))
-        return 1;
-    }
+    return occurs_check_func(theta, var, x->function);
   }
-  else {
-    // Stubbed quote case; need to eventually check when quasiquotation is added, TODO
-    return 0;
+  else if (x->type == QUOTE && x->quote->type == CLAUSE) {
+    clause *c = x->quote->clause_quote;
+    for (int i = 0; i < c->pos_count; i++)
+      if (occurs_check_func(theta, var, c->pos_lits[i]))
+        return 1;
+    for (int i = 0; i < c->neg_count; i++)
+      if (occurs_check_func(theta, var, c->neg_lits[i]))
+        return 1;
   }
   return 0;
 }
 
+static void subst_func(binding_list *theta, alma_function *func, int level) {
+  for (int i = 0; i < func->term_count; i++)
+    subst(theta, func->terms+i, level);
+}
+
 // For a given term, replace variables in the binding list, replace with what they're bound to
-void subst(binding_list *theta, alma_term *term) {
+void subst(binding_list *theta, alma_term *term, int level) {
   if (term->type == VARIABLE) {
+    // TODO: must be generalized significantly based on quotation and quasi-quotation amounts
+
     alma_term *contained = bindings_contain(theta, term->variable);
     if (contained != NULL) {
       free(term->variable->name);
@@ -118,17 +140,20 @@ void subst(binding_list *theta, alma_term *term) {
     }
   }
   else if (term->type == FUNCTION) {
-    for (int i = 0; i < term->function->term_count; i++)
-      subst(theta, term->function->terms+i);
+    subst_func(theta, term->function, level);
   }
-  else {
-    // Stubbed quote case; need to eventually subst when quasiquotation is added, TODO
+  else if (term->type == QUOTE && term->quote->type == CLAUSE) {
+    clause *c = term->quote->clause_quote;
+    for (int i = 0; i < c->pos_count; i++)
+      subst_func(theta, c->pos_lits[i], level+1);
+    for (int i = 0; i < c->neg_count; i++)
+      subst_func(theta, c->neg_lits[i], level+1);
   }
 }
 
 static void cascade_substitution(binding_list *theta) {
   for (int i = 0; i < theta->num_bindings; i++)
-    subst(theta, theta->list[i].term);
+    subst(theta, theta->list[i].term, 0);
 
   // AIMA code examples process functions for a second time; may need to do here as well
 }
@@ -238,10 +263,20 @@ int pred_unify(alma_function *x, alma_function *y, binding_list *theta) {
 
 // Operations on bindings
 
-// Append new binding of var/term
-void add_binding(binding_list *theta, alma_variable *var, alma_term *term, int copy_term) {
+void init_bindings(binding_list *theta) {
+  theta->num_bindings = 0;
+  theta->list = NULL;
+  theta->quoted_var_matches = malloc(sizeof*(theta->quoted_var_matches));
+  var_match_init(theta->quoted_var_matches);
+}
+
+// Append new binding of var/term with additional fields used by quotaton as well
+static void add_binding_detailed(binding_list *theta, alma_variable *var, alma_term *term, int quote_lvl, int qq_lvl, void *parent, int copy_term) {
   theta->num_bindings++;
   theta->list = realloc(theta->list, sizeof(*theta->list) * theta->num_bindings);
+  theta->list[theta->num_bindings-1].full_quote_level = quote_lvl;
+  theta->list[theta->num_bindings-1].quasi_quote_level = qq_lvl;
+  theta->list[theta->num_bindings-1].term_parent = parent;
   theta->list[theta->num_bindings-1].var = malloc(sizeof(*var));
   copy_alma_var(var, theta->list[theta->num_bindings-1].var);
   if (copy_term) {
@@ -256,6 +291,11 @@ void add_binding(binding_list *theta, alma_variable *var, alma_term *term, int c
   cascade_substitution(theta);
 }
 
+// Append new binding of var/term
+void add_binding(binding_list *theta, alma_variable *var, alma_term *term, int copy_term) {
+  add_binding_detailed(theta, var, term, 0, 0, NULL, copy_term);
+}
+
 // Function to free binding block, after failure or success
 void cleanup_bindings(binding_list *theta) {
   for (int i = 0; i < theta->num_bindings; i++) {
@@ -265,6 +305,10 @@ void cleanup_bindings(binding_list *theta) {
     free(theta->list[i].term);
   }
   free(theta->list);
+
+  release_matches(theta->quoted_var_matches, 0);
+  free(theta->quoted_var_matches);
+
   free(theta);
 }
 
@@ -274,21 +318,34 @@ void copy_bindings(binding_list *dest, binding_list *src) {
   if (dest->num_bindings > 0) {
     dest->list = malloc(sizeof(*dest->list) * src->num_bindings);
     for (int i = 0; i < src->num_bindings; i++) {
+      dest->list[i].full_quote_level = src->list[i].full_quote_level;
+      dest->list[i].quasi_quote_level = src->list[i].quasi_quote_level;
       dest->list[i].var = malloc(sizeof(alma_variable));
       copy_alma_var(src->list[i].var, dest->list[i].var);
       dest->list[i].term = malloc(sizeof(alma_term));
       copy_alma_term(src->list[i].term, dest->list[i].term);
+      dest->list[i].term_parent = src->list[i].term_parent;
     }
   }
   else
     dest->list = NULL;
+  if (src->quoted_var_matches != NULL) {
+    dest->quoted_var_matches = malloc(sizeof(*dest->quoted_var_matches));
+    dest->quoted_var_matches->levels = src->quoted_var_matches->levels;
+    dest->quoted_var_matches->level_counts = malloc(sizeof(*dest->quoted_var_matches->level_counts) * dest->quoted_var_matches->levels);
+    memcpy(dest->quoted_var_matches->level_counts, src->quoted_var_matches->level_counts, dest->quoted_var_matches->levels);
+    dest->quoted_var_matches->matches = malloc(sizeof(*dest->quoted_var_matches->matches) * dest->quoted_var_matches->levels);
+    for (int i = 0; i < dest->quoted_var_matches->levels; i++) {
+      dest->quoted_var_matches->matches[i] = malloc(sizeof(*dest->quoted_var_matches->matches[i]) * dest->quoted_var_matches->level_counts[i]);
+      memcpy(dest->quoted_var_matches->matches[i], src->quoted_var_matches->matches[i], sizeof(*dest->quoted_var_matches->matches[i]) * dest->quoted_var_matches->level_counts[i]);
+    }
+  }
+  else
+    dest->quoted_var_matches = NULL;
 }
 
-void swap_bindings(binding_list *a, binding_list *b) {
-  binding *temp = a->list;
-  a->list = b->list;
-  b->list = temp;
-  int num_temp = a->num_bindings;
-  a->num_bindings = b->num_bindings;
-  b->num_bindings = num_temp;
+void swap_bindings(binding_list **a, binding_list **b) {
+  binding_list *temp = *a;
+  *a = *b;
+  *b = temp;
 }

@@ -31,7 +31,7 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *collection
   // Create copy and substitute based on bindings available
   alma_term *search_term = malloc(sizeof(*search_term));
   copy_alma_term(arg->terms, search_term);
-  subst(bindings, search_term);
+  subst(bindings, search_term, 0);
 
   alma_function *search = NULL;
   tommy_hashlin *map = &collection->pos_map;
@@ -85,7 +85,7 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *collection
         // Returning first match based at the moment
         if (pred_unify(search, lit, copy)) {
           if (kind != run_neg_int)
-            swap_bindings(bindings, copy);
+            swap_bindings(&bindings, &copy);
           cleanup_bindings(copy);
 
           if (kind == run_acquired) {
@@ -123,11 +123,11 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, binding_list *bi
   // Create copies and substitute based on bindings available
   alma_term *ancestor_copy = malloc(sizeof(*ancestor_copy));
   copy_alma_term(ancestor, ancestor_copy);
-  subst(bindings, ancestor_copy);
+  subst(bindings, ancestor_copy, 0);
 
   alma_term *descendant_copy = malloc(sizeof(*descendant_copy));
   copy_alma_term(descendant, descendant_copy);
-  subst(bindings, descendant_copy);
+  subst(bindings, descendant_copy, 0);
 
   int has_ancestor = 0;
   if ((ancestor_copy->type == FUNCTION || (ancestor_copy->type == QUOTE && ancestor_copy->quote->type == CLAUSE))
@@ -257,7 +257,7 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, binding_list *bi
         }
 
         if (success) {
-          swap_bindings(anc_bindings, bindings);
+          swap_bindings(&anc_bindings, &bindings);
           cleanup_bindings(anc_bindings);
           has_ancestor = 1;
           break;

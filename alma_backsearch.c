@@ -50,8 +50,7 @@ void backsearch_from_clause(kb *collection, clause *c) {
   tommy_array_insert(&bt->new_clauses, negated);
   tommy_array_init(&bt->new_clause_bindings);
   binding_list *negated_bindings = malloc(sizeof(*negated_bindings));
-  negated_bindings->list = NULL;
-  negated_bindings->num_bindings = 0;
+  init_bindings(negated_bindings);
   // Create initial bindings where each variable in negated target is present, but each term is set to NULL
   for (int i = 0; i < negated_lit->term_count; i++)
     collect_variables(negated_lit->terms+i, negated_bindings);

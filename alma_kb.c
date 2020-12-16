@@ -1140,7 +1140,7 @@ static void lits_copy(int count, alma_function **lits, alma_function **cmp, bind
       alma_function *litcopy = malloc(sizeof(*litcopy));
       copy_alma_function(lits[i], litcopy);
       for (int j = 0; j < litcopy->term_count; j++)
-        subst(mgu, litcopy->terms+j);
+        subst(mgu, litcopy->terms+j, 0);
       res_lits[*res_count] = litcopy;
       (*res_count)++;
     }
@@ -1315,7 +1315,7 @@ void distrust_recursive(kb *collection, clause *c, clause *parent, kb_str *buf) 
 
 static void binding_subst(binding_list *target, binding_list *theta) {
   for (int i = 0; i < target->num_bindings; i++)
-    subst(theta, target->list[i].term);
+    subst(theta, target->list[i].term, 0);
 }
 
 static binding_list* parent_binding_prepare(backsearch_task *bs, long parent_index, binding_list *theta) {
@@ -1343,8 +1343,7 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
       // Does not do resolution with a distrusted clause
       if (!is_distrusted(collection, current_task->x->index) && !is_distrusted(collection,  current_task->y->index)) {
         binding_list *theta = malloc(sizeof(*theta));
-        theta->list = NULL;
-        theta->num_bindings = 0;
+        init_bindings(theta);
         // Given a res_task, attempt unification
         if (pred_unify(current_task->pos, current_task->neg, theta)) {
           // If successful, create clause for result of resolution and add to new_clauses
@@ -1358,8 +1357,7 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
             if (x_bindings != NULL && y_bindings != NULL) {
               // Check that tracked bindings for unified pair are compatible/unifiable
               binding_list *parent_theta = malloc(sizeof(*parent_theta));
-              parent_theta->num_bindings = 0;
-              parent_theta->list = NULL;
+              init_bindings(parent_theta);
               int unify_fail = 0;
               for (int j = 0; j < x_bindings->num_bindings; j++) {
                 if (!unify(x_bindings->list[j].term, y_bindings->list[j].term, parent_theta)) {
@@ -1392,10 +1390,10 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
                 // Apply parent_theta to resolution result as well
                 for (int j = 0; j < res_result->pos_count; j++)
                   for (int k = 0; k < res_result->pos_lits[j]->term_count; k++)
-                    subst(parent_theta, res_result->pos_lits[j]->terms+k);
+                    subst(parent_theta, res_result->pos_lits[j]->terms+k, 0);
                 for (int j = 0; j < res_result->neg_count; j++)
                   for (int k = 0; k < res_result->neg_lits[j]->term_count; k++)
-                    subst(parent_theta, res_result->neg_lits[j]->terms+k);
+                    subst(parent_theta, res_result->neg_lits[j]->terms+k, 0);
 
                 cleanup_bindings(parent_theta);
               }
@@ -1435,14 +1433,14 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
                 answer->pos_lits[0] = malloc(sizeof(*answer->pos_lits[0]));
                 copy_alma_function(bs->target->pos_lits[0], answer->pos_lits[0]);
                 for (int j = 0; j < answer->pos_lits[0]->term_count; j++)
-                  subst(x_bindings, answer->pos_lits[0]->terms+j);
+                  subst(x_bindings, answer->pos_lits[0]->terms+j, 0);
               }
               else {
                 answer->neg_lits = malloc(sizeof(*answer->neg_lits));
                 answer->neg_lits[0] = malloc(sizeof(*answer->neg_lits[0]));
                 copy_alma_function(bs->target->neg_lits[0], answer->neg_lits[0]);
                 for (int j = 0; j < answer->neg_lits[0]->term_count; j++)
-                  subst(x_bindings, answer->neg_lits[0]->terms+j);
+                  subst(x_bindings, answer->neg_lits[0]->terms+j, 0);
               }
               set_variable_ids(answer, 0, NULL, collection);
 
