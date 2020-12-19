@@ -253,7 +253,7 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, binding_list *bi
                  && c->neg_count == ancestor_copy->quote->clause_quote->neg_count) {
             quote_holder->clause_quote = c;
             // Try unifying pair of quotes
-            success = unify_quotes(ancestor_copy->quote, quote_holder, anc_bindings);
+            success = quote_term_unify(ancestor_copy->quote, quote_holder, anc_bindings);
         }
 
         if (success) {
@@ -293,20 +293,20 @@ static int less_than(alma_term *x, alma_term *y, binding_list *bindings, kb *alm
   char *x_str;
   char *y_str;
   if (x->type == VARIABLE) {
-    alma_term *bound = bindings_contain(bindings, x->variable);
-    if (bound == NULL || bound->type != FUNCTION || bound->function->term_count != 0)
+    binding *res = bindings_contain(bindings, x->variable);
+    if (res == NULL || res->term->type != FUNCTION || res->term->function->term_count != 0)
       return 0;
-    x_str = bound->function->name;
+    x_str = res->term->function->name;
   }
   else if (x->type == FUNCTION && x->function->term_count == 0)
     x_str = x->function->name;
   else
     return 0;
   if (y->type == VARIABLE) {
-    alma_term *bound = bindings_contain(bindings, y->variable);
-    if (bound == NULL || bound->type != FUNCTION || bound->function->term_count != 0)
+    binding *res = bindings_contain(bindings, y->variable);
+    if (res == NULL || res->term->type != FUNCTION || res->term->function->term_count != 0)
       return 0;
-    y_str = bound->function->name;
+    y_str = res->term->function->name;
   }
   else if (y->type == FUNCTION && y->function->term_count == 0)
     y_str = y->function->name;
@@ -335,10 +335,10 @@ static int less_than(alma_term *x, alma_term *y, binding_list *bindings, kb *alm
 static int idx_to_form(alma_term *index_term, alma_term *result, binding_list *bindings, kb *alma) {
   char *idx_str;
   if (index_term->type == VARIABLE) {
-    alma_term *bound = bindings_contain(bindings, index_term->variable);
-    if (bound == NULL || bound->type != FUNCTION || bound->function->term_count != 0)
+    binding *res = bindings_contain(bindings, index_term->variable);
+    if (res == NULL || res->term->type != FUNCTION || res->term->function->term_count != 0)
       return 0;
-    idx_str = bound->function->name;
+    idx_str = res->term->function->name;
   }
   else if (index_term->type == FUNCTION && index_term->function->term_count == 0)
     idx_str = index_term->function->name;

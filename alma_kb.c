@@ -476,7 +476,7 @@ static alma_function* literal_by_name(clause *c, char *name, int pos) {
 
 // Returns 0 if variable pair respects x and y matchings in matches arg outside of quotes
 static int variables_differ(alma_variable *x, alma_variable *y, var_match_set *matches, int quote_level) {
-  return !var_match_check(matches, quote_level, x, y);
+  return !var_match_consistent(matches, quote_level, x, y);
 }
 
 static int functions_differ(alma_function *x, alma_function *y, var_match_set *matches, int quote_level);
@@ -1360,7 +1360,7 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
               init_bindings(parent_theta);
               int unify_fail = 0;
               for (int j = 0; j < x_bindings->num_bindings; j++) {
-                if (!unify(x_bindings->list[j].term, y_bindings->list[j].term, parent_theta)) {
+                if (!term_unify(x_bindings->list[j].term, y_bindings->list[j].term, parent_theta)) {
                   unify_fail = 1;
                   break;
                 }
