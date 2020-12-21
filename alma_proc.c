@@ -85,7 +85,7 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *collection
         // Returning first match based at the moment
         if (pred_unify(search, lit, copy)) {
           if (kind != run_neg_int)
-            swap_bindings(&bindings, &copy);
+            swap_bindings(bindings, copy);
           cleanup_bindings(copy);
 
           if (kind == run_acquired) {
@@ -257,7 +257,7 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, binding_list *bi
         }
 
         if (success) {
-          swap_bindings(&anc_bindings, &bindings);
+          swap_bindings(anc_bindings, bindings);
           cleanup_bindings(anc_bindings);
           has_ancestor = 1;
           break;

@@ -54,17 +54,6 @@ void var_match_add(var_match_set *v, int depth, alma_variable *x, alma_variable 
   v->matches[depth][v->level_counts[depth]-1] = latest;
 }
 
-/*static void print_matches(var_match_set *v) {
-  for (int i = 0; i < v->levels; i++) {
-    printf("Level %d:\n", i);
-    if (v->level_counts[i] == 0)
-      printf("None\n");
-    for (int j = 0; j < v->level_counts[i]; j++) {
-      printf("%lld, %lld\n", v->matches[i][j].x, v->matches[i][j].y);
-    }
-  }
-}*/
-
 // Function to call when short-circuiting function using them, to properly free var_matching instance
 int release_matches(var_match_set *v, int retval) {
   //print_matches(v);
@@ -397,8 +386,8 @@ void copy_bindings(binding_list *dest, binding_list *src) {
     dest->quoted_var_matches = NULL;
 }
 
-void swap_bindings(binding_list **a, binding_list **b) {
-  binding_list *temp = *a;
+void swap_bindings(binding_list *a, binding_list *b) {
+  binding_list temp = *a;
   *a = *b;
   *b = temp;
 }

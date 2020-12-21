@@ -1346,6 +1346,9 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
         init_bindings(theta);
         // Given a res_task, attempt unification
         if (pred_unify(current_task->pos, current_task->neg, theta)) {
+          // To debug
+          print_bindings(collection, theta, 1, buf);
+
           // If successful, create clause for result of resolution and add to new_clauses
           clause *res_result = malloc(sizeof(*res_result));
           resolve(current_task, theta, res_result);

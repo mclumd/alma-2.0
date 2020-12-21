@@ -50,9 +50,8 @@ int pred_unify(alma_function *x, alma_function *y, binding_list *theta);
 
 void init_bindings(binding_list *theta);
 void add_binding(binding_list *theta, alma_variable *var, alma_term *term, int copy_term);
-//void print_bindings(binding_list *theta, kb_str *buf);
 void cleanup_bindings(binding_list *theta);
 void copy_bindings(binding_list *dest, binding_list *src);
-void swap_bindings(binding_list **a, binding_list **b);
+void swap_bindings(binding_list *a, binding_list *b);
 
 #endif

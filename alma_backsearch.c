@@ -1,18 +1,33 @@
 #include <string.h>
 #include "alma_backsearch.h"
 
-static void collect_variables(alma_term *term, binding_list *b) {
+static void collect_variables(alma_term *term, binding_list *b, int quote_level, void *parent) {
+  // TODO needs eventual quasi-quote cases
   if (term->type == VARIABLE) {
     b->num_bindings++;
     b->list = realloc(b->list, sizeof(*b->list) * b->num_bindings);
     b->list[b->num_bindings-1].var = malloc(sizeof(alma_variable));
     copy_alma_var(term->variable, b->list[b->num_bindings-1].var);
+    b->list[b->num_bindings-1].var_quote_lvl = quote_level;
+    b->list[b->num_bindings-1].var_quasi_quote_lvl = 0;
     b->list[b->num_bindings-1].term = malloc(sizeof(alma_term));
+    b->list[b->num_bindings-1].term_quote_lvl = quote_level;
+    b->list[b->num_bindings-1].term_quasi_quote_lvl = 0;
     copy_alma_term(term, b->list[b->num_bindings-1].term);
+    b->list[b->num_bindings-1].term_parent = parent;
   }
-  else {
+  else if (term->type == FUNCTION) {
     for (int i = 0; i < term->function->term_count; i++)
-      collect_variables(term->function->terms+i, b);
+      collect_variables(term->function->terms+i, b, quote_level, parent);
+  }
+  else if (term->type == QUOTE && term->quote->type == CLAUSE) {
+    clause *c = term->quote->clause_quote;
+    for (int i = 0; i < c->pos_count; i++)
+      for (int j = 0; j < c->pos_lits[i]->term_count; j++)
+        collect_variables(c->pos_lits[i]->terms+j, b, quote_level+1, parent);
+    for (int i = 0; i < c->neg_count; i++)
+      for (int j = 0; j < c->neg_lits[i]->term_count; j++)
+        collect_variables(c->neg_lits[i]->terms+j, b, quote_level+1, parent);
   }
 }
 
@@ -26,7 +41,7 @@ void backsearch_from_clause(kb *collection, clause *c) {
   clause *negated = malloc(sizeof(*negated));
   memcpy(negated, c, sizeof(*negated));
   alma_function *negated_lit;
-  if (c->pos_count == 1){
+  if (c->pos_count == 1) {
     negated->neg_count = 1;
     negated->neg_lits = malloc(sizeof(*negated->neg_lits));
     negated_lit = negated->neg_lits[0] = malloc(sizeof(*negated->neg_lits[0]));
@@ -53,7 +68,7 @@ void backsearch_from_clause(kb *collection, clause *c) {
   init_bindings(negated_bindings);
   // Create initial bindings where each variable in negated target is present, but each term is set to NULL
   for (int i = 0; i < negated_lit->term_count; i++)
-    collect_variables(negated_lit->terms+i, negated_bindings);
+    collect_variables(negated_lit->terms+i, negated_bindings, 0, negated_lit);
   bt->target_vars = negated_bindings;
   tommy_array_insert(&bt->new_clause_bindings, negated_bindings);
 

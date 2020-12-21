@@ -175,12 +175,38 @@ void clause_print(kb *collection, clause *c, kb_str *buf) {
   //tee_alt(" (L%ld)", c->acquired);
 }
 
-void print_bindings(kb *collection, binding_list *theta, kb_str *buf) {
+void print_matches(kb *collection, var_match_set *v, kb_str *buf){
+  for (int i = 0; i < v->levels; i++) {
+    tee_alt("Level %d: ", collection, buf, i);
+    if (v->level_counts[i] == 0)
+      tee_alt("None\n", collection, buf);
+    for (int j = 0; j < v->level_counts[i]; j++) {
+      tee_alt("%lld + %lld", collection, buf, v->matches[i][j].x, v->matches[i][j].y);
+      if (j < v->level_counts[i]-1)
+        tee_alt(", ", collection, buf);
+      else
+        tee_alt("\n", collection, buf);
+    }
+  }
+}
+
+void print_bindings(kb *collection, binding_list *theta, int print_all, kb_str *buf) {
   for (int i = 0; i < theta->num_bindings; i++) {
-    tee_alt("%s%lld/", collection, buf, theta->list[i].var->name, theta->list[i].var->id);
+    tee_alt("%s%lld", collection, buf, theta->list[i].var->name, theta->list[i].var->id);
+    if (print_all) {
+      tee_alt(" (%d, %d)", collection, buf, theta->list[i].var_quote_lvl, theta->list[i].var_quasi_quote_lvl);
+    }
+    tee_alt(" / ", collection, buf);
     alma_term_print(collection, theta->list[i].term, buf);
+    if (print_all) {
+      tee_alt(" (%d, %d, 0x%p)", collection, buf, theta->list[i].term_quote_lvl, theta->list[i].term_quasi_quote_lvl, theta->list[i].term_parent);
+    }
     if (i < theta->num_bindings-1)
       tee_alt(", ", collection, buf);
+    if (print_all) {
+      tee_alt("\n", collection, buf);
+      print_matches(collection, theta->quoted_var_matches, buf);
+    }
   }
 }
 
@@ -241,14 +267,14 @@ int tee(char const *content, ...) {
   //  va_end(ap);
   return 37;
 
-  
+
   if (!python_mode) {
     vprintf(content, ap);
   } else {
     va_copy(copy_ap,ap);
     size = dest->limit - dest->size;
     bytes = vsnprintf(&(dest->buffer[dest->size]), size, content, copy_ap);
-    
+
     while (bytes == size) {
       dest->limit += 1000;
       dest->buffer = realloc(dest->buffer, dest->limit);
@@ -260,9 +286,9 @@ int tee(char const *content, ...) {
 
     va_end(copy_ap);
   }
-  
+
   va_end(ap);
-  
+
   if (logs_on) {
     va_start(ap, content);
     vfprintf(almalog, content, ap);

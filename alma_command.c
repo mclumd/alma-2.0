@@ -202,7 +202,7 @@ void kb_print(kb *collection, kb_str *buf) {
         binding_mapping *m = tommy_hashlin_search(&t->clause_bindings, bm_compare, &c->index, tommy_hash_u64(0, &c->index, sizeof(c->index)));
         if (m != NULL) {
           tee_alt(" (bindings: ", collection, buf);
-          print_bindings(collection, m->bindings, buf);
+          print_bindings(collection, m->bindings, 0, buf);
           tee_alt(")", collection, buf);
         }
         tee_alt("\n", collection, buf);
