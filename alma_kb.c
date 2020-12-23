@@ -1307,7 +1307,7 @@ void distrust_recursive(kb *collection, clause *c, clause *parent, kb_str *buf) 
   if (c->children != NULL) {
     for (int i = 0; i < c->children_count; i++) {
       if (!is_distrusted(collection, c->children[i]->index)) {
-	distrust_recursive(collection, c->children[i], parent, buf);
+        distrust_recursive(collection, c->children[i], parent, buf);
       }
     }
   }
@@ -1346,7 +1346,7 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
         init_bindings(theta);
         // Given a res_task, attempt unification
         if (pred_unify(current_task->pos, current_task->neg, theta)) {
-          // To debug
+          // Debug
           print_bindings(collection, theta, 1, buf);
 
           // If successful, create clause for result of resolution and add to new_clauses

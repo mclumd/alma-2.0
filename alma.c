@@ -65,7 +65,7 @@ int main(int argc, char **argv) {
 
   kb *alma_kb;
   kb_init(&alma_kb, file, agent, verbose, NULL, logs_on);
-  kb_print(alma_kb,NULL);
+  kb_print(alma_kb, NULL);
 
   if (run) {
     while (!alma_kb->idling) {
@@ -96,7 +96,7 @@ int main(int argc, char **argv) {
         }
         else if (strcmp(line, "print") == 0) {
 	  //	  tee_alt("ALMA %d print:\n",NULL,counter);
-          kb_print(alma_kb,NULL);
+          kb_print(alma_kb, NULL);
 	  fflush(stdout);
         }
         else if (strcmp(line, "halt") == 0) {

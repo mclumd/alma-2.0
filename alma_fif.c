@@ -1,6 +1,7 @@
 #include <string.h>
 #include "alma_fif.h"
 #include "alma_proc.h"
+#include "alma_print.h"
 
 // Given a new fif clause, initializes fif task mappings held by fif_tasks for each premise of c
 // Also places single fif_task into fif_task_mapping for first premise
@@ -98,6 +99,10 @@ static clause* fif_conclude(kb *collection, fif_task *task, binding_list *bindin
   // Using task's overall bindings, obtain proper conclusion predicate
   alma_function *conc_func = malloc(sizeof(*conc_func));
   copy_alma_function(task->fif->fif->conclusion, conc_func);
+
+  // Debug
+  print_bindings(collection, bindings, 1, NULL);
+
   for (int k = 0; k < conc_func->term_count; k++)
     subst(bindings, conc_func->terms+k, 0);
 

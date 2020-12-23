@@ -179,15 +179,21 @@ static int unify_var(alma_term *varterm, alma_term *x, void *var_parent, void *x
     // TODO: note this for now assumes no quasi-quotation
     if (var_quote_lvl > 0 && x_quote_lvl > 0 && x->type == VARIABLE) {
       // Variables which are from the same parent cannot be unified
-      if  (var_parent == x_parent)
+      if (var_parent == x_parent) {
+        // Debug
+        printf("Same parent for quoted vars %lld and %lld; unification failure\n\n", var->id, x->variable->id);
         return 0;
+      }
 
       // Check for match of var and x being consistent with existing matching
       int check = var_match_consistent(theta->quoted_var_matches, x_quote_lvl, x->variable, var);
       if (var_quote_lvl != x_quote_lvl)
         check = check && var_match_consistent(theta->quoted_var_matches, var_quote_lvl, var, x->variable);
-      if (!check)
+      if (!check) {
+        // Debug
+        printf("Var matching not consistent between %lld and %lld\n\n", var->id, x->variable->id);
         return 0;
+      }
     }
 
     add_binding_detailed(theta, var, var_quote_lvl, 0, x, x_quote_lvl, 0, x_parent, 1);
@@ -202,7 +208,7 @@ static int unify_quote_func(alma_function *x, alma_function *y, void *x_parent, 
     for (int i = 0; i < x->term_count; i++) {
       alma_term *x_t = x->terms+i;
       alma_term *y_t = y->terms+i;
-      if (x_t->type != y_t->type) {
+      if (x_t->type == y_t->type) {
         if (x_t->type == VARIABLE && !unify_var(x_t, y_t, x_parent, y_parent, x_quote_lvl, y_quote_lvl, theta))
           return 0;
         else if (x_t->type == FUNCTION && !unify_quote_func(x_t->function, y_t->function, x_parent, y_parent, x_quote_lvl, y_quote_lvl, theta))
@@ -210,6 +216,8 @@ static int unify_quote_func(alma_function *x, alma_function *y, void *x_parent, 
         else if (x_t->type == QUOTE && !unify_quotes(x_t->quote, y_t->quote, x_parent, y_parent, x_quote_lvl+1, y_quote_lvl+1, theta))
           return 0;
       }
+      else
+        return 0;
     }
     return 1;
   }

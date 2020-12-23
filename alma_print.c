@@ -199,14 +199,15 @@ void print_bindings(kb *collection, binding_list *theta, int print_all, kb_str *
     tee_alt(" / ", collection, buf);
     alma_term_print(collection, theta->list[i].term, buf);
     if (print_all) {
-      tee_alt(" (%d, %d, 0x%p)", collection, buf, theta->list[i].term_quote_lvl, theta->list[i].term_quasi_quote_lvl, theta->list[i].term_parent);
+      tee_alt(" (%d, %d, %p)", collection, buf, theta->list[i].term_quote_lvl, theta->list[i].term_quasi_quote_lvl, theta->list[i].term_parent);
     }
     if (i < theta->num_bindings-1)
       tee_alt(", ", collection, buf);
-    if (print_all) {
-      tee_alt("\n", collection, buf);
-      print_matches(collection, theta->quoted_var_matches, buf);
-    }
+  }
+  if (print_all) {
+    tee_alt("\n", collection, buf);
+    print_matches(collection, theta->quoted_var_matches, buf);
+    tee_alt("\n", collection, buf);
   }
 }
 
