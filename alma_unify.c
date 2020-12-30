@@ -18,9 +18,10 @@ int var_match_consistent(var_match_set *v, int depth, alma_variable *x, alma_var
   // Search existing level of depth
   if (depth < v->levels) {
     for (int i = 0; i < v->level_counts[depth]; i++) {
-      if (x->id == v->matches[depth][i].x && y->id == v->matches[depth][i].y)
+      if ((x->id == v->matches[depth][i].x && y->id == v->matches[depth][i].y) || (x->id == v->matches[depth][i].y && y->id == v->matches[depth][i].x))
         return 1;
-      else if ((x->id == v->matches[depth][i].x && y->id != v->matches[depth][i].y) || (x->id != v->matches[depth][i].x && y->id == v->matches[depth][i].y))
+      else if ((x->id == v->matches[depth][i].x && y->id != v->matches[depth][i].y) || (x->id != v->matches[depth][i].x && y->id == v->matches[depth][i].y)
+               || (x->id == v->matches[depth][i].y && y->id != v->matches[depth][i].x) || (x->id != v->matches[depth][i].y && y->id == v->matches[depth][i].x))
         return 0;
     }
     var_match_add(v, depth, x, y);
@@ -178,20 +179,20 @@ static int unify_var(alma_term *varterm, alma_term *x, void *var_parent, void *x
     // Cases to check for variables within quotes that don't escape
     // TODO: note this for now assumes no quasi-quotation
     if (var_quote_lvl > 0 && x_quote_lvl > 0 && x->type == VARIABLE) {
-      // Variables which are from the same parent cannot be unified
-      if (var_parent == x_parent) {
-        // Debug
-        printf("Same parent for quoted vars %lld and %lld; unification failure\n\n", var->id, x->variable->id);
-        return 0;
-      }
-
       // Check for match of var and x being consistent with existing matching
       int check = var_match_consistent(theta->quoted_var_matches, x_quote_lvl, x->variable, var);
       if (var_quote_lvl != x_quote_lvl)
-        check = check && var_match_consistent(theta->quoted_var_matches, var_quote_lvl, var, x->variable);
+        check = check && var_match_consistent(theta->quoted_var_matches, var_quote_lvl, x->variable, var);
       if (!check) {
         // Debug
-        printf("Var matching not consistent between %lld and %lld\n\n", var->id, x->variable->id);
+        printf("Var matching not consistent if matching %lld with %lld\n", var->id, x->variable->id);
+        return 0;
+      }
+
+      // Variables which are from the same parent cannot be unified
+      if (var_parent == x_parent) {
+        // Debug
+        printf("Same parent for quoted vars %lld and %lld; unification failure\n", var->id, x->variable->id);
         return 0;
       }
     }

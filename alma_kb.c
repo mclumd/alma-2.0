@@ -1344,11 +1344,10 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
       if (!is_distrusted(collection, current_task->x->index) && !is_distrusted(collection,  current_task->y->index)) {
         binding_list *theta = malloc(sizeof(*theta));
         init_bindings(theta);
+        // Debug
+        printf("Unifying %ld with %ld\n", current_task->x->index, current_task->y->index);
         // Given a res_task, attempt unification
         if (pred_unify(current_task->pos, current_task->neg, theta)) {
-          // Debug
-          print_bindings(collection, theta, 1, buf);
-
           // If successful, create clause for result of resolution and add to new_clauses
           clause *res_result = malloc(sizeof(*res_result));
           resolve(current_task, theta, res_result);
@@ -1475,13 +1474,15 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
               strcpy(contra_str+loc, ").");
 
               // Assert contra and distrusted
-	      clause *contra = assert_formula(collection, contra_str, 0, buf);
+	            clause *contra = assert_formula(collection, contra_str, 0, buf);
               free(contra_str);
               distrust_recursive(collection, current_task->x, contra, buf);
               distrust_recursive(collection, current_task->y, contra, buf);
             }
           }
         }
+        // Debug
+        print_bindings(collection, theta, 1, buf);
         cleanup:
         cleanup_bindings(theta);
       }
