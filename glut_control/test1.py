@@ -73,7 +73,7 @@ def train(explosion_steps=50, num_steps=500, numeric_bits=10, model_name="test1"
                 res_task_input = [x[:2] for x in res_tasks]
                 #network.train_batch(res_task_input, res_lits)
                 # the conditional below is just for debugging.
-                if idx % 500 == 0:   
+                if idx % 500 == 0:
                     network.save_batch(res_task_input, res_lits)
                 else:
                     network.save_batch(res_task_input, res_lits)
@@ -81,7 +81,7 @@ def train(explosion_steps=50, num_steps=500, numeric_bits=10, model_name="test1"
                 alma.set_priors_prb(alma_inst, priorities.flatten().tolist())
                 alma.prb_to_res_task(alma_inst)
             #alma.add(alma_inst, "distanceAt(a, {}, {}).".format(idx, idx))
-            if idx > 0 and idx % 500 == 0:
+            if idx > 0 and idx % 50 == 0:
                 print("Network has {} samples, {} of which are positive".format(len(network.ybuffer), network.ypos_count))
                 if network.ypos_count > (network.batch_size  / 2):
                     H = network.train_buffered_batch()
