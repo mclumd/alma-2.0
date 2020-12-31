@@ -584,7 +584,7 @@ void remove_fif_singleton_tasks(kb *collection, clause *c) {
 
 // Compare function to be used by tommy_hashlin_search for fif_mapping
 // compares string arg to conclude_name of fif_mapping
-int fifm_compare(const void *arg, const void*obj) {
+int fifm_compare(const void *arg, const void *obj) {
   return strcmp((const char*)arg, ((const fif_mapping*)obj)->conclude_name);
 }
 

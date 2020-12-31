@@ -368,7 +368,9 @@ static int idx_to_form(alma_term *index_term, alma_term *result, binding_list *b
     quoted->quote = malloc(sizeof(*quoted->quote));
     quoted->quote->type = CLAUSE;
     quoted->quote->clause_quote = quote_form;
-    add_binding(bindings, result->variable, quoted, 0);
+    // Within idx_to_form proc literal, index_term also can uniquely identify source of resulting binding
+    // Used as a proxy for the parent pointer to proc, instead of passing around further info
+    add_binding(bindings, result->variable, quoted, index_term, 0);
     return 1;
   }
   else

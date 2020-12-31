@@ -209,7 +209,8 @@ void print_bindings(kb *collection, binding_list *theta, int print_all, kb_str *
     }
   }
   if (print_all) {
-    tee_alt("\n", collection, buf);
+    if (theta->num_bindings > 0)
+      tee_alt("\n", collection, buf);
     print_matches(collection, theta->quoted_var_matches, buf);
     tee_alt("\n", collection, buf);
   }

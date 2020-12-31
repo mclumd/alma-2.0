@@ -49,7 +49,6 @@ void var_match_add(var_match_set *v, int depth, alma_variable *x, alma_variable 
   v->level_counts[depth]++;
   v->matches[depth] = realloc(v->matches[depth], sizeof(*v->matches[depth]) * v->level_counts[depth]);
   var_matching latest;
-  latest.x_parent = latest.y_parent = NULL;
   latest.x = x->id;
   latest.y = y->id;
   v->matches[depth][v->level_counts[depth]-1] = latest;
@@ -189,8 +188,8 @@ static int unify_var(alma_term *varterm, alma_term *x, void *var_parent, void *x
         return 0;
       }
 
-      // Variables which are from the same parent cannot be unified
-      if (var_parent == x_parent) {
+      // Variables which are from the same (non-null) parent cannot be unified
+      if (var_parent == x_parent && var_parent != NULL) {
         // Debug
         printf("Same parent for quoted vars %lld and %lld; unification failure\n", var->id, x->variable->id);
         return 0;
@@ -337,8 +336,8 @@ static void add_binding_detailed(binding_list *theta, alma_variable *var, int va
 }
 
 // Append new binding of var/term
-void add_binding(binding_list *theta, alma_variable *var, alma_term *term, int copy_term) {
-  add_binding_detailed(theta, var, 0, 0, term, 0, 0, NULL, copy_term);
+void add_binding(binding_list *theta, alma_variable *var, alma_term *term, void *parent, int copy_term) {
+  add_binding_detailed(theta, var, 0, 0, term, 0, 0, parent, copy_term);
 }
 
 // Function to free binding block, after failure or success

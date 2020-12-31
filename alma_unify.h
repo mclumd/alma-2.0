@@ -5,10 +5,6 @@
 
 // For a particular level, stores count-length arrays of x and y indices
 typedef struct var_matching {
-  // Parent literal/term pointers to track overall source of variables
-  // Only used within unification, not duplicate checking
-  void *x_parent;
-  void *y_parent;
   long long x;
   long long y;
 } var_matching;
@@ -32,6 +28,7 @@ typedef struct binding {
   alma_term *term;
   int term_quote_lvl;
   int term_quasi_quote_lvl;
+  // Parent literal/term pointer to track overall source of term in binding
   void *term_parent;
 } binding;
 
@@ -49,7 +46,7 @@ int term_unify(alma_term *x, alma_term *y, binding_list *theta);
 int pred_unify(alma_function *x, alma_function *y, binding_list *theta);
 
 void init_bindings(binding_list *theta);
-void add_binding(binding_list *theta, alma_variable *var, alma_term *term, int copy_term);
+void add_binding(binding_list *theta, alma_variable *var, alma_term *term, void *parent, int copy_term);
 void cleanup_bindings(binding_list *theta);
 void copy_bindings(binding_list *dest, binding_list *src);
 void swap_bindings(binding_list *a, binding_list *b);

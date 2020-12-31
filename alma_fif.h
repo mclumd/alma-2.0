@@ -51,7 +51,7 @@ void free_fif_task_mapping(void *arg);
 alma_function* fif_access(clause *c, int i);
 void remove_fif_singleton_tasks(kb *collection, clause *c);
 
-int fifm_compare(const void *arg, const void*obj);
+int fifm_compare(const void *arg, const void *obj);
 int fif_taskm_compare(const void *arg, const void *obj);
 
 #endif
