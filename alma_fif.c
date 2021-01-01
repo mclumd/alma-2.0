@@ -5,7 +5,7 @@
 
 // Given a new fif clause, initializes fif task mappings held by fif_tasks for each premise of c
 // Also places single fif_task into fif_task_mapping for first premise
-void fif_task_map_init(kb *collection, clause *c) {
+void fif_task_map_init(kb *collection, clause *c, int init_to_unify) {
   if (c->tag == FIF) {
     for (int i = 0; i < c->fif->premise_count; i++) {
       alma_function *f = fif_access(c, i);
@@ -19,12 +19,11 @@ void fif_task_map_init(kb *collection, clause *c) {
       // If a task map entry doesn't exist for name of a literal, create one
       if (result == NULL) {
         result = malloc(sizeof(*result));
-        result->predname = name;
+        result->predname = malloc(strlen(name)+1);
+        strcpy(result->predname, name);
         tommy_list_init(&result->tasks);
         tommy_hashlin_insert(&collection->fif_tasks, &result->node, result, tommy_hash_u64(0, result->predname, strlen(result->predname)));
       }
-      else
-        free(name);
 
       // For first premise, initialze fif_task root for c
       if (i == 0) {
@@ -36,16 +35,37 @@ void fif_task_map_init(kb *collection, clause *c) {
         task->unified_clauses = NULL;
         task->num_to_unify = 0;
         task->to_unify = NULL;
+
+        if (init_to_unify) {
+          // Searches for existing singletons to set to_unify
+          int neg = c->fif->ordering[0] < 0;
+          tommy_hashlin *map = neg ? &collection->pos_map : &collection->neg_map; // Sign flip for clauses to unify with first fif premise
+
+          predname_mapping *pm_result = tommy_hashlin_search(map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
+          if (pm_result != NULL) {
+            for (int j = 0; j < pm_result->num_clauses; j++) {
+              if (pm_result->clauses[j]->pos_count + pm_result->clauses[j]->neg_count == 1) {
+                task->num_to_unify++;
+                task->to_unify = realloc(task->to_unify, sizeof(*task->to_unify) * task->num_to_unify);
+                task->to_unify[task->num_to_unify-1] = pm_result->clauses[j];
+              }
+            }
+          }
+        }
+
         task->proc_next = (strcmp(fif_access(c, 0)->name, "proc") == 0);
         tommy_list_insert_tail(&result->tasks, &task->node, task);
       }
+
+      free(name);
     }
   }
 }
 
-// Given a non-fif singleton clause, sets adds to_unify entries for fif tasks that have next clause to process matching it
+// Sets to_unify entries for fif tasks
 void fif_tasks_from_clause(kb *collection, clause *c) {
-  if (c->fif == NONE && c->pos_count + c->neg_count == 1) {
+  // If a non-fif singleton clause, sets to_unify for tasks with a matching next clause to process
+  if (c->tag == NONE && c->pos_count + c->neg_count == 1) {
     char *name;
     int pos = 1;
     if (c->pos_count == 1)

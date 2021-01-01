@@ -40,7 +40,7 @@ typedef struct fif_task {
   tommy_node node; // For storage in fif_mapping's list
 } fif_task;
 
-void fif_task_map_init(kb *collection, clause *c);
+void fif_task_map_init(kb *collection, clause *c, int init_to_unify);
 void fif_tasks_from_clause(kb *collection, clause *c);
 void process_fif_tasks(kb *collection);
 

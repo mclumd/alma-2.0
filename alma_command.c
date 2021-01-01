@@ -88,7 +88,7 @@ void kb_init(kb **collection, char *file, char *agent, int verbose, kb_str *buf,
   while (i) {
     clause *c = ((index_mapping*)i->data)->value;
     if (c->tag == FIF)
-      fif_task_map_init(collec, c);
+      fif_task_map_init(collec, c, 0);
     else {
       res_tasks_from_clause(collec, c, 0);
       fif_tasks_from_clause(collec, c);

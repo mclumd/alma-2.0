@@ -919,7 +919,7 @@ int is_distrusted(kb *collection, long index) {
 }
 
 void make_single_task(kb *collection, clause *c, alma_function *c_lit, clause *other, tommy_array *tasks, int use_bif, int pos) {
-  if (c != other && (other->tag != BIF || use_bif)) {
+  if (c != other && (other->tag != BIF || use_bif) && other->tag != FIF) {
     alma_function *other_lit = literal_by_name(other, c_lit->name, pos);
     if (other_lit != NULL) {
       res_task *t = malloc(sizeof(*t));
@@ -960,7 +960,7 @@ void make_res_tasks(kb *collection, clause *c, int count, alma_function **c_lits
 // Tasks are added into the res_tasks of collection
 // Used only for non-bif resolution tasks; hence checks tag of c
 void res_tasks_from_clause(kb *collection, clause *c, int process_negatives) {
-  if (c->tag != BIF) {
+  if (c->tag != BIF && c->tag != FIF) {
     make_res_tasks(collection, c, c->pos_count, c->pos_lits, &collection->neg_map, &collection->res_tasks, 0, 0);
     // Only done if clauses differ from KB's clauses (i.e. after first task generation)
     if (process_negatives)
@@ -1640,9 +1640,6 @@ void process_new_clauses(kb *collection, kb_str *buf) {
     int reinstate = c->pos_count == 1 && c->neg_count == 0 && strcmp(c->pos_lits[0]->name, "reinstate") == 0 && c->pos_lits[0]->term_count == 1;
     if (dupe == NULL || reinstate) {
       //      c->dirty_bit = (char) 1;
-      if (c->tag == FIF)
-        fif_task_map_init(collection, c);
-
       if (c->pos_count == 1 && c->neg_count == 0) {
         if (strcmp(c->pos_lits[0]->name, "true") == 0)
           handle_true(collection, c, buf);
@@ -1694,21 +1691,26 @@ void process_new_clauses(kb *collection, kb_str *buf) {
       }
       // Non-reinstate sentences generate tasks
       else {
-        res_tasks_from_clause(collection, c, 1);
-        fif_tasks_from_clause(collection, c);
+        if (c->tag == FIF) {
+          fif_task_map_init(collection, c, 1);
+        }
+        else {
+          res_tasks_from_clause(collection, c, 1);
+          fif_tasks_from_clause(collection, c);
 
-        // Get tasks between new KB clauses and all bs clauses
-        tommy_node *curr = tommy_list_head(&collection->backsearch_tasks);
-        while (curr) {
-          backsearch_task *t = curr->data;
-          for (int j = 0; j < tommy_array_size(&t->clauses); j++) {
-            clause *bt_c = tommy_array_get(&t->clauses, j);
-            for (int k = 0; k < bt_c->pos_count; k++)
-              make_single_task(collection, bt_c, bt_c->pos_lits[k], c, &t->to_resolve, 1, 0);
-            for (int k = 0; k < bt_c->neg_count; k++)
-              make_single_task(collection, bt_c, bt_c->neg_lits[k], c, &t->to_resolve, 1, 1);
+          // Get tasks between new KB clauses and all bs clauses
+          tommy_node *curr = tommy_list_head(&collection->backsearch_tasks);
+          while (curr) {
+            backsearch_task *t = curr->data;
+            for (int j = 0; j < tommy_array_size(&t->clauses); j++) {
+              clause *bt_c = tommy_array_get(&t->clauses, j);
+              for (int k = 0; k < bt_c->pos_count; k++)
+                make_single_task(collection, bt_c, bt_c->pos_lits[k], c, &t->to_resolve, 1, 0);
+              for (int k = 0; k < bt_c->neg_count; k++)
+                make_single_task(collection, bt_c, bt_c->neg_lits[k], c, &t->to_resolve, 1, 1);
+            }
+            curr = curr->next;
           }
-          curr = curr->next;
         }
       }
 
