@@ -7,12 +7,6 @@
 char logs_on;
 char python_mode;
 
-static void alma_function_print(kb *collection, alma_function *func, kb_str *buf);
-static void alma_quote_print(kb *collection, alma_quote *quote, kb_str *buf);
-
-
-static void alma_function_print(kb *collection, alma_function *func, kb_str *buf);
-
 void enable_logs() {
   logs_on = 1;
 }
@@ -25,13 +19,29 @@ void disable_python_mode() {
   python_mode = 0;
 }
 
+static void alma_function_print(kb *collection, alma_function *func, kb_str *buf);
+
 static void alma_term_print(kb *collection, alma_term *term, kb_str *buf) {
-  if (term->type == VARIABLE)
+  if (term->type == VARIABLE) {
     tee_alt("%s%lld", collection, buf, term->variable->name, term->variable->id);
-  else if (term->type == FUNCTION)
+  }
+  else if (term->type == FUNCTION) {
     alma_function_print(collection, term->function, buf);
-  else
-    alma_quote_print(collection, term->quote, buf);
+  }
+  else if (term->type == QUOTE) {
+    tee_alt("\"", collection, buf);
+    if (term->quote->type == SENTENCE)
+      alma_fol_print(collection, term->quote->sentence, buf);
+    else
+      clause_print(collection, term->quote->clause_quote, buf);
+    tee_alt("\"", collection, buf);
+  }
+  else {
+    char *backticks = malloc(term->quasiquote->backtick_count+1);
+    for (int i = 0; i < term->quasiquote->backtick_count; i++)
+      backticks[i] = '`';
+    tee_alt("%s%s%lld", collection, buf, backticks, term->quasiquote->variable->name, term->quasiquote->variable->id);
+  }
 }
 
 static void alma_function_print(kb *collection, alma_function *func, kb_str *buf) {
@@ -45,15 +55,6 @@ static void alma_function_print(kb *collection, alma_function *func, kb_str *buf
     }
     tee_alt(")", collection, buf);
   }
-}
-
-static void alma_quote_print(kb *collection, alma_quote *quote, kb_str *buf) {
-  tee_alt("\"", collection, buf);
-  if (quote->type == SENTENCE)
-    alma_fol_print(collection, quote->sentence, buf);
-  else
-    clause_print(collection, quote->clause_quote, buf);
-  tee_alt("\"", collection, buf);
 }
 
 void alma_fol_print(kb *collection, alma_node *node, kb_str *buf) {
@@ -175,12 +176,44 @@ void clause_print(kb *collection, clause *c, kb_str *buf) {
   //tee_alt(" (L%ld)", c->acquired);
 }
 
-void print_bindings(kb *collection, binding_list *theta, kb_str *buf) {
+void print_matches(kb *collection, var_match_set *v, kb_str *buf){
+  for (int i = 0; i < v->levels; i++) {
+    tee_alt("Level %d: ", collection, buf, i);
+    if (v->level_counts[i] == 0)
+      tee_alt("None\n", collection, buf);
+    for (int j = 0; j < v->level_counts[i]; j++) {
+      tee_alt("%lld + %lld", collection, buf, v->matches[i][j].x, v->matches[i][j].y);
+      if (j < v->level_counts[i]-1)
+        tee_alt(", ", collection, buf);
+      else
+        tee_alt("\n", collection, buf);
+    }
+  }
+}
+
+void print_bindings(kb *collection, binding_list *theta, int print_all, kb_str *buf) {
   for (int i = 0; i < theta->num_bindings; i++) {
-    tee_alt("%s%lld/", collection, buf, theta->list[i].var->name, theta->list[i].var->id);
+    tee_alt("%s%lld", collection, buf, theta->list[i].var->name, theta->list[i].var->id);
+    if (print_all) {
+      tee_alt(" (%d, %d)", collection, buf, theta->list[i].var_quote_lvl, theta->list[i].var_quasi_quote_lvl);
+    }
+    tee_alt(" / ", collection, buf);
     alma_term_print(collection, theta->list[i].term, buf);
-    if (i < theta->num_bindings-1)
-      tee_alt(", ", collection, buf);
+    if (print_all) {
+      tee_alt(" (%d, %d, %p)", collection, buf, theta->list[i].term_quote_lvl, theta->list[i].term_quasi_quote_lvl, theta->list[i].term_parent);
+    }
+    if (i < theta->num_bindings-1) {
+      if (print_all)
+        tee_alt("\n", collection, buf);
+      else
+        tee_alt(", ", collection, buf);
+    }
+  }
+  if (print_all) {
+    if (theta->num_bindings > 0)
+      tee_alt("\n", collection, buf);
+    print_matches(collection, theta->quoted_var_matches, buf);
+    tee_alt("\n", collection, buf);
   }
 }
 
@@ -241,14 +274,14 @@ int tee(char const *content, ...) {
   //  va_end(ap);
   return 37;
 
-  
+
   if (!python_mode) {
     vprintf(content, ap);
   } else {
     va_copy(copy_ap,ap);
     size = dest->limit - dest->size;
     bytes = vsnprintf(&(dest->buffer[dest->size]), size, content, copy_ap);
-    
+
     while (bytes == size) {
       dest->limit += 1000;
       dest->buffer = realloc(dest->buffer, dest->limit);
@@ -260,9 +293,9 @@ int tee(char const *content, ...) {
 
     va_end(copy_ap);
   }
-  
+
   va_end(ap);
-  
+
   if (logs_on) {
     va_start(ap, content);
     vfprintf(almalog, content, ap);

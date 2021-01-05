@@ -14,6 +14,7 @@ mpc_parser_t* Conjform;
 mpc_parser_t* Literal;
 mpc_parser_t* Listofterms;
 mpc_parser_t* Term;
+mpc_parser_t* Quasiquote;
 mpc_parser_t* Predname;
 mpc_parser_t* Constant;
 mpc_parser_t* Funcname;
@@ -27,7 +28,7 @@ void parse_init(void) {
   pthread_mutex_lock(&count_mutex);
   parser_ref_count++;
   pthread_mutex_unlock(&count_mutex);
-  
+
   Alma = mpc_new("alma");
   Almacomment = mpc_new("almacomment");
   Almaformula = mpc_new("almaformula");
@@ -40,6 +41,7 @@ void parse_init(void) {
   Literal = mpc_new("literal");
   Listofterms = mpc_new("listofterms");
   Term = mpc_new("term");
+  Quasiquote = mpc_new("quasiquote");
   Predname = mpc_new("predname");
   Constant = mpc_new("constant");
   Funcname = mpc_new("funcname");
@@ -69,14 +71,17 @@ void parse_init(void) {
     " listofterms  : <term> (',' <term>)* ;                      "
     " term         : \"quote\" '(' <sentence> ')'                "
     "              | <funcname> '(' <listofterms> ')'            "
-    "              | <variable> | <constant> ;                   "
+    "              | <quasiquote> | <variable> | <constant> ;    "
+    " quasiquote   : '`' <quasiquote> | '`' <variable> ;         "
     " predname     : <prologconst> ;                             "
     " constant     : <prologconst> ;                             "
     " funcname     : <prologconst> ;                             "
     " variable     : /[A-Z][a-zA-Z0-9_]*/ ;                      "
     " prologconst  : /[a-z0-9_][a-zA-Z0-9_]*/ ;                  ",
-    Alma, Almacomment, Almaformula, Sentence, Formula, FFormula, FFormConc, BFormula, Conjform,
-    Literal, Listofterms, Term, Predname, Constant, Funcname, Variable, Prologconst, NULL);
+    Alma, Almacomment, Almaformula, Sentence, Formula, FFormula,
+    FFormConc, BFormula, Conjform, Literal, Listofterms, Term,
+    Quasiquote, Predname, Constant, Funcname, Variable, Prologconst,
+    NULL);
 }
 
 // Attempts to open filename and parse contents according to ALMA language
@@ -120,7 +125,8 @@ void parse_cleanup(void) {
   pthread_mutex_unlock(&count_mutex);
 
   if (parser_ref_count == 0) {
-      mpc_cleanup(17, Alma, Almacomment, Almaformula, Sentence, Formula, FFormula, FFormConc, BFormula,
-		  Conjform, Literal, Listofterms, Term, Predname, Constant, Funcname, Variable, Prologconst);
+    mpc_cleanup(17, Alma, Almacomment, Almaformula, Sentence, Formula,
+      FFormula, FFormConc, BFormula, Conjform, Literal, Listofterms,
+      Term, Quasiquote, Predname, Constant, Funcname, Variable, Prologconst);
   }
 }

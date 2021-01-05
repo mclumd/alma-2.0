@@ -42,88 +42,176 @@ static void make_clause_rec(alma_node *node, clause *c) {
   }
 }
 
-static void find_variable_names(tommy_array *list, alma_term *term, int id_from_name) {
+// Struct for a tracking name/ID record; for purposes of managing variable names/IDs
+typedef struct name_record {
+  long long new_id;
+  union {
+    long long old_id;
+    char *name;
+  };
+} name_record;
+
+// Tree for recursively tracking name_records across different quotations and levels of quotation
+// Next_level list represents each quotation nested further inside of the clause
+typedef struct record_tree {
+  int quote_level;
+
+  int next_level_count;
+  struct record_tree **next_level;
+
+  int variable_count;
+  name_record **variables;
+
+  // May need parent pointer to trace back for quasi-quote
+} record_tree;
+
+static void init_record_tree(record_tree *records, int quote_level) {
+  records->quote_level = quote_level;
+  records->next_level_count = 0;
+  records->next_level = NULL;
+  records->variable_count = 0;
+  records->variables = NULL;
+}
+
+static void free_record_tree(record_tree *records) {
+  for (int i = 0; i < records->next_level_count; i++) {
+    free_record_tree(records->next_level[i]);
+    free(records->next_level[i]);
+  }
+  free(records->next_level);
+
+  for (int i = 0; i < records->variable_count; i++)
+    free(records->variables[i]);
+  free(records->variables);
+}
+
+static name_record* records_retrieve(record_tree *records, int quote_level, long long query_id) {
+  if (quote_level == records->quote_level) {
+    for (int i = 0; i < records->variable_count; i++)
+      if (records->variables[i]->old_id == query_id)
+        return records->variables[i];
+  }
+  // Otherwise, records->quote_level is less than query quote level
+  else {
+    for (int i = 0; i < records->next_level_count; i++) {
+      name_record *rec = records_retrieve(records->next_level[i], quote_level, query_id);
+      if (rec != NULL)
+        return rec;
+    }
+  }
+  return NULL;
+}
+
+
+static void set_variable_ids_rec(record_tree *records, clause *c, int id_from_name, int quote_level, kb *collection);
+
+static void set_variable_names(record_tree *records, alma_term *term, int id_from_name, int quote_level, kb *collection) {
   if (term->type == VARIABLE) {
-    for (tommy_size_t i = 0; i < tommy_array_size(list); i++) {
-      if (id_from_name) {
-        if (strcmp(term->variable->name, tommy_array_get(list, i)) == 0)
-          return;
-      }
-      else if (term->variable->id == *(long long *)tommy_array_get(list, i))
+    // If a match for the variable is found in the record tree, set ID using new field
+    for (int i = 0; i < records->variable_count; i++) {
+      name_record *rec = records->variables[i];
+      if ((!id_from_name && term->variable->id == rec->old_id) ||
+          (id_from_name && strcmp(term->variable->name, rec->name) == 0)) {
+        term->variable->id = rec->new_id;
         return;
+      }
     }
-    if (id_from_name) {
-      tommy_array_insert(list, term->variable->name);
-    }
-    else {
-      long long *id = malloc(sizeof(*id));
-      *id =  term->variable->id;
-      tommy_array_insert(list, id);
-    }
+    // If did not find match from records, create a new one
+    records->variable_count++;
+    records->variables = realloc(records->variables, sizeof(*records->variables) * records->variable_count);
+    records->variables[records->variable_count-1] = malloc(sizeof(*records->variables[records->variable_count-1]));
+    if (id_from_name)
+      records->variables[records->variable_count-1]->name = term->variable->name;
+    else
+      records->variables[records->variable_count-1]->old_id = term->variable->id;
+    term->variable->id = records->variables[records->variable_count-1]->new_id = collection->variable_id_count;
+    collection->variable_id_count++;
   }
   else if (term->type == FUNCTION) {
     for (int i = 0; i < term->function->term_count; i++)
-      find_variable_names(list, term->function->terms+i, id_from_name);
+      set_variable_names(records, term->function->terms+i, id_from_name, quote_level, collection);
+  }
+  else if (term->type == QUOTE) {
+    if (term->quote->type == CLAUSE) {
+      // Create new child record_tree for further nested quotation
+      records->next_level_count++;
+      records->next_level = realloc(records->next_level, sizeof(*records->next_level) * records->next_level_count);
+      records->next_level[records->next_level_count-1] = malloc(sizeof(*records->next_level[records->next_level_count-1]));
+      init_record_tree(records->next_level[records->next_level_count-1], quote_level+1);
+
+      set_variable_ids_rec(records->next_level[records->next_level_count-1], term->quote->clause_quote, id_from_name, quote_level+1, collection);
+    }
   }
   else {
-    // TODO quote case
+    // TODO Quasi-quote case
   }
 }
 
-static void set_variable_names(tommy_array *list, alma_term *term, int id_from_name, kb *collection) {
+static void set_variable_ids_rec(record_tree *records, clause *c, int id_from_name, int quote_level, kb *collection) {
+  for (int i = 0; i < c->pos_count; i++)
+    for (int j = 0; j < c->pos_lits[i]->term_count; j++)
+      set_variable_names(records, c->pos_lits[i]->terms+j, id_from_name, quote_level, collection);
+  for (int i = 0; i < c->neg_count; i++)
+    for (int j = 0; j < c->neg_lits[i]->term_count; j++)
+      set_variable_names(records, c->neg_lits[i]->terms+j, id_from_name, quote_level, collection);
+}
+
+
+static void set_clause_from_records(record_tree *records, clause *c, int quote_level, kb *collection);
+
+// Use existing assembled record_tree to update ID values from old_id to new_id in the argument term
+static void set_term_from_records(record_tree *records, alma_term *term, int quote_level, kb *collection) {
   if (term->type == VARIABLE) {
-    for (tommy_size_t i = 0; i < tommy_array_size(list); i++) {
-      if (id_from_name) {
-        if (strcmp(term->variable->name, tommy_array_get(list, i)) == 0)
-          term->variable->id = collection->variable_id_count + i;
-      }
-      else if (term->variable->id == *(long long *)tommy_array_get(list, i))
-        term->variable->id = collection->variable_id_count + i;
-    }
+    name_record *rec = records_retrieve(records, quote_level, term->variable->id);
+    if (rec != NULL)
+      term->variable->id = rec->new_id;
   }
   else if (term->type == FUNCTION) {
     for (int i = 0; i < term->function->term_count; i++)
-      set_variable_names(list, term->function->terms+i, id_from_name, collection);
+      set_term_from_records(records, term->function->terms+i, quote_level, collection);
+  }
+  else if (term->type == QUOTE) {
+    if (term->quote->type == CLAUSE) {
+      set_clause_from_records(records, term->quote->clause_quote, quote_level+1, collection);
+    }
   }
   else {
-    // TODO quote case
+    // TODO quasi-quote case
   }
+}
+
+static void set_clause_from_records(record_tree *records, clause *c, int quote_level, kb *collection) {
+  for (int i = 0; i < c->pos_count; i++)
+    for (int j = 0; j < c->pos_lits[i]->term_count; j++)
+      set_term_from_records(records, c->pos_lits[i]->terms+j, quote_level, collection);
+  for (int i = 0; i < c->neg_count; i++)
+    for (int j = 0; j < c->neg_lits[i]->term_count; j++)
+      set_term_from_records(records, c->neg_lits[i]->terms+j, quote_level, collection);
 }
 
 // Given a clause, assign the ID fields of each variable
 // Two cases:
 // 1) If clause is result of resolution, replace existing matching IDs with fresh values each
+// id_from_name is false in this case; distinct variables are tracked using ID given names may not be unique
 // 2) Otherwise, give variables with the same name matching IDs
+// id_from_name is true in this case; distinct variables are tracked by name
 // Fresh ID values drawn from variable_id_count global variable
 void set_variable_ids(clause *c, int id_from_name, binding_list *bs_bindings, kb *collection) {
-  tommy_array vars;
-  tommy_array_init(&vars);
+  record_tree *records;
+  records = malloc(sizeof(*records));
+  init_record_tree(records, 0);
 
-  for (int i = 0; i < c->pos_count; i++)
-    for (int j = 0; j < c->pos_lits[i]->term_count; j++)
-      find_variable_names(&vars, c->pos_lits[i]->terms+j, id_from_name);
-  for (int i = 0; i < c->neg_count; i++)
-    for (int j = 0; j < c->neg_lits[i]->term_count; j++)
-      find_variable_names(&vars, c->neg_lits[i]->terms+j, id_from_name);
-
-  for (int i = 0; i < c->pos_count; i++)
-    for (int j = 0; j < c->pos_lits[i]->term_count; j++)
-      set_variable_names(&vars, c->pos_lits[i]->terms+j, id_from_name, collection);
-  for (int i = 0; i < c->neg_count; i++)
-    for (int j = 0; j < c->neg_lits[i]->term_count; j++)
-      set_variable_names(&vars, c->neg_lits[i]->terms+j, id_from_name, collection);
+  set_variable_ids_rec(records, c, id_from_name, 0, collection);
 
   // If bindings for a backsearch have been passed in, update variable names for them as well
+  // Id_from_name always false in this case; omits that parameter
   if (bs_bindings)
     for (int i = 0; i < bs_bindings->num_bindings; i++)
-      set_variable_names(&vars, bs_bindings->list[i].term, id_from_name, collection);
+      // TODO: eventually needs to get quote_level out based on binding?
+      set_term_from_records(records, bs_bindings->list[i].term, 0, collection);
 
-  collection->variable_id_count += tommy_array_size(&vars);
-  if (!id_from_name) {
-    for (int i = 0; i < tommy_array_size(&vars); i++)
-      free(tommy_array_get(&vars, i));
-  }
-  tommy_array_done(&vars);
+  free_record_tree(records);
+  free(records);
 }
 
 static void init_ordering_rec(fif_info *info, alma_node *node, int *next, int *pos, int *neg) {
@@ -391,39 +479,16 @@ static alma_function* literal_by_name(clause *c, char *name, int pos) {
   return NULL;
 }
 
-
-typedef struct var_matching {
-  int count;
-  long long *x;
-  long long *y;
-} var_matching;
-
 // Returns 0 if variable pair respects x and y matchings in matches arg outside of quotes
-static int variables_differ(alma_variable *x, alma_variable *y, var_matching *matches, int quote_level) {
-  if (quote_level == 0) {
-    // Look for matching variable in var_matching's x and y
-    for (int j = 0; j < matches->count; j++) {
-      // If only one of IDs matches, return unequal
-      if ((x->id == matches->x[j] && y->id != matches->y[j]) || (y->id == matches->y[j] && x->id != matches->x[j]))
-        return 1;
-    }
-    // No match was found, add a new one to the matching
-    matches->count++;
-    matches->x = realloc(matches->x, sizeof(*matches->x) * matches->count);
-    matches->x[matches->count -1] = x->id;
-    matches->y = realloc(matches->y, sizeof(*matches->y) * matches->count);
-    matches->y[matches->count -1] = y->id;
-    return 0;
-  }
-  else
-    return strcmp(x->name, y->name) != 0;
+static int variables_differ(alma_variable *x, alma_variable *y, var_match_set *matches, int quote_level) {
+  return !var_match_consistent(matches, quote_level, x, y);
 }
 
-static int functions_differ(alma_function *x, alma_function *y, var_matching *matches, int quote_level);
+static int functions_differ(alma_function *x, alma_function *y, var_match_set *matches, int quote_level);
 
-// Returns 0 if functions are equal while respecting x and y matchings based on matches arg; otherwise returns 1
-// Pairs of variables quasiquoted to escape quotation must match according to var_matching arg
-static int quotes_differ(alma_quote *x, alma_quote *y, var_matching *matches, int quote_level) {
+// Returns 0 if quotation terms are equal while respecting x and y matchings based on matches arg; otherwise returns 1
+// Pairs of variables according to var_match_set arg corresponding to their level of quotation
+static int quotes_differ(alma_quote *x, alma_quote *y, var_match_set *matches, int quote_level) {
   if (x->type == y->type) {
     if (x->type == SENTENCE) {
       // TODO
@@ -434,10 +499,10 @@ static int quotes_differ(alma_quote *x, alma_quote *y, var_matching *matches, in
       if (c_x->pos_count != c_y->pos_count || c_x->neg_count != c_y->neg_count)
         return 1;
       for (int i = 0; i < c_x->pos_count; i++)
-        if (functions_differ(c_x->pos_lits[i], c_y->pos_lits[i], matches, quote_level+1))
+        if (functions_differ(c_x->pos_lits[i], c_y->pos_lits[i], matches, quote_level))
           return 1;
       for (int i = 0; i < c_x->neg_count; i++)
-        if (functions_differ(c_x->neg_lits[i], c_y->neg_lits[i], matches, quote_level+1))
+        if (functions_differ(c_x->neg_lits[i], c_y->neg_lits[i], matches, quote_level))
           return 1;
     }
     return 0;
@@ -445,15 +510,21 @@ static int quotes_differ(alma_quote *x, alma_quote *y, var_matching *matches, in
   return 1;
 }
 
+static int quasiquotes_differ(alma_quasiquote *x, alma_quasiquote *y, var_match_set *matches, int quote_level) {
+  // TODO
+  return 1;
+}
+
 // Returns 0 if functions are equal while respecting x and y matchings based on matches arg; otherwise returns 1
 // Further detail in clauses_differ
-static int functions_differ(alma_function *x, alma_function *y, var_matching *matches, int quote_level) {
+static int functions_differ(alma_function *x, alma_function *y, var_match_set *matches, int quote_level) {
   if (x->term_count == y->term_count && strcmp(x->name, y->name) == 0) {
     for (int i = 0; i < x->term_count; i++)
       if (x->terms[i].type != y->terms[i].type
           || (x->terms[i].type == VARIABLE && variables_differ(x->terms[i].variable, y->terms[i].variable, matches, quote_level))
           || (x->terms[i].type == FUNCTION && functions_differ(x->terms[i].function, y->terms[i].function, matches, quote_level))
-          || (x->terms[i].type == QUOTE && quotes_differ(x->terms[i].quote, y->terms[i].quote, matches, quote_level)))
+          || (x->terms[i].type == QUOTE && quotes_differ(x->terms[i].quote, y->terms[i].quote, matches, quote_level+1))
+          || (x->terms[i].type == QUASIQUOTE && quasiquotes_differ(x->terms[i].quasiquote, y->terms[i].quasiquote, matches, quote_level)))
         return 1;
 
     // All arguments compared as equal; return 0
@@ -462,22 +533,14 @@ static int functions_differ(alma_function *x, alma_function *y, var_matching *ma
   return 1;
 }
 
-// Function to call when short-circuiting clauses_differ to properly free var_matching instance
-static int release_matches(var_matching *matches, int retval) {
-  free(matches->x);
-  free(matches->y);
-  return retval;
-}
-
 // Returns 0 if clauses have equal positive and negative literal sets; otherwise returns 1
 // Equality of variables is that there is a one-to-one correspondence in the sets of variables x and y use,
 // based on each location where a variable maps to another
 // Thus a(X, X) and a(X, Y) are here considered different
 int clauses_differ(clause *x, clause *y) {
   if (x->pos_count == y->pos_count && x->neg_count == y->neg_count){
-    var_matching matches;
-    matches.count = 0;
-    matches.x = matches.y = NULL;
+    var_match_set matches;
+    var_match_init(&matches);
     if (x->tag == FIF) {
       for (int i = 0; i < x->fif->premise_count; i++) {
         alma_function *xf = fif_access(x, i);
@@ -509,11 +572,12 @@ int clauses_differ(clause *x, clause *y) {
 }
 
 // Checks if x and y are ground literals that are identical
+// Currently does not check within quotes; any quotation term found returns 0
 static int ground_duplicate_literals(alma_function *x, alma_function *y) {
   if (strcmp(x->name, y->name) == 0 && x->term_count == y->term_count) {
     for (int i = 0; i < x->term_count; i++)
-      if (x->terms[i].type != y->terms[i].type || x->terms[i].type == VARIABLE
-          || x->terms[i].type == QUOTE || !ground_duplicate_literals(x->terms[i].function, y->terms[i].function))
+      if (x->terms[i].type != y->terms[i].type || x->terms[i].type == VARIABLE || x->terms[i].type == QUASIQUOTE || x->terms[i].type == QUOTE
+          || (x->terms[i].type == FUNCTION && !ground_duplicate_literals(x->terms[i].function, y->terms[i].function)))
         return 0;
     return 1;
   }
@@ -761,7 +825,7 @@ void remove_clause(kb *collection, clause *c, kb_str *buf) {
   free(result);
 
   //  printf("ALMA: MID WAY THROUGH REMOVE CLAUSE: CHILDREN COUNT %d\n",c->children_count);
-  
+
   // Remove clause from the parents list of each of its children
   for (int i = 0; i < c->children_count; i++) {
     clause *child = c->children[i];
@@ -769,7 +833,7 @@ void remove_clause(kb *collection, clause *c, kb_str *buf) {
       int new_count = child->parent_set_count;
       //      printf("ALMA: CHILD POS LITS POINTER: %p\n",(void *)child->pos_lits);
       //      for (int z = 0; z < child->pos_count; z++) {
-      //      	tee_alt("IN ALMA REMOVE_CLAUSE: CHILD POS LITS NAME AND POINTER: %s : %p\n",buf,child->pos_lits[z]->name,(void *)child);	
+      //      	tee_alt("IN ALMA REMOVE_CLAUSE: CHILD POS LITS NAME AND POINTER: %s : %p\n",buf,child->pos_lits[z]->name,(void *)child);
       //      }
       //      tee_alt("IN ALMA REMOVE_CLAUSE: PARENT SET COUNT %d\n",buf,child->parent_set_count);
       //  If a parent set has a clause matching, remove match
@@ -840,7 +904,7 @@ void remove_clause(kb *collection, clause *c, kb_str *buf) {
         }
 	//	printf("REALLOCING PARENTS 1\n");
 	//	for (int z = 0; z < child->pos_count; z++) {
-	//	  printf("ALMA: CHILD POS LITS NAME: %s\n",child->pos_lits[z]->name);	
+	//	  printf("ALMA: CHILD POS LITS NAME: %s\n",child->pos_lits[z]->name);
 	//	}
         child->parents = realloc(child->parents, sizeof(*child->parents)*new_count);
       }
@@ -867,7 +931,7 @@ int is_distrusted(kb *collection, long index) {
 }
 
 void make_single_task(kb *collection, clause *c, alma_function *c_lit, clause *other, tommy_array *tasks, int use_bif, int pos) {
-  if (c != other && (other->tag != BIF || use_bif)) {
+  if (c != other && (other->tag != BIF || use_bif) && other->tag != FIF) {
     alma_function *other_lit = literal_by_name(other, c_lit->name, pos);
     if (other_lit != NULL) {
       res_task *t = malloc(sizeof(*t));
@@ -908,7 +972,7 @@ void make_res_tasks(kb *collection, clause *c, int count, alma_function **c_lits
 // Tasks are added into the res_tasks of collection
 // Used only for non-bif resolution tasks; hence checks tag of c
 void res_tasks_from_clause(kb *collection, clause *c, int process_negatives) {
-  if (c->tag != BIF) {
+  if (c->tag != BIF && c->tag != FIF) {
     make_res_tasks(collection, c, c->pos_count, c->pos_lits, &collection->neg_map, &collection->res_tasks, 0, 0);
     // Only done if clauses differ from KB's clauses (i.e. after first task generation)
     if (process_negatives)
@@ -949,7 +1013,7 @@ int delete_formula(kb *collection, char *string, int print, kb_str *buf) {
       free_alma_tree(formulas+i);
     }
     free(formulas);
-    
+
     //    tee_alt("ALMA IN DELETE FORMULA: clause size %d\n",buf,tommy_array_size(&clauses));
     // Process and remove each clause
     for (tommy_size_t i = 0; i < tommy_array_size(&clauses); i++) {
@@ -1088,7 +1152,7 @@ static void lits_copy(int count, alma_function **lits, alma_function **cmp, bind
       alma_function *litcopy = malloc(sizeof(*litcopy));
       copy_alma_function(lits[i], litcopy);
       for (int j = 0; j < litcopy->term_count; j++)
-        subst(mgu, litcopy->terms+j);
+        subst(mgu, litcopy->terms+j, 0);
       res_lits[*res_count] = litcopy;
       (*res_count)++;
     }
@@ -1178,7 +1242,7 @@ void transfer_parent(kb *collection, clause *target, clause *source, int add_chi
   if (!repeat_parents) {
     //    printf("REALLOCING PARENTS 2\n");
     //    for (int z = 0; z < target->pos_count; z++) {
-    //      printf("ALMA: TARGET POS LITS NAME: %s\n",target->pos_lits[z]->name);	
+    //      printf("ALMA: TARGET POS LITS NAME: %s\n",target->pos_lits[z]->name);
     //    }
 
     target->parents = realloc(target->parents, sizeof(*target->parents) * (target->parent_set_count + 1));
@@ -1255,7 +1319,7 @@ void distrust_recursive(kb *collection, clause *c, clause *parent, kb_str *buf) 
   if (c->children != NULL) {
     for (int i = 0; i < c->children_count; i++) {
       if (!is_distrusted(collection, c->children[i]->index)) {
-	distrust_recursive(collection, c->children[i], parent, buf);
+        distrust_recursive(collection, c->children[i], parent, buf);
       }
     }
   }
@@ -1263,7 +1327,7 @@ void distrust_recursive(kb *collection, clause *c, clause *parent, kb_str *buf) 
 
 static void binding_subst(binding_list *target, binding_list *theta) {
   for (int i = 0; i < target->num_bindings; i++)
-    subst(theta, target->list[i].term);
+    subst(theta, target->list[i].term, 0);
 }
 
 static binding_list* parent_binding_prepare(backsearch_task *bs, long parent_index, binding_list *theta) {
@@ -1291,8 +1355,9 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
       // Does not do resolution with a distrusted clause
       if (!is_distrusted(collection, current_task->x->index) && !is_distrusted(collection,  current_task->y->index)) {
         binding_list *theta = malloc(sizeof(*theta));
-        theta->list = NULL;
-        theta->num_bindings = 0;
+        init_bindings(theta);
+        // Debug
+        printf("Unifying %ld with %ld\n", current_task->x->index, current_task->y->index);
         // Given a res_task, attempt unification
         if (pred_unify(current_task->pos, current_task->neg, theta)) {
           // If successful, create clause for result of resolution and add to new_clauses
@@ -1306,11 +1371,10 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
             if (x_bindings != NULL && y_bindings != NULL) {
               // Check that tracked bindings for unified pair are compatible/unifiable
               binding_list *parent_theta = malloc(sizeof(*parent_theta));
-              parent_theta->num_bindings = 0;
-              parent_theta->list = NULL;
+              init_bindings(parent_theta);
               int unify_fail = 0;
               for (int j = 0; j < x_bindings->num_bindings; j++) {
-                if (!unify(x_bindings->list[j].term, y_bindings->list[j].term, parent_theta)) {
+                if (!term_unify(x_bindings->list[j].term, y_bindings->list[j].term, parent_theta)) {
                   unify_fail = 1;
                   break;
                 }
@@ -1340,10 +1404,10 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
                 // Apply parent_theta to resolution result as well
                 for (int j = 0; j < res_result->pos_count; j++)
                   for (int k = 0; k < res_result->pos_lits[j]->term_count; k++)
-                    subst(parent_theta, res_result->pos_lits[j]->terms+k);
+                    subst(parent_theta, res_result->pos_lits[j]->terms+k, 0);
                 for (int j = 0; j < res_result->neg_count; j++)
                   for (int k = 0; k < res_result->neg_lits[j]->term_count; k++)
-                    subst(parent_theta, res_result->neg_lits[j]->terms+k);
+                    subst(parent_theta, res_result->neg_lits[j]->terms+k, 0);
 
                 cleanup_bindings(parent_theta);
               }
@@ -1378,20 +1442,21 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
             if (bs) {
               clause *answer = malloc(sizeof(*answer));
               memcpy(answer, bs->target, sizeof(*answer));
-              if (bs->target->pos_count == 1){
+              if (bs->target->pos_count == 1) {
                 answer->pos_lits = malloc(sizeof(*answer->pos_lits));
                 answer->pos_lits[0] = malloc(sizeof(*answer->pos_lits[0]));
                 copy_alma_function(bs->target->pos_lits[0], answer->pos_lits[0]);
                 for (int j = 0; j < answer->pos_lits[0]->term_count; j++)
-                  subst(x_bindings, answer->pos_lits[0]->terms+j);
+                  subst(x_bindings, answer->pos_lits[0]->terms+j, 0);
               }
               else {
                 answer->neg_lits = malloc(sizeof(*answer->neg_lits));
                 answer->neg_lits[0] = malloc(sizeof(*answer->neg_lits[0]));
                 copy_alma_function(bs->target->neg_lits[0], answer->neg_lits[0]);
                 for (int j = 0; j < answer->neg_lits[0]->term_count; j++)
-                  subst(x_bindings, answer->neg_lits[0]->terms+j);
+                  subst(x_bindings, answer->neg_lits[0]->terms+j, 0);
               }
+              set_variable_ids(answer, 0, NULL, collection);
 
               // TODO: parent setup for answer?
               tommy_array_insert(&collection->new_clauses, answer);
@@ -1421,13 +1486,15 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
               strcpy(contra_str+loc, ").");
 
               // Assert contra and distrusted
-	      clause *contra = assert_formula(collection, contra_str, 0, buf);
+	            clause *contra = assert_formula(collection, contra_str, 0, buf);
               free(contra_str);
               distrust_recursive(collection, current_task->x, contra, buf);
               distrust_recursive(collection, current_task->y, contra, buf);
             }
           }
         }
+        // Debug
+        print_bindings(collection, theta, 1, buf);
         cleanup:
         cleanup_bindings(theta);
       }
@@ -1506,9 +1573,8 @@ static void handle_distrust(kb *collection, clause *distrust, kb_str *buf) {
         if (!is_distrusted(collection, result->clauses[i]->index) && result->clauses[i]->pos_count + result->clauses[i]->neg_count == 1) {
           alma_function *lit = (map == &collection->pos_map ? result->clauses[i]->pos_lits[0] : result->clauses[i]->neg_lits[0]);
 
-          var_matching matches;
-          matches.count = 0;
-          matches.x = matches.y = NULL;
+          var_match_set matches;
+          var_match_init(&matches);
           // Distrust each match found
           if (function_compare(&func, &lit) == 0 || !functions_differ(func, lit, &matches, 0))
             distrust_recursive(collection, result->clauses[i], distrust, buf);
@@ -1586,9 +1652,6 @@ void process_new_clauses(kb *collection, kb_str *buf) {
     int reinstate = c->pos_count == 1 && c->neg_count == 0 && strcmp(c->pos_lits[0]->name, "reinstate") == 0 && c->pos_lits[0]->term_count == 1;
     if (dupe == NULL || reinstate) {
       //      c->dirty_bit = (char) 1;
-      if (c->tag == FIF)
-        fif_task_map_init(collection, c);
-
       if (c->pos_count == 1 && c->neg_count == 0) {
         if (strcmp(c->pos_lits[0]->name, "true") == 0)
           handle_true(collection, c, buf);
@@ -1640,21 +1703,26 @@ void process_new_clauses(kb *collection, kb_str *buf) {
       }
       // Non-reinstate sentences generate tasks
       else {
-        res_tasks_from_clause(collection, c, 1);
-        fif_tasks_from_clause(collection, c);
+        if (c->tag == FIF) {
+          fif_task_map_init(collection, c, 1);
+        }
+        else {
+          res_tasks_from_clause(collection, c, 1);
+          fif_tasks_from_clause(collection, c);
 
-        // Get tasks between new KB clauses and all bs clauses
-        tommy_node *curr = tommy_list_head(&collection->backsearch_tasks);
-        while (curr) {
-          backsearch_task *t = curr->data;
-          for (int j = 0; j < tommy_array_size(&t->clauses); j++) {
-            clause *bt_c = tommy_array_get(&t->clauses, j);
-            for (int k = 0; k < bt_c->pos_count; k++)
-              make_single_task(collection, bt_c, bt_c->pos_lits[k], c, &t->to_resolve, 1, 0);
-            for (int k = 0; k < bt_c->neg_count; k++)
-              make_single_task(collection, bt_c, bt_c->neg_lits[k], c, &t->to_resolve, 1, 1);
+          // Get tasks between new KB clauses and all bs clauses
+          tommy_node *curr = tommy_list_head(&collection->backsearch_tasks);
+          while (curr) {
+            backsearch_task *t = curr->data;
+            for (int j = 0; j < tommy_array_size(&t->clauses); j++) {
+              clause *bt_c = tommy_array_get(&t->clauses, j);
+              for (int k = 0; k < bt_c->pos_count; k++)
+                make_single_task(collection, bt_c, bt_c->pos_lits[k], c, &t->to_resolve, 1, 0);
+              for (int k = 0; k < bt_c->neg_count; k++)
+                make_single_task(collection, bt_c, bt_c->neg_lits[k], c, &t->to_resolve, 1, 1);
+            }
+            curr = curr->next;
           }
-          curr = curr->next;
         }
       }
 

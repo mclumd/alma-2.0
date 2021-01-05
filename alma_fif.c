@@ -1,10 +1,11 @@
 #include <string.h>
 #include "alma_fif.h"
 #include "alma_proc.h"
+#include "alma_print.h"
 
 // Given a new fif clause, initializes fif task mappings held by fif_tasks for each premise of c
 // Also places single fif_task into fif_task_mapping for first premise
-void fif_task_map_init(kb *collection, clause *c) {
+void fif_task_map_init(kb *collection, clause *c, int init_to_unify) {
   if (c->tag == FIF) {
     for (int i = 0; i < c->fif->premise_count; i++) {
       alma_function *f = fif_access(c, i);
@@ -18,33 +19,53 @@ void fif_task_map_init(kb *collection, clause *c) {
       // If a task map entry doesn't exist for name of a literal, create one
       if (result == NULL) {
         result = malloc(sizeof(*result));
-        result->predname = name;
+        result->predname = malloc(strlen(name)+1);
+        strcpy(result->predname, name);
         tommy_list_init(&result->tasks);
         tommy_hashlin_insert(&collection->fif_tasks, &result->node, result, tommy_hash_u64(0, result->predname, strlen(result->predname)));
       }
-      else
-        free(name);
 
       // For first premise, initialze fif_task root for c
       if (i == 0) {
         fif_task *task = malloc(sizeof(*task));
         task->fif = c;
         task->bindings = malloc(sizeof(*task->bindings));
-        task->bindings->list = NULL;
-        task->bindings->num_bindings = task->premises_done = task->num_unified = 0;
+        init_bindings(task->bindings);
+        task->premises_done = task->num_unified = 0;
         task->unified_clauses = NULL;
         task->num_to_unify = 0;
         task->to_unify = NULL;
+
+        if (init_to_unify) {
+          // Searches for existing singletons to set to_unify
+          int neg = c->fif->ordering[0] < 0;
+          tommy_hashlin *map = neg ? &collection->pos_map : &collection->neg_map; // Sign flip for clauses to unify with first fif premise
+
+          predname_mapping *pm_result = tommy_hashlin_search(map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
+          if (pm_result != NULL) {
+            for (int j = 0; j < pm_result->num_clauses; j++) {
+              if (pm_result->clauses[j]->pos_count + pm_result->clauses[j]->neg_count == 1) {
+                task->num_to_unify++;
+                task->to_unify = realloc(task->to_unify, sizeof(*task->to_unify) * task->num_to_unify);
+                task->to_unify[task->num_to_unify-1] = pm_result->clauses[j];
+              }
+            }
+          }
+        }
+
         task->proc_next = (strcmp(fif_access(c, 0)->name, "proc") == 0);
         tommy_list_insert_tail(&result->tasks, &task->node, task);
       }
+
+      free(name);
     }
   }
 }
 
-// Given a non-fif singleton clause, sets adds to_unify entries for fif tasks that have next clause to process matching it
+// Sets to_unify entries for fif tasks
 void fif_tasks_from_clause(kb *collection, clause *c) {
-  if (c->fif == NONE && c->pos_count + c->neg_count == 1) {
+  // If a non-fif singleton clause, sets to_unify for tasks with a matching next clause to process
+  if (c->tag == NONE && c->pos_count + c->neg_count == 1) {
     char *name;
     int pos = 1;
     if (c->pos_count == 1)
@@ -98,8 +119,12 @@ static clause* fif_conclude(kb *collection, fif_task *task, binding_list *bindin
   // Using task's overall bindings, obtain proper conclusion predicate
   alma_function *conc_func = malloc(sizeof(*conc_func));
   copy_alma_function(task->fif->fif->conclusion, conc_func);
+
+  // Debug
+  print_bindings(collection, bindings, 1, NULL);
+
   for (int k = 0; k < conc_func->term_count; k++)
-    subst(bindings, conc_func->terms+k);
+    subst(bindings, conc_func->terms+k, 0);
 
   if (task->fif->fif->neg_conc) {
     conclusion->pos_count = 0;
@@ -189,6 +214,8 @@ static void fif_task_unify_loop(kb *collection, tommy_list *tasks, tommy_list *s
 
             binding_list *copy = malloc(sizeof(*copy));
             copy_bindings(copy, next_task->bindings);
+            // Debug
+            printf("Unifying %ld with %ld\n", jth->index, next_task->fif->index);
             if (pred_unify(next_func, to_unify, copy)) {
               // If task is now completed, obtain resulting clause and insert to new_clauses
               if (next_task->premises_done + 1 == next_task->fif->fif->premise_count) {
@@ -226,6 +253,8 @@ static void fif_task_unify_loop(kb *collection, tommy_list *tasks, tommy_list *s
               }
             }
             else {
+              // Debug
+              print_bindings(collection, copy, 1, NULL);
               // Unification failure
               cleanup_bindings(copy);
             }
@@ -272,6 +301,8 @@ static void process_fif_task_mapping(kb *collection, fif_task_mapping *entry, to
             if (!is_distrusted(collection, unify_target->index)) {
               alma_function *to_unify_func = (unify_target->pos_count > 0) ? unify_target->pos_lits[0] : unify_target->neg_lits[0];
 
+              // Debug
+              printf("Unifying %ld with %ld\n", unify_target->index, f->fif->index);
               if (pred_unify(fif_access(f->fif, f->premises_done), to_unify_func, f->bindings)) {
                 // If task is now completed, obtain resulting clause and insert to new_clauses
                 if (f->premises_done + 1 == f->fif->fif->premise_count) {
@@ -305,6 +336,8 @@ static void process_fif_task_mapping(kb *collection, fif_task_mapping *entry, to
                 copy_bindings(f->bindings, copy);
               }
               else {
+                // Debug
+                print_bindings(collection, f->bindings, 1, NULL);
                 cleanup_bindings(f->bindings);
                 f->bindings = malloc(sizeof(*f->bindings));
                 copy_bindings(f->bindings, copy);
@@ -571,7 +604,7 @@ void remove_fif_singleton_tasks(kb *collection, clause *c) {
 
 // Compare function to be used by tommy_hashlin_search for fif_mapping
 // compares string arg to conclude_name of fif_mapping
-int fifm_compare(const void *arg, const void*obj) {
+int fifm_compare(const void *arg, const void *obj) {
   return strcmp((const char*)arg, ((const fif_mapping*)obj)->conclude_name);
 }
 

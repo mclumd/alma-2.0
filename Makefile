@@ -52,10 +52,10 @@ alma_print.o: alma_print.c alma_kb.h alma_formula.h alma_unify.h alma_fif.h alma
 alma_proc.o: alma_proc.c alma_kb.h alma_formula.h alma_unify.h alma_proc.h tommy.h
 	$(CC) $(CFLAGS) -c alma_proc.c
 
-alma_fif.o: alma_fif.c alma_kb.h alma_formula.h alma_proc.h alma_fif.h tommy.h
+alma_fif.o: alma_fif.c alma_kb.h alma_formula.h alma_unify.h alma_proc.h alma_fif.h tommy.h
 	$(CC) $(CFLAGS) -c alma_fif.c
 
-alma_backsearch.o: alma_backsearch.c alma_kb.h alma_formula.h alma_backsearch.h tommy.h
+alma_backsearch.o: alma_backsearch.c alma_kb.h alma_formula.h alma_unify.h alma_backsearch.h tommy.h
 	$(CC) $(CFLAGS) -c alma_backsearch.c
 
 clean:

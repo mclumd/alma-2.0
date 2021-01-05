@@ -10,11 +10,11 @@
 // TODO: Longer term, check for error codes of library functions used
 // TODO: Functions to return error instead of void
 
-static void alma_quote_init(alma_quote *quote, mpc_ast_t *ast);
-static void alma_function_init(alma_function *func, mpc_ast_t *ast);
+static void alma_function_init(alma_function *func, int quote_level, mpc_ast_t *ast);
+static void alma_quote_init(alma_quote *quote, int quote_level, mpc_ast_t *ast);
 
 // Recursively constructs ALMA FOL term representation of AST argument into term pointer
-static void alma_term_init(alma_term *term, mpc_ast_t *ast) {
+static void alma_term_init(alma_term *term, int quote_level, mpc_ast_t *ast) {
   // Variable
   if (strstr(ast->tag, "variable") != NULL) {
     term->type = VARIABLE;
@@ -27,18 +27,49 @@ static void alma_term_init(alma_term *term, mpc_ast_t *ast) {
   else if (strstr(ast->tag, "constant") != NULL || strstr(ast->children[0]->tag, "funcname") != NULL) {
     term->type = FUNCTION;
     term->function = malloc(sizeof(*term->function));
-    alma_function_init(term->function, ast);
+    alma_function_init(term->function, quote_level, ast);
+  }
+  // Quasi-quote
+  // Constructs ALMA quasi-quoted variable, counting backtick marks
+  // If excessive quasi-quotation marks are given, they are reduced to the amount matching outer quotation
+  // All quasi-quotation may be removed if erroneously given to non-quoted content
+  else if (strstr(ast->tag, "quasiquote") != NULL) {
+    int backtick_count = 0;
+    alma_variable *var = malloc(sizeof(*var));
+    while (strstr(ast->tag, "quasiquote") != NULL) {
+      backtick_count++;
+      ast = ast->children[1];
+    }
+    if (strstr(ast->tag, "variable") != NULL) {
+      var->name = malloc(strlen(ast->contents)+1);
+      var->id = 0;
+      strcpy(var->name, ast->contents);
+    }
+
+    if (backtick_count > quote_level) {
+      backtick_count = quote_level;
+    }
+    if (backtick_count > 0) {
+      term->type = QUASIQUOTE;
+      term->quasiquote = malloc(sizeof(*term->quasiquote));
+      term->quasiquote->backtick_count = backtick_count;
+      term->quasiquote->variable = var;
+    }
+    else {
+      term->type = VARIABLE;
+      term->variable = var;
+    }
   }
   // Quote
   else {
     term->type = QUOTE;
     term->quote = malloc(sizeof(*term->quote));
-    alma_quote_init(term->quote, ast);
+    alma_quote_init(term->quote, quote_level+1, ast);
   }
 }
 
 // Recursively constructs ALMA FOL function representation of AST argument into ALMA function pointer
-static void alma_function_init(alma_function *func, mpc_ast_t *ast) {
+static void alma_function_init(alma_function *func, int quote_level, mpc_ast_t *ast) {
   // Case for function containing no terms
   if (ast->children_num == 0) {
     func->name = malloc(strlen(ast->contents)+1);
@@ -58,34 +89,34 @@ static void alma_function_init(alma_function *func, mpc_ast_t *ast) {
     if (termlist->children_num == 0 || strstr(termlist->tag, "|term") != NULL) {
       func->term_count = 1;
       func->terms = malloc(sizeof(*func->terms));
-      alma_term_init(func->terms, termlist);
+      alma_term_init(func->terms, quote_level, termlist);
     }
     // Case for listofterms with multiple terms
     else {
       func->term_count = (termlist->children_num+1)/2;
       func->terms = malloc(sizeof(*func->terms) * func->term_count);
       for (int i = 0; i < func->term_count; i++) {
-        alma_term_init(func->terms+i, termlist->children[i*2]);
+        alma_term_init(func->terms+i, quote_level, termlist->children[i*2]);
       }
     }
   }
 }
 
-static void alma_tree_init(alma_node *alma_tree, mpc_ast_t *ast);
+static void alma_tree_init(alma_node *alma_tree, int quote_level, mpc_ast_t *ast);
 
 // Recursively constructs ALMA FOL function representation of AST argument into ALMA quote pointer
-static void alma_quote_init(alma_quote *quote, mpc_ast_t *ast) {
+static void alma_quote_init(alma_quote *quote, int quote_level, mpc_ast_t *ast) {
   quote->type = SENTENCE;
   quote->sentence = malloc(sizeof(*quote->sentence));
-  alma_tree_init(quote->sentence, ast->children[2]);
+  alma_tree_init(quote->sentence, quote_level, ast->children[2]);
 }
 
 // Constructs ALMA FOL representation of a predicate:
 // an ALMA node whose union is used to hold an ALMA function that describes the predicate
-static void alma_predicate_init(alma_node *node, mpc_ast_t *ast) {
+static void alma_predicate_init(alma_node *node, int quote_level, mpc_ast_t *ast) {
   node->type = PREDICATE;
   node->predicate = malloc(sizeof(*node->predicate));
-  alma_function_init(node->predicate, ast);
+  alma_function_init(node->predicate, quote_level, ast);
 }
 
 
@@ -102,17 +133,18 @@ static alma_operator op_from_contents(char *contents) {
 }
 
 // Given an MPC AST pointer, constructs an ALMA tree to a FOL representation of the AST
-static void alma_tree_init(alma_node *alma_tree, mpc_ast_t *ast) {
+static void alma_tree_init(alma_node *alma_tree, int quote_level, mpc_ast_t *ast) {
   // Match tag containing literal as function
   if (strstr(ast->tag, "literal") != NULL) {
-    alma_predicate_init(alma_tree, ast);
+    alma_predicate_init(alma_tree, quote_level, ast);
   }
   // Match nested pieces of formula/fformula/bformula/conjform/fformconc rules, recursively operate on
   // Dependent on only these productions containing string formula within an almaformula tree
-  else if (strstr(ast->tag, "formula") != NULL || strstr(ast->tag, "conjform") != NULL || strstr(ast->tag, "fformconc") != NULL) {
+  else if (strstr(ast->tag, "formula") != NULL || strstr(ast->tag, "conjform") != NULL
+          || strstr(ast->tag, "fformconc") != NULL) {
     // Case for formula producing just a literal
     if (strstr(ast->children[0]->tag, "literal") != NULL) {
-      alma_predicate_init(alma_tree, ast->children[0]);
+      alma_predicate_init(alma_tree, quote_level, ast->children[0]);
     }
     // Otherwise, formula derives to FOL contents
     else {
@@ -124,12 +156,12 @@ static void alma_tree_init(alma_node *alma_tree, mpc_ast_t *ast) {
 
       // Set arg1 based on children
       alma_tree->fol->arg1 = malloc(sizeof(*alma_tree->fol->arg1));
-      alma_tree_init(alma_tree->fol->arg1, ast->children[1]);
+      alma_tree_init(alma_tree->fol->arg1, quote_level, ast->children[1]);
 
       if (strstr(ast->tag, "fformula") != NULL) {
         // Set arg2 for fformula conclusion
         alma_tree->fol->arg2 = malloc(sizeof(*alma_tree->fol->arg2));
-        alma_tree_init(alma_tree->fol->arg2, ast->children[4]);
+        alma_tree_init(alma_tree->fol->arg2, quote_level, ast->children[4]);
         alma_tree->fol->tag = FIF;
       }
       else {
@@ -139,7 +171,7 @@ static void alma_tree_init(alma_node *alma_tree, mpc_ast_t *ast) {
         }
         else {
           alma_tree->fol->arg2 = malloc(sizeof(*alma_tree->fol->arg2));
-          alma_tree_init(alma_tree->fol->arg2, ast->children[3]);
+          alma_tree_init(alma_tree->fol->arg2, quote_level, ast->children[3]);
         }
         if (strstr(ast->tag, "bformula") != NULL)
           alma_tree->fol->tag = BIF;
@@ -165,7 +197,7 @@ static void generate_alma_trees(mpc_ast_t *ast, alma_node **alma_trees, int *siz
   int index = 0;
   for (int i = 0; i < ast->children_num; i++) {
     if (strstr(ast->children[i]->tag, "almaformula") != NULL) {
-      alma_tree_init(*alma_trees + index, ast->children[i]->children[0]);
+      alma_tree_init(*alma_trees + index, 0, ast->children[i]->children[0]);
       index++;
     }
   }
@@ -238,10 +270,17 @@ void free_term(alma_term *term) {
     free(term->variable->name);
     free(term->variable);
   }
-  else if (term->type == FUNCTION)
+  else if (term->type == FUNCTION) {
     free_function(term->function);
-  else
+  }
+  else if (term->type == QUOTE) {
     free_quote(term->quote);
+  }
+  else {
+    free(term->quasiquote->variable->name);
+    free(term->quasiquote->variable);
+    free(term->quasiquote);
+  }
 }
 
 // Frees an alma_node EXCEPT for top-level
@@ -284,6 +323,12 @@ void copy_alma_quote(alma_quote *original, alma_quote *copy) {
   }
 }
 
+void copy_alma_quasiquote(alma_quasiquote *original, alma_quasiquote *copy) {
+  copy->backtick_count = original->backtick_count;
+  copy->variable = malloc(sizeof(*copy->variable));
+  copy_alma_var(original->variable, copy->variable);
+}
+
 // Space for copy must be allocated before call
 void copy_alma_term(alma_term *original, alma_term *copy) {
   copy->type = original->type;
@@ -295,9 +340,13 @@ void copy_alma_term(alma_term *original, alma_term *copy) {
     copy->function = malloc(sizeof(*copy->function));
     copy_alma_function(original->function, copy->function);
   }
-  else {
+  else if (original->type == QUOTE) {
     copy->quote = malloc(sizeof(*copy->quote));
     copy_alma_quote(original->quote, copy->quote);
+  }
+  else {
+    copy->quasiquote = malloc(sizeof(*copy->quasiquote));
+    copy_alma_quasiquote(original->quasiquote, copy->quasiquote);
   }
 }
 
@@ -370,8 +419,10 @@ void quote_convert_func(alma_function *func) {
         copy_alma_tree(quote->sentence, copy);
         make_cnf(copy);
 
+        // If result has an AND at the top-level, several clauses result, so abort
         if (copy->type == FOL && copy->fol->op == AND)
           free_node(copy, 1);
+        // Otherwise, adjust quote to new type, and construct clause
         else {
           free_node(quote->sentence, 1);
           quote->type = CLAUSE;
@@ -385,7 +436,6 @@ void quote_convert_func(alma_function *func) {
           c->tag = NONE;
           c->fif = NULL;
           make_clause(copy, c);
-          // TODO: when have quasiquotation, set variable IDs; complicated as need context
           free_node(copy, 1);
           quote->clause_quote = c;
         }

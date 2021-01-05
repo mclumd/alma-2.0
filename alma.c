@@ -17,8 +17,6 @@ extern char python_mode;
 // Initialize global variable (declared in alma_formula header) to count up variable IDs
 //long long variable_id_count = 0;
 
-FILE *almalog = NULL;
-
 int main(int argc, char **argv) {
   int run = 0;
   int verbose = 0;
@@ -27,8 +25,6 @@ int main(int argc, char **argv) {
 
   logs_on = (char) 1;
   python_mode = (char) 0;
-  
-  //int index;
 
   int c;
   while ((c = getopt (argc, argv, "rxvf:a:")) != -1)
@@ -67,30 +63,10 @@ int main(int argc, char **argv) {
     return 0;
   }
 
-  time_t rawtime;
-  time(&rawtime);
-  char *time = ctime(&rawtime);
-  int timelen = strlen(time)-1;
-  for (int i = 0; i < timelen; i++)
-    if (time[i] == ' ' || time[i] == ':')
-      time[i] = '-';
-  int agentlen = agent != NULL ? strlen(agent) : 0;
-  char *logname = malloc(4 + agentlen + 1 + timelen + 9);
-  strcpy(logname, "alma");
-  if (agent != NULL)
-    strcpy(logname+4, agent);
-  logname[4+agentlen] = '-';
-  strncpy(logname+5+agentlen, time, 24);
-  strcpy(logname+5+agentlen+timelen, "-log.txt");
-
-  if (logs_on) {
-    almalog = fopen(logname, "w");
-  }
-  free(logname);
-
   kb *alma_kb;
   kb_init(&alma_kb, file, agent, NULL, NULL, verbose, NULL, logs_on);
-  kb_print(alma_kb,NULL);
+  kb_print(alma_kb, NULL);
+
 
   if (run) {
     while (!alma_kb->idling) {
@@ -103,7 +79,7 @@ int main(int argc, char **argv) {
     char line[LINELEN];
 
     int counter = 0;
-    
+
     while (1) {
       tee_alt("alma: ",alma_kb,NULL,counter);
       //      tee_alt("about to fgets...\n",NULL);
@@ -121,7 +97,7 @@ int main(int argc, char **argv) {
         }
         else if (strcmp(line, "print") == 0) {
 	  //	  tee_alt("ALMA %d print:\n",NULL,counter);
-          kb_print(alma_kb,NULL);
+          kb_print(alma_kb, NULL);
 	  fflush(stdout);
         }
         else if (strcmp(line, "halt") == 0) {

@@ -88,7 +88,7 @@ void kb_init(kb **collection, char *file, char *agent, char *trialnum, char *log
   while (i) {
     clause *c = ((index_mapping*)i->data)->value;
     if (c->tag == FIF)
-      fif_task_map_init(collec, c);
+      fif_task_map_init(collec, c, 0);
     else {
       res_tasks_from_clause(collec, c, 0);
       fif_tasks_from_clause(collec, c);
@@ -103,7 +103,7 @@ void kb_init(kb **collection, char *file, char *agent, char *trialnum, char *log
     int timelen = strlen(time)-1;
     for (int idx = 0; idx < timelen; idx++)
       if (time[idx] == ' ' || time[idx] == ':')
-	time[idx] = '-';
+        time[idx] = '-';
     int agentlen = agent != NULL ? strlen(agent) : 0;
     int triallen = trialnum != NULL ? strlen(trialnum) : 0;
     int log_dir_len = log_dir != NULL ? strlen(log_dir) : 0;
@@ -123,7 +123,6 @@ void kb_init(kb **collection, char *file, char *agent, char *trialnum, char *log
     logname[log_dir_len+4+agentlen+1+triallen] = '-';
     strncpy(logname+log_dir_len+6+agentlen+triallen, time, 24);
     strcpy(logname+log_dir_len+6+agentlen+triallen+timelen, "-log.txt");
-    
     collec->almalog = fopen(logname, "w");
     free(logname);
   } else {
@@ -182,7 +181,7 @@ void kb_step(kb *collection, kb_str *buf) {
     tee_alt("-a: Idling...\n", collection, buf);
 }
 
-void kb_print(kb *collection, kb_str *buf) { 
+void kb_print(kb *collection, kb_str *buf) {
   //  char temp_buf[1000];
   //  tee_alt("in kb_print:\n",buf);
 
@@ -213,7 +212,7 @@ void kb_print(kb *collection, kb_str *buf) {
         binding_mapping *m = tommy_hashlin_search(&t->clause_bindings, bm_compare, &c->index, tommy_hash_u64(0, &c->index, sizeof(c->index)));
         if (m != NULL) {
           tee_alt(" (bindings: ", collection, buf);
-          print_bindings(collection, m->bindings, buf);
+          print_bindings(collection, m->bindings, 0, buf);
           tee_alt(")", collection, buf);
         }
         tee_alt("\n", collection, buf);

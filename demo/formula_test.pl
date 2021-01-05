@@ -3,6 +3,8 @@ fif(and(if(not(t(A)), t(B)), atom), conclusion(thing)).
 if(and(if(not(t(A)), t(B)), atom), athing(b(c(f,g,h,i,j,B)))).
 
 if(and(if(not(t(x)), t(B)), atom), thing).
+if(and(if(not(t(x)), t(B)), atom), thing).
+if(and(if(not(t(x)), t(B)), atom), thing).
 
 if(a,b).
 

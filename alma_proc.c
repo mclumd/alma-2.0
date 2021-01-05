@@ -31,7 +31,7 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *collection
   // Create copy and substitute based on bindings available
   alma_term *search_term = malloc(sizeof(*search_term));
   copy_alma_term(arg->terms, search_term);
-  subst(bindings, search_term);
+  subst(bindings, search_term, 0);
 
   alma_function *search = NULL;
   tommy_hashlin *map = &collection->pos_map;
@@ -123,11 +123,11 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, binding_list *bi
   // Create copies and substitute based on bindings available
   alma_term *ancestor_copy = malloc(sizeof(*ancestor_copy));
   copy_alma_term(ancestor, ancestor_copy);
-  subst(bindings, ancestor_copy);
+  subst(bindings, ancestor_copy, 0);
 
   alma_term *descendant_copy = malloc(sizeof(*descendant_copy));
   copy_alma_term(descendant, descendant_copy);
-  subst(bindings, descendant_copy);
+  subst(bindings, descendant_copy, 0);
 
   int has_ancestor = 0;
   if ((ancestor_copy->type == FUNCTION || (ancestor_copy->type == QUOTE && ancestor_copy->quote->type == CLAUSE))
@@ -253,7 +253,7 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, binding_list *bi
                  && c->neg_count == ancestor_copy->quote->clause_quote->neg_count) {
             quote_holder->clause_quote = c;
             // Try unifying pair of quotes
-            success = unify_quotes(ancestor_copy->quote, quote_holder, anc_bindings);
+            success = quote_term_unify(ancestor_copy->quote, quote_holder, anc_bindings);
         }
 
         if (success) {
@@ -293,20 +293,20 @@ static int less_than(alma_term *x, alma_term *y, binding_list *bindings, kb *alm
   char *x_str;
   char *y_str;
   if (x->type == VARIABLE) {
-    alma_term *bound = bindings_contain(bindings, x->variable);
-    if (bound == NULL || bound->type != FUNCTION || bound->function->term_count != 0)
+    binding *res = bindings_contain(bindings, x->variable);
+    if (res == NULL || res->term->type != FUNCTION || res->term->function->term_count != 0)
       return 0;
-    x_str = bound->function->name;
+    x_str = res->term->function->name;
   }
   else if (x->type == FUNCTION && x->function->term_count == 0)
     x_str = x->function->name;
   else
     return 0;
   if (y->type == VARIABLE) {
-    alma_term *bound = bindings_contain(bindings, y->variable);
-    if (bound == NULL || bound->type != FUNCTION || bound->function->term_count != 0)
+    binding *res = bindings_contain(bindings, y->variable);
+    if (res == NULL || res->term->type != FUNCTION || res->term->function->term_count != 0)
       return 0;
-    y_str = bound->function->name;
+    y_str = res->term->function->name;
   }
   else if (y->type == FUNCTION && y->function->term_count == 0)
     y_str = y->function->name;
@@ -335,10 +335,10 @@ static int less_than(alma_term *x, alma_term *y, binding_list *bindings, kb *alm
 static int idx_to_form(alma_term *index_term, alma_term *result, binding_list *bindings, kb *alma) {
   char *idx_str;
   if (index_term->type == VARIABLE) {
-    alma_term *bound = bindings_contain(bindings, index_term->variable);
-    if (bound == NULL || bound->type != FUNCTION || bound->function->term_count != 0)
+    binding *res = bindings_contain(bindings, index_term->variable);
+    if (res == NULL || res->term->type != FUNCTION || res->term->function->term_count != 0)
       return 0;
-    idx_str = bound->function->name;
+    idx_str = res->term->function->name;
   }
   else if (index_term->type == FUNCTION && index_term->function->term_count == 0)
     idx_str = index_term->function->name;
@@ -368,7 +368,9 @@ static int idx_to_form(alma_term *index_term, alma_term *result, binding_list *b
     quoted->quote = malloc(sizeof(*quoted->quote));
     quoted->quote->type = CLAUSE;
     quoted->quote->clause_quote = quote_form;
-    add_binding(bindings, result->variable, quoted, 0);
+    // Within idx_to_form proc literal, index_term also can uniquely identify source of resulting binding
+    // Used as a proxy for the parent pointer to proc, instead of passing around further info
+    add_binding(bindings, result->variable, quoted, index_term, 0);
     return 1;
   }
   else
