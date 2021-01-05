@@ -207,12 +207,14 @@ static PyObject * alma_init(PyObject *self, PyObject *args) {
   PyObject *ret_val;
   char *file;
   char *agent;
-
-  if (!PyArg_ParseTuple(args, "iiss", &verbose, &log_mode, &file, &agent))
+  char *trialnum;
+  char *log_dir;
+  
+  if (!PyArg_ParseTuple(args, "iissss", &verbose, &log_mode, &file, &agent, &trialnum, &log_dir))
     return NULL;
 
   if (log_mode) {
-    printf("ENABLING LOGS!\n");
+    //    printf("ENABLING LOGS!\n");
     enable_logs();
   }
   
@@ -225,7 +227,7 @@ static PyObject * alma_init(PyObject *self, PyObject *args) {
   buf.buffer[0] = '\0';
   
   kb *alma_kb;
-  kb_init(&alma_kb,file,agent,verbose, &buf, log_mode); 
+  kb_init(&alma_kb,file,agent, trialnum, log_dir, verbose, &buf, log_mode); 
 
   //  ret_val = malloc(buf.size + 1);
   //  strcpy(ret_val,buf.buffer);

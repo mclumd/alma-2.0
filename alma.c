@@ -64,8 +64,9 @@ int main(int argc, char **argv) {
   }
 
   kb *alma_kb;
-  kb_init(&alma_kb, file, agent, verbose, NULL, logs_on);
+  kb_init(&alma_kb, file, agent, NULL, NULL, verbose, NULL, logs_on);
   kb_print(alma_kb, NULL);
+
 
   if (run) {
     while (!alma_kb->idling) {
