@@ -7,12 +7,6 @@
 char logs_on;
 char python_mode;
 
-static void alma_function_print(kb *collection, alma_function *func, kb_str *buf);
-static void alma_quote_print(kb *collection, alma_quote *quote, kb_str *buf);
-
-
-static void alma_function_print(kb *collection, alma_function *func, kb_str *buf);
-
 void enable_logs() {
   logs_on = 1;
 }
@@ -25,13 +19,29 @@ void disable_python_mode() {
   python_mode = 0;
 }
 
+static void alma_function_print(kb *collection, alma_function *func, kb_str *buf);
+
 static void alma_term_print(kb *collection, alma_term *term, kb_str *buf) {
-  if (term->type == VARIABLE)
+  if (term->type == VARIABLE) {
     tee_alt("%s%lld", collection, buf, term->variable->name, term->variable->id);
-  else if (term->type == FUNCTION)
+  }
+  else if (term->type == FUNCTION) {
     alma_function_print(collection, term->function, buf);
-  else
-    alma_quote_print(collection, term->quote, buf);
+  }
+  else if (term->type == QUOTE) {
+    tee_alt("\"", collection, buf);
+    if (term->quote->type == SENTENCE)
+      alma_fol_print(collection, term->quote->sentence, buf);
+    else
+      clause_print(collection, term->quote->clause_quote, buf);
+    tee_alt("\"", collection, buf);
+  }
+  else {
+    char *backticks = malloc(term->quasiquote->backtick_count+1);
+    for (int i = 0; i < term->quasiquote->backtick_count; i++)
+      backticks[i] = '`';
+    tee_alt("%s%s%lld", collection, buf, backticks, term->quasiquote->variable->name, term->quasiquote->variable->id);
+  }
 }
 
 static void alma_function_print(kb *collection, alma_function *func, kb_str *buf) {
@@ -45,15 +55,6 @@ static void alma_function_print(kb *collection, alma_function *func, kb_str *buf
     }
     tee_alt(")", collection, buf);
   }
-}
-
-static void alma_quote_print(kb *collection, alma_quote *quote, kb_str *buf) {
-  tee_alt("\"", collection, buf);
-  if (quote->type == SENTENCE)
-    alma_fol_print(collection, quote->sentence, buf);
-  else
-    clause_print(collection, quote->clause_quote, buf);
-  tee_alt("\"", collection, buf);
 }
 
 void alma_fol_print(kb *collection, alma_node *node, kb_str *buf) {

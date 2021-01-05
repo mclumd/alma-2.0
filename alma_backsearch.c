@@ -2,7 +2,6 @@
 #include "alma_backsearch.h"
 
 static void collect_variables(alma_term *term, binding_list *b, int quote_level, void *parent) {
-  // TODO needs eventual quasi-quote cases
   if (term->type == VARIABLE) {
     b->num_bindings++;
     b->list = realloc(b->list, sizeof(*b->list) * b->num_bindings);
@@ -28,6 +27,9 @@ static void collect_variables(alma_term *term, binding_list *b, int quote_level,
     for (int i = 0; i < c->neg_count; i++)
       for (int j = 0; j < c->neg_lits[i]->term_count; j++)
         collect_variables(c->neg_lits[i]->terms+j, b, quote_level+1, parent);
+  }
+  else {
+    // TODO quasi-quote case
   }
 }
 

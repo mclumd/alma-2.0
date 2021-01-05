@@ -131,7 +131,7 @@ static void set_variable_names(record_tree *records, alma_term *term, int id_fro
     for (int i = 0; i < term->function->term_count; i++)
       set_variable_names(records, term->function->terms+i, id_from_name, quote_level, collection);
   }
-  else {
+  else if (term->type == QUOTE) {
     if (term->quote->type == CLAUSE) {
       // Create new child record_tree for further nested quotation
       records->next_level_count++;
@@ -142,7 +142,9 @@ static void set_variable_names(record_tree *records, alma_term *term, int id_fro
       set_variable_ids_rec(records->next_level[records->next_level_count-1], term->quote->clause_quote, id_from_name, quote_level+1, collection);
     }
   }
-  // Quasi-quote case TODO when added
+  else {
+    // TODO Quasi-quote case
+  }
 }
 
 static void set_variable_ids_rec(record_tree *records, clause *c, int id_from_name, int quote_level, kb *collection) {
@@ -168,10 +170,13 @@ static void set_term_from_records(record_tree *records, alma_term *term, int quo
     for (int i = 0; i < term->function->term_count; i++)
       set_term_from_records(records, term->function->terms+i, quote_level, collection);
   }
-  else {
+  else if (term->type == QUOTE) {
     if (term->quote->type == CLAUSE) {
       set_clause_from_records(records, term->quote->clause_quote, quote_level+1, collection);
     }
+  }
+  else {
+    // TODO quasi-quote case
   }
 }
 
@@ -505,6 +510,11 @@ static int quotes_differ(alma_quote *x, alma_quote *y, var_match_set *matches, i
   return 1;
 }
 
+static int quasiquotes_differ(alma_quasiquote *x, alma_quasiquote *y, var_match_set *matches, int quote_level) {
+  // TODO
+  return 1;
+}
+
 // Returns 0 if functions are equal while respecting x and y matchings based on matches arg; otherwise returns 1
 // Further detail in clauses_differ
 static int functions_differ(alma_function *x, alma_function *y, var_match_set *matches, int quote_level) {
@@ -513,7 +523,8 @@ static int functions_differ(alma_function *x, alma_function *y, var_match_set *m
       if (x->terms[i].type != y->terms[i].type
           || (x->terms[i].type == VARIABLE && variables_differ(x->terms[i].variable, y->terms[i].variable, matches, quote_level))
           || (x->terms[i].type == FUNCTION && functions_differ(x->terms[i].function, y->terms[i].function, matches, quote_level))
-          || (x->terms[i].type == QUOTE && quotes_differ(x->terms[i].quote, y->terms[i].quote, matches, quote_level+1)))
+          || (x->terms[i].type == QUOTE && quotes_differ(x->terms[i].quote, y->terms[i].quote, matches, quote_level+1))
+          || (x->terms[i].type == QUASIQUOTE && quasiquotes_differ(x->terms[i].quasiquote, y->terms[i].quasiquote, matches, quote_level)))
         return 1;
 
     // All arguments compared as equal; return 0
@@ -561,11 +572,12 @@ int clauses_differ(clause *x, clause *y) {
 }
 
 // Checks if x and y are ground literals that are identical
+// Currently does not check within quotes; any quotation term found returns 0
 static int ground_duplicate_literals(alma_function *x, alma_function *y) {
   if (strcmp(x->name, y->name) == 0 && x->term_count == y->term_count) {
     for (int i = 0; i < x->term_count; i++)
-      if (x->terms[i].type != y->terms[i].type || x->terms[i].type == VARIABLE
-          || x->terms[i].type == QUOTE || !ground_duplicate_literals(x->terms[i].function, y->terms[i].function))
+      if (x->terms[i].type != y->terms[i].type || x->terms[i].type == VARIABLE || x->terms[i].type == QUASIQUOTE || x->terms[i].type == QUOTE
+          || (x->terms[i].type == FUNCTION && !ground_duplicate_literals(x->terms[i].function, y->terms[i].function)))
         return 0;
     return 1;
   }

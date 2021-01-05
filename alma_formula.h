@@ -32,11 +32,12 @@ typedef struct alma_function {
   struct alma_term *terms;
 } alma_function;
 
-typedef enum term_type {VARIABLE, FUNCTION, QUOTE} term_type;
+typedef enum term_type {VARIABLE, FUNCTION, QUOTE, QUASIQUOTE} term_type;
 
 struct alma_variable;
 struct alma_function;
 struct alma_quote;
+struct alma_quasiquote;
 
 typedef struct alma_term {
   term_type type;
@@ -44,6 +45,7 @@ typedef struct alma_term {
     struct alma_variable *variable;
     alma_function *function;
     struct alma_quote *quote;
+    struct alma_quasiquote *quasiquote;
   };
 } alma_term;
 
@@ -63,6 +65,11 @@ typedef struct alma_quote {
   };
 } alma_quote;
 
+typedef struct alma_quasiquote {
+  int backtick_count;
+  alma_variable *variable;
+} alma_quasiquote;
+
 int formulas_from_source(char *source, int file_src, int *formula_count, alma_node **formulas);
 void make_cnf(alma_node *node);
 void quote_convert_func(alma_function *func);
@@ -75,6 +82,7 @@ void free_alma_tree(alma_node *node);
 void copy_alma_var(alma_variable *original, alma_variable *copy);
 void copy_alma_function(alma_function *original, alma_function *copy);
 void copy_alma_quote(alma_quote *original, alma_quote *copy);
+void copy_alma_quasiquote(alma_quasiquote *original, alma_quasiquote *copy);
 void copy_alma_term(alma_term *original, alma_term *copy);
 void copy_alma_tree(alma_node *original, alma_node *copy);
 
