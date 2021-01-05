@@ -40,7 +40,9 @@ static void alma_term_print(kb *collection, alma_term *term, kb_str *buf) {
     char *backticks = malloc(term->quasiquote->backtick_count+1);
     for (int i = 0; i < term->quasiquote->backtick_count; i++)
       backticks[i] = '`';
+    backticks[term->quasiquote->backtick_count] = '\0';
     tee_alt("%s%s%lld", collection, buf, backticks, term->quasiquote->variable->name, term->quasiquote->variable->id);
+    free(backticks);
   }
 }
 

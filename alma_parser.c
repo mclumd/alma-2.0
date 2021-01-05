@@ -125,7 +125,7 @@ void parse_cleanup(void) {
   pthread_mutex_unlock(&count_mutex);
 
   if (parser_ref_count == 0) {
-    mpc_cleanup(17, Alma, Almacomment, Almaformula, Sentence, Formula,
+    mpc_cleanup(18, Alma, Almacomment, Almaformula, Sentence, Formula,
       FFormula, FFormConc, BFormula, Conjform, Literal, Listofterms,
       Term, Quasiquote, Predname, Constant, Funcname, Variable, Prologconst);
   }

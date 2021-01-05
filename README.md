@@ -51,7 +51,8 @@ bformula     : \"bif(\" <formula> ',' <formula> ')'
 conjform     : \"and(\" <conjform> ',' <conjform> ')' | \"not(\" <literal> ')' | <literal>
 literal      : <predname> '(' <listofterms> ')' | <predname>
 listofterms  : <term> (',' <term>)*
-term         : \"quote\" '(' <sentence> ')' | <funcname> '(' <listofterms> ')'| <variable> | <constant>
+term         : \"quote\" '(' <sentence> ')' | <funcname> '(' <listofterms> ')' | <quasiquote> | <variable> | <constant>
+quasiquote   : '`' <quasiquote> | '`' <variable>
 predname     : <prologconst>
 constant     : <prologconst>
 funcname     : <prologconst>

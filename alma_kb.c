@@ -9,10 +9,8 @@
 #include "alma_proc.h"
 #include "alma_print.h"
 
-//static long next_index;
-
 static void make_clause_rec(alma_node *node, clause *c) {
-  // Note: predicate null assignment necessary for freeing of notes without losing predicates
+  // Note: predicate null assignment necessary for freeing of nodes without losing predicates
   if (node != NULL) {
     if (node->type == FOL) {
       // Neg lit case for NOT
@@ -62,15 +60,17 @@ typedef struct record_tree {
   int variable_count;
   name_record **variables;
 
-  // May need parent pointer to trace back for quasi-quote
+  // Parent pointer to trace back for quasi-quote
+  struct record_tree *parent;
 } record_tree;
 
-static void init_record_tree(record_tree *records, int quote_level) {
+static void init_record_tree(record_tree *records, int quote_level, record_tree *parent) {
   records->quote_level = quote_level;
   records->next_level_count = 0;
   records->next_level = NULL;
   records->variable_count = 0;
   records->variables = NULL;
+  records->parent = parent;
 }
 
 static void free_record_tree(record_tree *records) {
@@ -102,30 +102,52 @@ static name_record* records_retrieve(record_tree *records, int quote_level, long
   return NULL;
 }
 
+/*static void records_print(record_tree *records) {
+  printf("Level %d: ", records->quote_level);
+  if (records->variable_count == 0)
+    printf("None\n");
+  for (int i = 0; i < records->variable_count; i++) {
+    printf("%lld", records->variables[i]->new_id);
+    if (i == records->variable_count-1)
+      printf("\n");
+    else
+      printf(" ");
+  }
+
+  for (int i = 0; i < records->next_level_count; i++) {
+    records_print(records->next_level[i]);
+  }
+}*/
+
+
+// For a single ALMA variable, set fields in record_tree
+static void set_var_name(record_tree *records, alma_variable *var, int id_from_name, int quote_level, kb *collection) {
+  // If a match for the variable is found in the record tree, set ID using new field
+  for (int i = 0; i < records->variable_count; i++) {
+    name_record *rec = records->variables[i];
+    if ((!id_from_name && var->id == rec->old_id) ||
+        (id_from_name && strcmp(var->name, rec->name) == 0)) {
+      var->id = rec->new_id;
+      return;
+    }
+  }
+  // If did not find match from records, create a new one
+  records->variable_count++;
+  records->variables = realloc(records->variables, sizeof(*records->variables) * records->variable_count);
+  records->variables[records->variable_count-1] = malloc(sizeof(*records->variables[records->variable_count-1]));
+  if (id_from_name)
+    records->variables[records->variable_count-1]->name = var->name;
+  else
+    records->variables[records->variable_count-1]->old_id = var->id;
+  var->id = records->variables[records->variable_count-1]->new_id = collection->variable_id_count;
+  collection->variable_id_count++;
+}
 
 static void set_variable_ids_rec(record_tree *records, clause *c, int id_from_name, int quote_level, kb *collection);
 
 static void set_variable_names(record_tree *records, alma_term *term, int id_from_name, int quote_level, kb *collection) {
   if (term->type == VARIABLE) {
-    // If a match for the variable is found in the record tree, set ID using new field
-    for (int i = 0; i < records->variable_count; i++) {
-      name_record *rec = records->variables[i];
-      if ((!id_from_name && term->variable->id == rec->old_id) ||
-          (id_from_name && strcmp(term->variable->name, rec->name) == 0)) {
-        term->variable->id = rec->new_id;
-        return;
-      }
-    }
-    // If did not find match from records, create a new one
-    records->variable_count++;
-    records->variables = realloc(records->variables, sizeof(*records->variables) * records->variable_count);
-    records->variables[records->variable_count-1] = malloc(sizeof(*records->variables[records->variable_count-1]));
-    if (id_from_name)
-      records->variables[records->variable_count-1]->name = term->variable->name;
-    else
-      records->variables[records->variable_count-1]->old_id = term->variable->id;
-    term->variable->id = records->variables[records->variable_count-1]->new_id = collection->variable_id_count;
-    collection->variable_id_count++;
+    set_var_name(records, term->variable, id_from_name, quote_level, collection);
   }
   else if (term->type == FUNCTION) {
     for (int i = 0; i < term->function->term_count; i++)
@@ -137,13 +159,16 @@ static void set_variable_names(record_tree *records, alma_term *term, int id_fro
       records->next_level_count++;
       records->next_level = realloc(records->next_level, sizeof(*records->next_level) * records->next_level_count);
       records->next_level[records->next_level_count-1] = malloc(sizeof(*records->next_level[records->next_level_count-1]));
-      init_record_tree(records->next_level[records->next_level_count-1], quote_level+1);
+      init_record_tree(records->next_level[records->next_level_count-1], quote_level+1, records);
 
       set_variable_ids_rec(records->next_level[records->next_level_count-1], term->quote->clause_quote, id_from_name, quote_level+1, collection);
     }
   }
   else {
-    // TODO Quasi-quote case
+    // Trace back up along parents based on amount of quasi-quotation
+    for (int i = 0; i < term->quasiquote->backtick_count; i++)
+      records = records->parent;
+    set_var_name(records, term->quasiquote->variable, id_from_name, quote_level - term->quasiquote->backtick_count, collection);
   }
 }
 
@@ -176,7 +201,12 @@ static void set_term_from_records(record_tree *records, alma_term *term, int quo
     }
   }
   else {
-    // TODO quasi-quote case
+    // Trace back up along parents based on amount of quasi-quotation
+    for (int i = 0; i < term->quasiquote->backtick_count; i++)
+      records = records->parent;
+    name_record *rec = records_retrieve(records, quote_level - term->quasiquote->backtick_count, term->quasiquote->variable->id);
+    if (rec != NULL)
+      term->variable->id = rec->new_id;
   }
 }
 
@@ -199,7 +229,7 @@ static void set_clause_from_records(record_tree *records, clause *c, int quote_l
 void set_variable_ids(clause *c, int id_from_name, binding_list *bs_bindings, kb *collection) {
   record_tree *records;
   records = malloc(sizeof(*records));
-  init_record_tree(records, 0);
+  init_record_tree(records, 0, NULL);
 
   set_variable_ids_rec(records, c, id_from_name, 0, collection);
 
@@ -210,6 +240,7 @@ void set_variable_ids(clause *c, int id_from_name, binding_list *bs_bindings, kb
       // TODO: eventually needs to get quote_level out based on binding?
       set_term_from_records(records, bs_bindings->list[i].term, 0, collection);
 
+  //records_print(records);
   free_record_tree(records);
   free(records);
 }
@@ -491,7 +522,7 @@ static int functions_differ(alma_function *x, alma_function *y, var_match_set *m
 static int quotes_differ(alma_quote *x, alma_quote *y, var_match_set *matches, int quote_level) {
   if (x->type == y->type) {
     if (x->type == SENTENCE) {
-      // TODO
+      // TODO when handling case for quote of formula equivalent to more than one clause
     }
     else {
       clause *c_x = x->clause_quote;
@@ -511,8 +542,7 @@ static int quotes_differ(alma_quote *x, alma_quote *y, var_match_set *matches, i
 }
 
 static int quasiquotes_differ(alma_quasiquote *x, alma_quasiquote *y, var_match_set *matches, int quote_level) {
-  // TODO
-  return 1;
+  return !var_match_consistent(matches, quote_level - x->backtick_count, x->variable, y->variable);
 }
 
 // Returns 0 if functions are equal while respecting x and y matchings based on matches arg; otherwise returns 1
