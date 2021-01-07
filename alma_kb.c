@@ -1850,8 +1850,10 @@ void process_new_clauses(kb *collection, kb_str *buf) {
   tommy_array_init(&collection->new_clauses);
 }
 
-/* Take all the resolution tasks from the pre_resolution buffer and push them onto the resolution task heap. */
-void pre_res_buffer_to_heap(kb *collection) {
+/* Take all the resolution tasks from the pre_resolution buffer and push them onto the resolution task heap.
+   If single is one just process the first element of the pre_resolution_buffer; otherwise process the whole 
+   buffer.  */
+void pre_res_buffer_to_heap(kb *collection, int single) {
   tommy_node *i = tommy_list_head(&collection->pre_res_task_buffer);
   tommy_node *next;
   while (i) {
@@ -1866,6 +1868,6 @@ void pre_res_buffer_to_heap(kb *collection) {
     }
     next = i->next;
     tommy_list_remove_existing(&collection->pre_res_task_buffer, i);
-    i = next;
+    i = single ? NULL : next; // Hacky -- set i to NULL if we only want to process at most one.
   }
 }

@@ -179,5 +179,5 @@ int im_compare(const void *arg, const void *obj);
 int pm_compare(const void *arg, const void *obj);
 char* name_with_arity(char *name, int arity);
 void init_resolution_choices(int ***resolution_choices, int num_subjects, int num_timesteps);
-void pre_res_buffer_to_heap(kb *collection);
+void pre_res_buffer_to_heap(kb *collection, int single);
 #endif
