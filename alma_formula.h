@@ -70,7 +70,7 @@ typedef struct alma_quasiquote {
   alma_variable *variable;
 } alma_quasiquote;
 
-int formulas_from_source(char *source, int file_src, int *formula_count, alma_node **formulas);
+int fol_from_source(char *source, int file_src, int *formula_count, alma_node **formulas, int *error_count, alma_node **errors);
 void make_cnf(alma_node *node);
 void quote_convert_func(alma_function *func);
 

@@ -14,3 +14,4 @@ fif(and(heard(quote(on_fire(Y))), smoke(Y)), conclusion(on_fire(Y))).
 if(and(bel(Agent_a, quote(color(sky, X))), bel(Agent_b, quote(color(sky, X)))), probably(quote(color(sky, X)))).
 if(and(bel(Agent_a, quote(color(sky, `X))), bel(Agent_b, quote(color(sky, `X)))), probably(quote(color(sky, X)))).
 if(and(bel(Agent_a, quote(color(sky, `X))), bel(Agent_b, quote(color(sky, `X)))), probably(quote(color(sky, `X)))).
+

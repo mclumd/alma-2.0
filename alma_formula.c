@@ -8,13 +8,12 @@
 #include "mpc/mpc.h"
 
 // TODO: Longer term, check for error codes of library functions used
-// TODO: Functions to return error instead of void
 
-static void alma_function_init(alma_function *func, int quote_level, mpc_ast_t *ast);
-static void alma_quote_init(alma_quote *quote, int quote_level, mpc_ast_t *ast);
+static int alma_function_init(alma_function *func, int quote_level, mpc_ast_t *ast);
+static int alma_quote_init(alma_quote *quote, int quote_level, mpc_ast_t *ast);
 
 // Recursively constructs ALMA FOL term representation of AST argument into term pointer
-static void alma_term_init(alma_term *term, int quote_level, mpc_ast_t *ast) {
+static int alma_term_init(alma_term *term, int quote_level, mpc_ast_t *ast) {
   // Variable
   if (strstr(ast->tag, "variable") != NULL) {
     term->type = VARIABLE;
@@ -22,12 +21,13 @@ static void alma_term_init(alma_term *term, int quote_level, mpc_ast_t *ast) {
     term->variable->name = malloc(strlen(ast->contents)+1);
     term->variable->id = 0;
     strcpy(term->variable->name, ast->contents);
+    return 1;
   }
   // Function
   else if (strstr(ast->tag, "constant") != NULL || strstr(ast->children[0]->tag, "funcname") != NULL) {
     term->type = FUNCTION;
     term->function = malloc(sizeof(*term->function));
-    alma_function_init(term->function, quote_level, ast);
+    return alma_function_init(term->function, quote_level, ast);
   }
   // Quasi-quote
   // Constructs ALMA quasi-quoted variable, counting backtick marks
@@ -46,36 +46,34 @@ static void alma_term_init(alma_term *term, int quote_level, mpc_ast_t *ast) {
       strcpy(var->name, ast->contents);
     }
 
-    if (backtick_count > quote_level) {
-      backtick_count = quote_level;
-    }
-    if (backtick_count > 0) {
-      term->type = QUASIQUOTE;
-      term->quasiquote = malloc(sizeof(*term->quasiquote));
-      term->quasiquote->backtick_count = backtick_count;
-      term->quasiquote->variable = var;
-    }
-    else {
-      term->type = VARIABLE;
-      term->variable = var;
-    }
+    term->type = QUASIQUOTE;
+    term->quasiquote = malloc(sizeof(*term->quasiquote));
+    term->quasiquote->backtick_count = backtick_count;
+    term->quasiquote->variable = var;
+
+    // Error return case for excess quasi-quotation marks
+    if (backtick_count > quote_level)
+      return 0;
+    else
+      return 1;
   }
   // Quote
   else {
     term->type = QUOTE;
     term->quote = malloc(sizeof(*term->quote));
-    alma_quote_init(term->quote, quote_level+1, ast);
+    return alma_quote_init(term->quote, quote_level+1, ast);
   }
 }
 
 // Recursively constructs ALMA FOL function representation of AST argument into ALMA function pointer
-static void alma_function_init(alma_function *func, int quote_level, mpc_ast_t *ast) {
+static int alma_function_init(alma_function *func, int quote_level, mpc_ast_t *ast) {
   // Case for function containing no terms
   if (ast->children_num == 0) {
     func->name = malloc(strlen(ast->contents)+1);
     strcpy(func->name, ast->contents);
     func->term_count = 0;
     func->terms = NULL;
+    return 1;
   }
   // Otherwise, terms exist and should be populated in ALMA instance
   else {
@@ -89,34 +87,36 @@ static void alma_function_init(alma_function *func, int quote_level, mpc_ast_t *
     if (termlist->children_num == 0 || strstr(termlist->tag, "|term") != NULL) {
       func->term_count = 1;
       func->terms = malloc(sizeof(*func->terms));
-      alma_term_init(func->terms, quote_level, termlist);
+      return alma_term_init(func->terms, quote_level, termlist);
     }
     // Case for listofterms with multiple terms
     else {
       func->term_count = (termlist->children_num+1)/2;
       func->terms = malloc(sizeof(*func->terms) * func->term_count);
+      int ret = 1;
       for (int i = 0; i < func->term_count; i++) {
-        alma_term_init(func->terms+i, quote_level, termlist->children[i*2]);
+        ret = ret && alma_term_init(func->terms+i, quote_level, termlist->children[i*2]);
       }
+      return ret;
     }
   }
 }
 
-static void alma_tree_init(alma_node *alma_tree, int quote_level, mpc_ast_t *ast);
+static int alma_tree_init(alma_node *alma_tree, int quote_level, mpc_ast_t *ast);
 
 // Recursively constructs ALMA FOL function representation of AST argument into ALMA quote pointer
-static void alma_quote_init(alma_quote *quote, int quote_level, mpc_ast_t *ast) {
+static int alma_quote_init(alma_quote *quote, int quote_level, mpc_ast_t *ast) {
   quote->type = SENTENCE;
   quote->sentence = malloc(sizeof(*quote->sentence));
-  alma_tree_init(quote->sentence, quote_level, ast->children[2]);
+  return alma_tree_init(quote->sentence, quote_level, ast->children[2]);
 }
 
 // Constructs ALMA FOL representation of a predicate:
 // an ALMA node whose union is used to hold an ALMA function that describes the predicate
-static void alma_predicate_init(alma_node *node, int quote_level, mpc_ast_t *ast) {
+static int alma_predicate_init(alma_node *node, int quote_level, mpc_ast_t *ast) {
   node->type = PREDICATE;
   node->predicate = malloc(sizeof(*node->predicate));
-  alma_function_init(node->predicate, quote_level, ast);
+  return alma_function_init(node->predicate, quote_level, ast);
 }
 
 
@@ -133,10 +133,10 @@ static alma_operator op_from_contents(char *contents) {
 }
 
 // Given an MPC AST pointer, constructs an ALMA tree to a FOL representation of the AST
-static void alma_tree_init(alma_node *alma_tree, int quote_level, mpc_ast_t *ast) {
+static int alma_tree_init(alma_node *alma_tree, int quote_level, mpc_ast_t *ast) {
   // Match tag containing literal as function
   if (strstr(ast->tag, "literal") != NULL) {
-    alma_predicate_init(alma_tree, quote_level, ast);
+    return alma_predicate_init(alma_tree, quote_level, ast);
   }
   // Match nested pieces of formula/fformula/bformula/conjform/fformconc rules, recursively operate on
   // Dependent on only these productions containing string formula within an almaformula tree
@@ -144,7 +144,7 @@ static void alma_tree_init(alma_node *alma_tree, int quote_level, mpc_ast_t *ast
           || strstr(ast->tag, "fformconc") != NULL) {
     // Case for formula producing just a literal
     if (strstr(ast->children[0]->tag, "literal") != NULL) {
-      alma_predicate_init(alma_tree, quote_level, ast->children[0]);
+      return alma_predicate_init(alma_tree, quote_level, ast->children[0]);
     }
     // Otherwise, formula derives to FOL contents
     else {
@@ -156,12 +156,12 @@ static void alma_tree_init(alma_node *alma_tree, int quote_level, mpc_ast_t *ast
 
       // Set arg1 based on children
       alma_tree->fol->arg1 = malloc(sizeof(*alma_tree->fol->arg1));
-      alma_tree_init(alma_tree->fol->arg1, quote_level, ast->children[1]);
+      int ret = alma_tree_init(alma_tree->fol->arg1, quote_level, ast->children[1]);
 
       if (strstr(ast->tag, "fformula") != NULL) {
         // Set arg2 for fformula conclusion
         alma_tree->fol->arg2 = malloc(sizeof(*alma_tree->fol->arg2));
-        alma_tree_init(alma_tree->fol->arg2, quote_level, ast->children[4]);
+        ret = ret && alma_tree_init(alma_tree->fol->arg2, quote_level, ast->children[4]);
         alma_tree->fol->tag = FIF;
       }
       else {
@@ -171,21 +171,22 @@ static void alma_tree_init(alma_node *alma_tree, int quote_level, mpc_ast_t *ast
         }
         else {
           alma_tree->fol->arg2 = malloc(sizeof(*alma_tree->fol->arg2));
-          alma_tree_init(alma_tree->fol->arg2, quote_level, ast->children[3]);
+          ret = ret && alma_tree_init(alma_tree->fol->arg2, quote_level, ast->children[3]);
         }
         if (strstr(ast->tag, "bformula") != NULL)
           alma_tree->fol->tag = BIF;
       }
+      return ret;
     }
   }
+  return 0;
 }
 
 // Top-level, given an AST for entire ALMA file parse
 // alma_trees must be freed by caller
-static void generate_alma_trees(mpc_ast_t *ast, alma_node **alma_trees, int *size) {
+static void generate_alma_trees(mpc_ast_t *ast, alma_node **alma_trees, int *size, alma_node **error_trees, int *error_size) {
   // Expects almaformula production to be children of top level of AST
-  // If the grammar changes such that top-level rule doesn't lead to almaformula,
-  // this will have to be changed
+  // If the grammar changes so top-level rule doesn't lead to almaformula, this must be changed
   *size = 0;
   // Only count children that contain an almaformula production
   for (int i = 0; i < ast->children_num; i++) {
@@ -195,34 +196,49 @@ static void generate_alma_trees(mpc_ast_t *ast, alma_node **alma_trees, int *siz
   *alma_trees = malloc(sizeof(**alma_trees) * *size);
 
   int index = 0;
+  *error_size = 0;
   for (int i = 0; i < ast->children_num; i++) {
     if (strstr(ast->children[i]->tag, "almaformula") != NULL) {
-      alma_tree_init(*alma_trees + index, 0, ast->children[i]->children[0]);
+      int ret = alma_tree_init(*alma_trees + index, 0, ast->children[i]->children[0]);
+      // Error return due to excess quasi-quotation, print message about
+      if (!ret) {
+        (*error_size)++;
+        *error_trees = realloc(*error_trees, sizeof(**error_trees) * *error_size);
+        (*error_trees)[*error_size-1] = (*alma_trees)[index];
+        (*alma_trees)[index].fol = NULL;
+      }
       index++;
     }
+  }
+
+  // If any trees moved to error_trees, adjust alma_trees to remove NULLs
+  if (*error_size > 0) {
+    alma_node *no_error = malloc(sizeof(*no_error) * (*size - *error_size));
+    index = 0;
+    for (int i = 0; i < *size && index < *size - *error_size; i++) {
+      if ((*alma_trees)[i].fol != NULL) {
+        no_error[index] = (*alma_trees)[i];
+        index++;
+      }
+    }
+    free(*alma_trees);
+    *alma_trees = no_error;
+    *size = *size - *error_size;
   }
 }
 
 // Boolean return based on success of parsing
-int formulas_from_source(char *source, int file_src, int *formula_count, alma_node **formulas) {
+int fol_from_source(char *source, int file_src, int *formula_count, alma_node **formulas, int *error_count, alma_node **errors) {
   mpc_ast_t *ast;
   if (file_src ? parse_file(source, &ast) : parse_string(source, &ast)) {
     // Obtain ALMA tree representations from MPC's AST
-    generate_alma_trees(ast, formulas, formula_count);
+    generate_alma_trees(ast, formulas, formula_count, errors, error_count);
     mpc_ast_delete(ast);
-
-    // Flatten CNF list into KB of clauses
-    for (int i = 0; i < *formula_count; i++)
-      make_cnf(*formulas+i);
-    // printf("CNF equivalents:\n");
-    // for (int i = 0; i < *formula_count; i++)
-    //   alma_fol_print(*formulas+i);
-    // printf("\n");
-
     return 1;
   }
   return 0;
 }
+
 
 void free_function(alma_function *func) {
   if (func == NULL)

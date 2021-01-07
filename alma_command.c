@@ -41,12 +41,45 @@ void kb_init(kb **collection, char *file, char *agent, char *trialnum, char *log
 
   parse_init();
 
+  if (logon) {
+    time_t rawtime;
+    time(&rawtime);
+    char *time = ctime(&rawtime);
+    int timelen = strlen(time)-1;
+    for (int idx = 0; idx < timelen; idx++)
+      if (time[idx] == ' ' || time[idx] == ':')
+        time[idx] = '-';
+    int agentlen = agent != NULL ? strlen(agent) : 0;
+    int triallen = trialnum != NULL ? strlen(trialnum) : 0;
+    int log_dir_len = log_dir != NULL ? strlen(log_dir) : 0;
+    char *logname = malloc(log_dir_len + 1 + 4 + agentlen + 1 + triallen + 1 + timelen + 9);
+    if (log_dir != NULL) {
+      strcpy(logname, log_dir);
+      logname[log_dir_len] = '/';
+      log_dir_len += 1;
+    }
+
+    strcpy(logname+log_dir_len, "alma");
+    if (agent != NULL)
+      strcpy(logname+log_dir_len+4, agent);
+    logname[log_dir_len+4+agentlen] = '-';
+    if (trialnum != NULL)
+      strcpy(logname+log_dir_len+4+agentlen+1,trialnum);
+    logname[log_dir_len+4+agentlen+1+triallen] = '-';
+    strncpy(logname+log_dir_len+6+agentlen+triallen, time, 24);
+    strcpy(logname+log_dir_len+6+agentlen+triallen+timelen, "-log.txt");
+    collec->almalog = fopen(logname, "w");
+    free(logname);
+  } else {
+    collec->almalog = NULL;
+  }
+
   // Given a file argument, obtain other initial clauses from
   if (file != NULL) {
     alma_node *trees;
     int num_trees;
 
-    if (formulas_from_source(file, 1, &num_trees, &trees)) {
+    if (formulas_from_source(file, 1, &num_trees, &trees, collec, buf)) {
       nodes_to_clauses(collec, trees, num_trees, &collec->new_clauses, 0, buf);
       fif_to_front(&collec->new_clauses);
     }
@@ -94,39 +127,6 @@ void kb_init(kb **collection, char *file, char *agent, char *trialnum, char *log
       fif_tasks_from_clause(collec, c);
     }
     i = i->next;
-  }
-
-  if (logon) {
-    time_t rawtime;
-    time(&rawtime);
-    char *time = ctime(&rawtime);
-    int timelen = strlen(time)-1;
-    for (int idx = 0; idx < timelen; idx++)
-      if (time[idx] == ' ' || time[idx] == ':')
-        time[idx] = '-';
-    int agentlen = agent != NULL ? strlen(agent) : 0;
-    int triallen = trialnum != NULL ? strlen(trialnum) : 0;
-    int log_dir_len = log_dir != NULL ? strlen(log_dir) : 0;
-    char *logname = malloc(log_dir_len + 1 + 4 + agentlen + 1 + triallen + 1 + timelen + 9);
-    if (log_dir != NULL) {
-      strcpy(logname, log_dir);
-      logname[log_dir_len] = '/';
-      log_dir_len += 1;
-    }
-    
-    strcpy(logname+log_dir_len, "alma");
-    if (agent != NULL)
-      strcpy(logname+log_dir_len+4, agent);
-    logname[log_dir_len+4+agentlen] = '-';
-    if (trialnum != NULL)
-      strcpy(logname+log_dir_len+4+agentlen+1,trialnum);
-    logname[log_dir_len+4+agentlen+1+triallen] = '-';
-    strncpy(logname+log_dir_len+6+agentlen+triallen, time, 24);
-    strcpy(logname+log_dir_len+6+agentlen+triallen+timelen, "-log.txt");
-    collec->almalog = fopen(logname, "w");
-    free(logname);
-  } else {
-    collec->almalog = NULL;
   }
 }
 
@@ -228,9 +228,11 @@ void kb_print(kb *collection, kb_str *buf) {
 void kb_halt(kb *collection) {
   // now and prev alias at this point, only free one
   free(collection->now);
+  if (collection->now == NULL)
+    free(collection->prev);
+  free(collection->wallnow);
   if (collection->wallnow == NULL)
     free(collection->wallprev);
-  free(collection->wallnow);
 
   for (tommy_size_t i = 0; i < tommy_array_size(&collection->new_clauses); i++)
     free_clause(tommy_array_get(&collection->new_clauses, i));
@@ -298,7 +300,7 @@ void kb_observe(kb *collection, char *string, kb_str *buf) {
   // Parse string into clauses
   alma_node *formulas;
   int formula_count;
-  if (formulas_from_source(string, 0, &formula_count, &formulas)) {
+  if (formulas_from_source(string, 0, &formula_count, &formulas, collection, buf)) {
     tommy_array arr;
     tommy_array_init(&arr);
     nodes_to_clauses(collection, formulas, formula_count, &arr, 0, buf);
@@ -335,7 +337,7 @@ void kb_backsearch(kb *collection, char *string, kb_str *buf) {
   // Parse string into clauses
   alma_node *formulas;
   int formula_count;
-  if (formulas_from_source(string, 0, &formula_count, &formulas)) {
+  if (formulas_from_source(string, 0, &formula_count, &formulas, collection, buf)) {
     tommy_array arr;
     tommy_array_init(&arr);
     nodes_to_clauses(collection, formulas, formula_count, &arr, 0, buf);

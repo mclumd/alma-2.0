@@ -112,6 +112,7 @@ typedef struct res_task {
   alma_function *neg; // Negative literal from y
 } res_task;
 
+int formulas_from_source(char *source, int file_src, int *formula_count, alma_node **formulas, kb *collection, kb_str *buf);
 void make_clause(alma_node *node, clause *c);
 int clauses_differ(clause *x, clause *y);
 clause* distrusted_dupe_check(kb *collection, clause *c);

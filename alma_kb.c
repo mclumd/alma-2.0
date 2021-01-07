@@ -281,6 +281,32 @@ static int function_compare(const void *p1, const void *p2) {
     return compare;
 }
 
+
+int formulas_from_source(char *source, int file_src, int *formula_count, alma_node **formulas, kb *collection, kb_str *buf) {
+  alma_node *errors = NULL;
+  int error_count;
+  int ret = fol_from_source(source, file_src, formula_count, formulas, &error_count, &errors);
+  if (ret) {
+    // Print messages and free error cases
+    /*for (int i = 0; i < error_count; i++) {
+      tee_alt("Error: quasi-quotation marks exceed level of quotation in ", collection, buf);
+      alma_fol_print(collection, errors + i, buf);
+    }*/
+    free(errors);
+
+    // Convert ALMA FOL to CNF formulas
+    for (int i = 0; i < *formula_count; i++)
+      make_cnf(*formulas+i);
+    // printf("CNF equivalents:\n");
+    // for (int i = 0; i < *formula_count; i++)
+    //   alma_fol_print(*formulas+i);
+    // printf("\n");
+    return 1;
+  }
+  else
+    return ret;
+}
+
 void make_clause(alma_node *node, clause *c) {
   make_clause_rec(node, c);
 
@@ -1016,7 +1042,7 @@ void res_tasks_from_clause(kb *collection, clause *c, int process_negatives) {
 clause* assert_formula(kb *collection, char *string, int print, kb_str *buf) {
   alma_node *formulas;
   int formula_count;
-  if (formulas_from_source(string, 0, &formula_count, &formulas)) {
+  if (formulas_from_source(string, 0, &formula_count, &formulas, collection, buf)) {
     //    printf("HEREEEE; %s\n",string);
     //    printf("BUF: %p\n",(void *)buf);
     tommy_array temp;
@@ -1034,7 +1060,7 @@ clause* assert_formula(kb *collection, char *string, int print, kb_str *buf) {
 int delete_formula(kb *collection, char *string, int print, kb_str *buf) {
   alma_node *formulas;
   int formula_count;
-  if (formulas_from_source(string, 0, &formula_count, &formulas)) {
+  if (formulas_from_source(string, 0, &formula_count, &formulas, collection, buf)) {
     // Convert formulas to clause array
     tommy_array clauses;
     tommy_array_init(&clauses);
@@ -1081,7 +1107,7 @@ int delete_formula(kb *collection, char *string, int print, kb_str *buf) {
 int update_formula(kb *collection, char *string, kb_str *buf) {
   alma_node *formulas;
   int formula_count;
-  if (formulas_from_source(string, 0, &formula_count, &formulas)) {
+  if (formulas_from_source(string, 0, &formula_count, &formulas, collection, buf)) {
     // Must supply two formula arguments to update
     if (formula_count != 2) {
       for (int i = 0; i < formula_count; i++)
