@@ -288,10 +288,12 @@ int formulas_from_source(char *source, int file_src, int *formula_count, alma_no
   int ret = fol_from_source(source, file_src, formula_count, formulas, &error_count, &errors);
   if (ret) {
     // Print messages and free error cases
-    /*for (int i = 0; i < error_count; i++) {
+    for (int i = 0; i < error_count; i++) {
       tee_alt("Error: quasi-quotation marks exceed level of quotation in ", collection, buf);
       alma_fol_print(collection, errors + i, buf);
-    }*/
+      tee_alt("\n", collection, buf);
+      free_alma_tree(errors+i);
+    }
     free(errors);
 
     // Convert ALMA FOL to CNF formulas

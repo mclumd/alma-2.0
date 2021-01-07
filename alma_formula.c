@@ -95,7 +95,7 @@ static int alma_function_init(alma_function *func, int quote_level, mpc_ast_t *a
       func->terms = malloc(sizeof(*func->terms) * func->term_count);
       int ret = 1;
       for (int i = 0; i < func->term_count; i++) {
-        ret = ret && alma_term_init(func->terms+i, quote_level, termlist->children[i*2]);
+        ret = alma_term_init(func->terms+i, quote_level, termlist->children[i*2]) && ret;
       }
       return ret;
     }
@@ -161,7 +161,7 @@ static int alma_tree_init(alma_node *alma_tree, int quote_level, mpc_ast_t *ast)
       if (strstr(ast->tag, "fformula") != NULL) {
         // Set arg2 for fformula conclusion
         alma_tree->fol->arg2 = malloc(sizeof(*alma_tree->fol->arg2));
-        ret = ret && alma_tree_init(alma_tree->fol->arg2, quote_level, ast->children[4]);
+        ret = alma_tree_init(alma_tree->fol->arg2, quote_level, ast->children[4]) && ret;
         alma_tree->fol->tag = FIF;
       }
       else {
@@ -171,7 +171,7 @@ static int alma_tree_init(alma_node *alma_tree, int quote_level, mpc_ast_t *ast)
         }
         else {
           alma_tree->fol->arg2 = malloc(sizeof(*alma_tree->fol->arg2));
-          ret = ret && alma_tree_init(alma_tree->fol->arg2, quote_level, ast->children[3]);
+          ret = alma_tree_init(alma_tree->fol->arg2, quote_level, ast->children[3]) && ret;
         }
         if (strstr(ast->tag, "bformula") != NULL)
           alma_tree->fol->tag = BIF;
