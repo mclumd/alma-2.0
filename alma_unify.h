@@ -27,7 +27,6 @@ typedef struct binding {
   int var_quasi_quote_lvl;
   alma_term *term;
   int term_quote_lvl;
-  int term_quasi_quote_lvl;
   // Parent literal/term pointer to track overall source of term in binding
   void *term_parent;
 } binding;

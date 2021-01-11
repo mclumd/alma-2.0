@@ -11,7 +11,6 @@ static void collect_variables(alma_term *term, binding_list *b, int quote_level,
     b->list[b->num_bindings-1].var_quasi_quote_lvl = 0;
     b->list[b->num_bindings-1].term = malloc(sizeof(alma_term));
     b->list[b->num_bindings-1].term_quote_lvl = quote_level;
-    b->list[b->num_bindings-1].term_quasi_quote_lvl = 0;
     copy_alma_term(term, b->list[b->num_bindings-1].term);
     b->list[b->num_bindings-1].term_parent = parent;
   }

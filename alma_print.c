@@ -202,7 +202,7 @@ void print_bindings(kb *collection, binding_list *theta, int print_all, kb_str *
     tee_alt(" / ", collection, buf);
     alma_term_print(collection, theta->list[i].term, buf);
     if (print_all) {
-      tee_alt(" (%d, %d, %p)", collection, buf, theta->list[i].term_quote_lvl, theta->list[i].term_quasi_quote_lvl, theta->list[i].term_parent);
+      tee_alt(" (%d, %p)", collection, buf, theta->list[i].term_quote_lvl, theta->list[i].term_parent);
     }
     if (i < theta->num_bindings-1) {
       if (print_all)
