@@ -67,36 +67,79 @@ int release_matches(var_match_set *v, int retval) {
 
 // Substitution functions
 
+static void adjust_quasiquote_level(alma_term *term, int new_lvl) {
+  if (term->type == FUNCTION) {
+    for (int i = 0; i < term->function->term_count; i++)
+      adjust_quasiquote_level(term->function->terms+i, new_lvl);
+  }
+  else if (term->type == QUOTE) {
+    if (term->type == CLAUSE) {
+      clause *c = term->quote->clause_quote;
+      for (int i = 0; i < c->pos_count; i++)
+        for (int j = 0; j < c->pos_lits[i]->term_count; j++)
+          adjust_quasiquote_level(c->pos_lits[i]->terms+j, new_lvl+1);
+      for (int i = 0; i < c->neg_count; i++)
+        for (int j = 0; j < c->neg_lits[i]->term_count; j++)
+          adjust_quasiquote_level(c->neg_lits[i]->terms+j, new_lvl+1);
+    }
+  }
+  else if (term->type == QUASIQUOTE) {
+    // Override amount of quasi-quotation marks with new level
+    if (new_lvl != 0)
+      term->quasiquote->backtick_count = new_lvl;
+    // If all quasiquotation would be lost, convert to regular variable
+    else {
+      term->type = VARIABLE;
+      alma_quasiquote *temp = term->quasiquote;
+      term->variable = temp->variable;
+      free(temp);
+    }
+  }
+}
+
 static void subst_func(binding_list *theta, alma_function *func, int level) {
   for (int i = 0; i < func->term_count; i++)
     subst(theta, func->terms+i, level);
 }
 
 // For a given term, replace variables in the binding list, replace with what they're bound to
-void subst(binding_list *theta, alma_term *term, int level) {
+void subst(binding_list *theta, alma_term *term, int quote_level) {
   if (term->type == VARIABLE) {
-    // TODO: must be generalized significantly based on quotation and quasi-quotation amounts
-
     binding *contained = bindings_contain(theta, term->variable);
+    // If a variable is bound, replace it with whatever it is bound to
     if (contained != NULL) {
       free(term->variable->name);
       free(term->variable);
       copy_alma_term(contained->term, term);
+
+      if (quote_level == 0 && contained->term_quote_lvl != quote_level)
+        adjust_quasiquote_level(term, quote_level);
     }
   }
   else if (term->type == FUNCTION) {
-    subst_func(theta, term->function, level);
+    subst_func(theta, term->function, quote_level);
   }
   else if (term->type == QUOTE && term->quote->type == CLAUSE) {
     clause *c = term->quote->clause_quote;
     for (int i = 0; i < c->pos_count; i++)
-      subst_func(theta, c->pos_lits[i], level+1);
+      subst_func(theta, c->pos_lits[i], quote_level+1);
     for (int i = 0; i < c->neg_count; i++)
-      subst_func(theta, c->neg_lits[i], level+1);
+      subst_func(theta, c->neg_lits[i], quote_level+1);
   }
   else if (term->type == QUASIQUOTE) {
-    // TODO
-    // complications of context-dependent substitution to take care with
+    binding *contained = bindings_contain(theta, term->quasiquote->variable);
+    // If a variable is bound, replace it with whatever it is bound to
+    if (contained != NULL) {
+      int quasiquote_amount = term->quasiquote->backtick_count;
+      free(term->quasiquote->variable->name);
+      free(term->quasiquote->variable);
+      free(term->quasiquote);
+      copy_alma_term(contained->term, term);
+
+      // If quote levels aren't equal, must adjust when substitute into new quote context
+      if (quasiquote_amount == quote_level && contained->term_quote_lvl != quote_level)
+        adjust_quasiquote_level(term, quote_level);
+    }
   }
 }
 

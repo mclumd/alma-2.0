@@ -38,7 +38,7 @@ typedef struct binding_list {
 } binding_list;
 
 binding* bindings_contain(binding_list *theta, alma_variable *var);
-void subst(binding_list *theta, alma_term *term, int level);
+void subst(binding_list *theta, alma_term *term, int quote_level);
 
 int quote_term_unify(alma_quote *x, alma_quote *y, binding_list *theta);
 int term_unify(alma_term *x, alma_term *y, binding_list *theta);
