@@ -570,7 +570,7 @@ static int quotes_differ(alma_quote *x, alma_quote *y, var_match_set *matches, i
 }
 
 static int quasiquotes_differ(alma_quasiquote *x, alma_quasiquote *y, var_match_set *matches, int quote_level) {
-  return !var_match_consistent(matches, quote_level - x->backtick_count, x->variable, y->variable);
+  return x->backtick_count != y->backtick_count || !var_match_consistent(matches, quote_level - x->backtick_count, x->variable, y->variable);
 }
 
 // Returns 0 if functions are equal while respecting x and y matchings based on matches arg; otherwise returns 1
@@ -1415,7 +1415,7 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
         binding_list *theta = malloc(sizeof(*theta));
         init_bindings(theta);
         // Debug
-        printf("Unifying %ld with %ld\n", current_task->x->index, current_task->y->index);
+        print_unify(collection, current_task->pos, current_task->x->index, current_task->neg, current_task->y->index, buf);
         // Given a res_task, attempt unification
         if (pred_unify(current_task->pos, current_task->neg, theta)) {
           // If successful, create clause for result of resolution and add to new_clauses

@@ -167,7 +167,7 @@ void clause_print(kb *collection, clause *c, kb_str *buf) {
     if (c->children != NULL) {
       tee_alt("children: ", collection, buf);
       for (int i = 0; i < c->children_count; i++) {
-        tee_alt("%ld",collection, buf, c->children[i]->index);
+        tee_alt("%ld", collection, buf, c->children[i]->index);
         if (i < c->children_count-1)
           tee_alt(", ", collection, buf);
       }
@@ -176,6 +176,14 @@ void clause_print(kb *collection, clause *c, kb_str *buf) {
   }
   c->dirty_bit = (char) 0;
   //tee_alt(" (L%ld)", c->acquired);
+}
+
+void print_unify(kb *collection, alma_function *pos, long pos_idx, alma_function *neg, long neg_idx, kb_str *buf) {
+  tee_alt("Unifying ", collection, buf);
+  alma_function_print(collection, pos, buf);
+  tee_alt(" (%ld) with ", collection, buf, pos_idx);
+  alma_function_print(collection, neg, buf);
+  tee_alt(" (%ld)\n", collection, buf, neg_idx);
 }
 
 void print_matches(kb *collection, var_match_set *v, kb_str *buf){
@@ -197,12 +205,12 @@ void print_bindings(kb *collection, binding_list *theta, int print_all, kb_str *
   for (int i = 0; i < theta->num_bindings; i++) {
     tee_alt("%s%lld", collection, buf, theta->list[i].var->name, theta->list[i].var->id);
     if (print_all) {
-      tee_alt(" (%d, %d)", collection, buf, theta->list[i].var_quote_lvl, theta->list[i].var_quasi_quote_lvl);
+      tee_alt(" (%d quote, %d quasi-quote)", collection, buf, theta->list[i].var_quote_lvl, theta->list[i].var_quasi_quote_lvl);
     }
     tee_alt(" / ", collection, buf);
     alma_term_print(collection, theta->list[i].term, buf);
     if (print_all) {
-      tee_alt(" (%d, %p)", collection, buf, theta->list[i].term_quote_lvl, theta->list[i].term_parent);
+      tee_alt(" (%d quasi-quote, %p parent)", collection, buf, theta->list[i].term_quote_lvl, theta->list[i].term_parent);
     }
     if (i < theta->num_bindings-1) {
       if (print_all)

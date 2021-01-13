@@ -151,7 +151,7 @@ void kb_step(kb *collection, kb_str *buf) {
   collection->time++;
 
   process_res_tasks(collection, &collection->res_tasks, &collection->new_clauses, NULL, buf);
-  process_fif_tasks(collection);
+  process_fif_tasks(collection, buf);
   process_backsearch_tasks(collection, buf);
 
   int newc = tommy_array_size(&collection->new_clauses) > 0;
@@ -191,11 +191,11 @@ void kb_print(kb *collection, kb_str *buf) {
   tommy_node *i = tommy_list_head(&collection->clauses);
   while (i) {
     index_mapping *data = i->data;
-    if (data->value->dirty_bit ) {
+    //if (data->value->dirty_bit) {
       tee_alt("%ld: ", collection, buf, data->key);
       clause_print(collection, data->value, buf);
       tee_alt("\n", collection, buf);
-    }
+    //}
     i = i->next;
   }
 

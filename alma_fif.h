@@ -42,7 +42,7 @@ typedef struct fif_task {
 
 void fif_task_map_init(kb *collection, clause *c, int init_to_unify);
 void fif_tasks_from_clause(kb *collection, clause *c);
-void process_fif_tasks(kb *collection);
+void process_fif_tasks(kb *collection, kb_str *buf);
 
 void fif_to_front(tommy_array *clauses);
 void free_fif_mapping(void *arg);

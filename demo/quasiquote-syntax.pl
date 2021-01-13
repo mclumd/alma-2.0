@@ -15,3 +15,4 @@ if(and(bel(Agent_a, quote(color(sky, X))), bel(Agent_b, quote(color(sky, X)))), 
 if(and(bel(Agent_a, quote(color(sky, `X))), bel(Agent_b, quote(color(sky, `X)))), probably(quote(color(sky, X)))).
 if(and(bel(Agent_a, quote(color(sky, `X))), bel(Agent_b, quote(color(sky, `X)))), probably(quote(color(sky, `X)))).
 
+if(and(foo, and(bel(Agent_a, quote(color(sky, `X))), bel(Agent_b, quote(color(sky, `X))))), probably2(quote(color(sky, X)))).
