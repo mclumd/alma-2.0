@@ -67,7 +67,9 @@ int release_matches(var_match_set *v, int retval) {
 
 // Substitution functions
 
-static void adjust_quasiquote_level(alma_term *term, int new_lvl) {
+// Function used for substitution and cases like truth predicate
+// Arg term is adjusted to begin inside quotation level new_lvl
+void adjust_quasiquote_level(alma_term *term, int new_lvl) {
   if (term->type == FUNCTION) {
     for (int i = 0; i < term->function->term_count; i++)
       adjust_quasiquote_level(term->function->terms+i, new_lvl);
@@ -112,6 +114,8 @@ void subst(binding_list *theta, alma_term *term, int quote_level) {
       free(term->variable);
       copy_alma_term(contained->term, term);
 
+      // If a variable is being substituted for a binding, and that binding comes from quotation,
+      // then must decrease quasi-quotation to match unquoted substitution context
       if (quote_level == 0 && contained->term_quote_lvl != quote_level)
         adjust_quasiquote_level(term, quote_level);
     }
@@ -365,7 +369,7 @@ static int unify_quasiquote(alma_term *qqterm, alma_term *x, void *qq_parent, vo
           printf("Surprising mismatch of quasi-quote type or mark amounts to unify %lld with %lld\n", res->var->id, x->quasiquote->variable->id);
           return 0;
         }
-        return unify_quasiquote(res->term, x, res->term_parent, x_parent, res->term_quote_lvl, x_quote_lvl, theta);
+        return unify(res->term, x, res->term_parent, x_parent, res->term_quote_lvl, x_quote_lvl, theta);
       }
       else if ((res = bindings_contain(theta, x->quasiquote->variable)) != NULL) {
         if (res->var_quasi_quote_lvl != x->quasiquote->backtick_count || res->term->type != QUASIQUOTE || res->term->quasiquote->backtick_count != qq->backtick_count) {
@@ -373,7 +377,7 @@ static int unify_quasiquote(alma_term *qqterm, alma_term *x, void *qq_parent, vo
           printf("Surprising mismatch of quasi-quote type or mark amounts to unify %lld with %lld\n", res->var->id, qq->variable->id);
           return 0;
         }
-        return unify_quasiquote(qqterm, res->term, qq_parent, res->term_parent, qq_quote_lvl, res->term_quote_lvl, theta);
+        return unify(qqterm, res->term, qq_parent, res->term_parent, qq_quote_lvl, res->term_quote_lvl, theta);
       }
       else if (occurs_check(theta, qq->variable, x)) {
         // Debug
@@ -457,6 +461,11 @@ static int unify(alma_term *x, alma_term *y, void *x_parent, void *y_parent, int
   // Unification succeeds without changing theta if trying to unify variable with itself
   if (x->type == VARIABLE && y->type == VARIABLE
       && x->variable->id == y->variable->id) {
+    return 1;
+  }
+  // Unification succeeds without changing theta if trying to unify quasi-quoted variable with itself
+  else if (x->type == QUASIQUOTE && y->type == QUASIQUOTE
+      && x->quasiquote->variable->id == y->quasiquote->variable->id) {
     return 1;
   }
   else if (x->type == VARIABLE) {

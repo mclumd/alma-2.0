@@ -38,6 +38,7 @@ typedef struct binding_list {
 } binding_list;
 
 binding* bindings_contain(binding_list *theta, alma_variable *var);
+void adjust_quasiquote_level(alma_term *term, int new_lvl);
 void subst(binding_list *theta, alma_term *term, int quote_level);
 
 int quote_term_unify(alma_quote *x, alma_quote *y, binding_list *theta);

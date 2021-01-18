@@ -1584,10 +1584,18 @@ static void handle_true(kb *collection, clause *truth, kb_str *buf) {
     }
     // Quote clause can be extracted directly
     else {
-      // TODO when quasiquotation is added, if done with new term these must be removed from outermost clause
       clause *u = malloc(sizeof(*u));
       copy_clause_structure(quote->clause_quote, u);
-      // TODO with quasiquotation, only set IDs for newly unquoted variables
+
+      // True formula has its outermost quotation withdrawn; must adjust quasiquotation for this
+      for (int i = 0; i < u->pos_count; i++)
+        for (int j = 0; j < u->pos_lits[i]->term_count; j++)
+          adjust_quasiquote_level(u->pos_lits[i]->terms+j, 0);
+      for (int i = 0; i < u->neg_count; i++)
+        for (int j = 0; j < u->neg_lits[i]->term_count; j++)
+          adjust_quasiquote_level(u->neg_lits[i]->terms+j, 0);
+
+      // Adjust variable IDs for the new formula
       set_variable_ids(u, 1, NULL, collection);
       tommy_array_insert(&unquoted, u);
     }
