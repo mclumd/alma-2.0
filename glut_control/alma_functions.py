@@ -12,7 +12,7 @@ from copy import deepcopy
 import numpy as np
 import alma
 import functools
-import rl_functions
+import rl_utils
 
 default_rl_params = {
   'training':  True,

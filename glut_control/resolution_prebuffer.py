@@ -3,27 +3,31 @@ Reinforcement learning functionality.
 
 Currently, the following are planned:
   a) A neural network that takes two alma_functions as parameters and outputs a probability that these will not unify.
-  b)
-  c)
+  b) 
+  c) 
 """
 
-
+import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras.models import Model
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.losses import BinaryCrossentropy
+from tensorflow.keras.metrics import CategoricalAccuracy
 from tensorflow.keras.layers import Dense, Dropout
 from spektral.layers import GCNConv, GlobalSumPool
+from spektral.data.graph import Graph
+from spektral.data import DisjointLoader
 
 import spektral
 import spektral.models
 
 import numpy as np
-import unif.unifier as un
-from rl_dataset import potential_inference_data
+from rl_dataset import potential_inference_data, simple_graph_dataset
 import sys
 import pickle
 import alma_functions as aw
 from sklearn.utils import shuffle
-
+from vectorization import graph_representation, unifies
 
 def forward_model(use_tf = False):
     # TODO:  fix use_tf code to return everything if this ever gets used.
@@ -51,21 +55,60 @@ def forward_model(use_tf = False):
         model.add(keras.layers.Dense(1, activation='sigmoid'))
     return model
 
+class history_struct:
+    def __init__(self, d):
+        self.history = d
+        
 class gnn_model(Model):
     def __init__(self, max_nodes=20):
         super().__init__()
-        self.graph_net = spektral.models.general_gnn.GeneralGNN(1, activation=None, hidden=256, message_passing=4, pre_process=2, post_process=2, connectivity='cat', batch_norm=True, dropout=0.0, aggregate='sum', hidden_activation='prelu', pool='sum')
-
-
-
+        self.graph_net = spektral.models.general_gnn.GeneralGNN(1, activation='softmax', hidden=256, message_passing=4, pre_process=2, post_process=2, connectivity='cat', batch_norm=True, dropout=0.2, aggregate='sum', hidden_activation='prelu', pool='sum')
+        self.graph_net.compile('adam', 'binary_crossentropy')
+        self.optimizer = Adam(learning_rate=0.00025, clipnorm=1.0)
+        #self.loss_fn = BinaryCrossentropy()
+        self.loss_fn = keras.losses.Huber()
+        self.acc_fn = CategoricalAccuracy()
 
     def call(self, inputs):
         return self.graph_net(inputs)
 
+    # Training function
+    #@tf.function(input_signature=loader_tr.tf_signature(), experimental_relax_shapes=True)
+    def train_on_batch(self, inputs, target):
+        with tf.GradientTape() as tape:
+            predictions = self.graph_net(inputs, training=True)
+            loss = self.loss_fn(target, predictions) + sum(self.graph_net.losses)
+            acc = self.acc_fn(target, predictions)
 
+        gradients = tape.gradient(loss, self.graph_net.trainable_variables)
+        self.optimizer.apply_gradients(zip(gradients, self.graph_net.trainable_variables))
+        return loss, acc
 
-class res_prefilter:
-    def __init__(self, subjects, words, use_tf=False, debug=True, use_gnn=False):
+    def fit(self, X, y, batch_size=16, verbose=True):
+        dataset = simple_graph_dataset(X,y)
+        loader = DisjointLoader(dataset, batch_size = batch_size)
+        preds = []
+        #results = []
+        total_loss = 0
+        total_acc = 0
+        num_epochs = len(X) // batch_size
+        if len(X) % batch_size != 0:
+            num_epochs += 1    # Extra batch for remainder
+        for i in range(num_epochs):
+            b = loader.__next__()
+            inputs = (b[0], b[1], b[3])
+            target = b[2]
+            loss, acc = self.train_on_batch(inputs, target )
+            total_loss += loss
+            total_acc += acc
+            #results.append((loss, acc))
+            #preds.append(batch_preds.numpy())
+        return history_struct({'accuracy': [(total_acc / num_epochs)],
+                               'loss': [(total_loss / num_epochs)]})
+        
+
+class res_prebuffer:
+    def __init__(self, subjects, words, use_tf=False, debug=True, use_gnn=False, gnn_nodes = 20):
         self.use_tf = use_tf
         self.model = forward_model(use_tf) if not use_gnn else gnn_model()
         self.model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy', 'binary_crossentropy'])
@@ -80,7 +123,7 @@ class res_prefilter:
         self.words_dict = {}
         for idx, word in enumerate(self.words):
             self.words_dict[word] = idx+1
-        self.batch_size = 32
+        self.batch_size = 16
         self.debug=debug
         if self.debug:
             self.saved_prbs = []
@@ -97,6 +140,8 @@ class res_prefilter:
         if use_gnn:
             #self.graph_buffer = potential_inference_data()
             self.graph_buffer = None
+            self.max_gnn_nodes = gnn_nodes
+            self.graph_rep = graph_representation(self.subjects_dict, self.max_gnn_nodes)
     
 
 
@@ -130,8 +175,17 @@ class res_prefilter:
 
 
     def vectorize(self, inputs):
-        if self.vectorize_alg == 'bow1' or self.vectorize_alg == 'gnn1':
+        if self.vectorize_alg == 'bow1':
             return self.vectorize_bow1(inputs)
+        elif self.vectorize_alg == 'gnn1':
+            res = []
+            for inp0, inp1 in inputs:
+                res.append(self.graph_rep.inputs_to_graphs(inp0, inp1))
+            print('done')
+            #test = np.array(res)
+            return res
+            #  after debugging use this
+            #  return np.array([ self.graph_rep.inputs_to_graphs(inp0, inp1) for inp0, inp1 in inputs ])
         elif self.vectorize_alg == 'word2vec':
             return self.vectorize_w2vec(inputs)
         
@@ -142,7 +196,7 @@ class res_prefilter:
     
     def save_batch(self, inputs, prb_strings):
         X = self.vectorize(inputs)
-        y0 = self.unifies(prb_strings)
+        y0 = unifies(prb_strings)
 
         if self.use_tf:
             y = tf.reshape(y0, (-1, 1))
@@ -173,9 +227,6 @@ class res_prefilter:
         else:
             self.Xbuffer, self.ybuffer = shuffle(self.Xbuffer, self.ybuffer)
 
-        if self.use_gnn and self.graph_buffer is None:
-            self.graph_buffer = potential_inference_data(self.saved_inputs, self.Xbuffer, self.ybuffer)
-
         total_samples = 0
         total_pos = 0
         Xres, yres = [], []
@@ -204,7 +255,10 @@ class res_prefilter:
                     yres.append(y)
                     total_samples += 1
                     total_pos += 1
-        return np.array(Xres), np.array(yres)
+        if self.use_gnn:
+            return Xres, yres
+        else:
+            return np.array(Xres), np.array(yres)
 
     def train_buffered_batch(self, sample_ratio=0.5):
         X, y0 = self.get_training_batch(self.batch_size, int(self.batch_size*sample_ratio))
@@ -212,6 +266,7 @@ class res_prefilter:
             y = tf.reshape(y0, (-1, 1))
         else:
             y = y0
+
         if self.use_tf:
             with tf.GradientTape() as tape:
                 predb = self.model(X)
@@ -265,16 +320,57 @@ class res_prefilter:
 
     def get_priorities(self, inputs):
         X = self.vectorize(inputs)
-        preds = self.model.predict(X)
+        if self.use_gnn:
+            #Xgraph = [ Graph(x,a) for a,x in X]
+            # Want inputs to be a pair X, A where
+            # X is (num_batches, num_nodes, num_features) and
+            # A is (num_batches, num_nodes, num_nodes)
+            # Want targets to be (num_batches,) I think.
+            # Xlist = []
+            # Alist = []
+            # for a,x in X:
+            #     Alist.append(a)
+            #     Xlist.append(x)
+            # inputs = (  np.array(Xlist), np.array(Alist))
+            # t = np.zeros(len(Xlist))  # don't really matter
+            #preds = self.model((inputs,t))
+            dataset = simple_graph_dataset(X)
+            loader = DisjointLoader(dataset, batch_size = self.batch_size)
+            preds = []
+            num_epochs = len(X) // self.batch_size
+            if len(X) % self.batch_size != 0:
+                num_epochs += 1    # Extra batch for remainder
+            for i in range(num_epochs):
+                b = loader.__next__()
+                # b is now a triple:  b[0] is a batch of X, b[1] is a batch of A (as a SparseTensor),
+                # b[2] is is some kind of index array
+                batch_preds = self.model.graph_net(b, training=False)
+                preds.append(batch_preds.numpy())
+            result = np.concatenate(preds).reshape(-1)
+            return result
+
+        else:
+            preds = self.model.predict(X)
         return preds
 
     def model_save(self, id_str, numeric_bits):
         pkl_file = open("rl_model_{}.pkl".format(id_str), "wb")
         pickle.dump((self.subjects, self.words, self.num_subjects, self.num_words, self.subjects_dict, self.words_dict, self.batch_size, self.use_tf, numeric_bits), pkl_file)
-        self.model.save("rl_model_{}".format(id_str))
+        if self.use_gnn:
+            self.model.graph_net.save("rl_model_{}".format(id_str))
+        else:
+            self.model.save("rl_model_{}".format(id_str))
 
     def model_load(self, id_str):
-        self.model = keras.models.load_model("rl_model_{}".format(id_str))
+        if self.use_gnn:
+            # print("Model loading not yet implemented.")
+            # raise NotImplementedError
+            # TODO:  test the following code
+            pkl_file = open("rl_model_{}.pkl".format(id_str), "rb")
+            (self.subjects, self.words, self.num_subjects, self.num_words, self.subjects_dict, self.words_dict, self.batch_size, self.use_tf, numeric_bits) = pickle.load(pkl_file)
+            self.model.graph_net = keras.models.load_model("rl_model_{}".format(id_str))
+        else:
+            self.model = keras.models.load_model("rl_model_{}".format(id_str))
 
     def unify_likelihood(self, inputs):
         X = self.vectorize(inputs)

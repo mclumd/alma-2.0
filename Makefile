@@ -80,7 +80,7 @@ shared: alma.o tommyarray.o tommyhashlin.o tommyhash.o tommylist.o mpc.o alma_pa
 	#sudo cp libalma.so /usr/local/lib/libalma.so
 
 python:  almamodule.c
-	source /home/justin/intelpython3/bin/activate && python setup.py install --user
+	python setup.py install --user
 
 static: alma.o tommyarray.o tommyhashlin.o tommyhash.o tommylist.o mpc.o alma_parser.o alma_formula.o alma_kb.o alma_unify.o alma_command.o alma_print.o alma_proc.o alma_fif.o alma_backsearch.o compute_priority.o res_task_heap.o alma_term_search.o
 	$(CC)  -o libalma.a tommyarray.o tommyhashlin.o tommyhash.o tommylist.o mpc.o alma_parser.o alma_formula.o alma_kb.o alma_unify.o alma_command.o alma_print.o alma_proc.o alma_fif.o alma_backsearch.o compute_priority.o res_task_heap.o alma_term_search.o alma.o
