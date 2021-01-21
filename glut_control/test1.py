@@ -8,7 +8,7 @@ Collect data and report results.
 
 import random
 import os
-import rl_functions
+import rl_utils as rl_functions
 import numpy as np
 import itertools
 import pickle
@@ -22,7 +22,7 @@ test_params = {
     'explosion_size': 1000,
     'alma_heap_print_size': 100
 }
-alma_inst,res = alma.init(1,'/home/justin/alma-2.0/glut_control/test1_kb.pl', '0', 1, 1000, ['a', 'b'], [0.5]*6)
+alma_inst,res = alma.init(1,'/home/justin/alma-2.0/glut_control/test1_kb.pl', '0', 1, 1000, [], [])
 
 def res_task_lits(lit_str):
     L = lit_str.split('\n')[:-1]
@@ -57,7 +57,7 @@ def train(explosion_steps=50, num_steps=500, numeric_bits=10, model_name="test1"
     network = rl_functions.res_prefilter(subjects, [])
     for b in range(10000):
         print("Starting round ", b)
-        alma_inst,res = alma.init(1,'/home/justin/alma-2.0/glut_control/test1_kb.pl', '0', 1, 1000, ['a', 'b'], [0.5]*6)
+        alma_inst,res = alma.init(1,'/home/justin/alma-2.0/glut_control/test1_kb.pl', '0', 1, 1000, [], [])
         exp = explosion(explosion_steps)
         res_tasks = exp[0]
         res_lits = res_task_lits(exp[2])
