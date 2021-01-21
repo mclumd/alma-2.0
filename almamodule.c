@@ -320,7 +320,22 @@ static PyObject *prb_to_resolutions(PyObject *self, PyObject *args) {
   }
   collection = (kb *)alma_kb;
   collection->prb_threshold = threshold;
-  pre_res_buffer_to_heap(collection);
+  pre_res_buffer_to_heap(collection, 0);
+  return Py_None;
+}
+
+static PyObject *single_prb_to_resolutions(PyObject *self, PyObject *args) {
+  long alma_kb;
+  kb *collection;
+  double threshold;
+
+  //fprintf(stderr, "In prb_to_resolutions\n");
+  if (!PyArg_ParseTuple(args, "ld", &alma_kb, &threshold )) {
+    return NULL;
+  }
+  collection = (kb *)alma_kb;
+  collection->prb_threshold = threshold;
+  pre_res_buffer_to_heap(collection, 1);
   return Py_None;
 }
 
@@ -756,6 +771,7 @@ static PyMethodDef AlmaMethods[] = {
   {"prebuf", alma_get_pre_res_task_buffer, METH_VARARGS,"Retrieve pre-resolution task list."},
   {"set_priors_prb", set_prb_priorities, METH_VARARGS,"Set pre-resolution task list priorities."},
   {"prb_to_res_task", prb_to_resolutions, METH_VARARGS,"Flush pre-resolution task list to resolution task heap."},
+  {"single_prb_to_res_task", single_prb_to_resolutions, METH_VARARGS,"Move single pre-resolution task list to resolution task heap."},
   {"res_task_buf", get_res_buf, METH_VARARGS,"Get resolution task heap."},
   {"kbprint", alma_kbprint, METH_VARARGS,"Print out entire alma kb."},
   {"halt", alma_halt, METH_VARARGS,"Stop an alma kb."},
@@ -842,7 +858,9 @@ static PyObject * alma_init(PyObject *self, PyObject *args) {
     }
  }
 
-    assert(subj_list_len == PyList_Size(subject_priority_list));
+    fprintf(stderr, "subj_list_len %ld\n", subj_list_len);
+    fprintf(stderr, "PyList_Size(subject_priority_list) %ld\n",  PyList_Size(subject_priority_list));
+    assert(subj_list_len ==  PyList_Size(subject_priority_list));
     collection_priorities = malloc(sizeof(double)* subj_list_len);
     for (idx = 0; idx < subj_list_len; idx++) {
       list_item = PyList_GetItem(subject_priority_list, idx);
