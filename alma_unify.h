@@ -38,8 +38,8 @@ typedef struct binding_list {
 } binding_list;
 
 struct clause;
-void increment_quote_level(struct clause *c);
-void decrement_quote_level(struct clause *c);
+void increment_quote_level(struct clause *c, int quote_lvl);
+void decrement_quote_level(struct clause *c, int quote_lvl);
 
 binding* bindings_contain(binding_list *theta, alma_variable *var);
 void subst(binding_list *theta, alma_term *term, int quote_level);

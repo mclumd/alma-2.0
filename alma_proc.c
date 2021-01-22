@@ -413,7 +413,8 @@ static int quote_cons(alma_term *to_quote, alma_variable *result, binding_list *
   formula->children = NULL;
   formula->tag = NONE;
   formula->fif = NULL;
-  increment_quote_level(formula);
+  //set_variable_ids(formula, 0, NULL, alma);
+  increment_quote_level(formula, 0);
 
   alma_term *quoted = malloc(sizeof(*quoted));
   quoted->type = QUOTE;

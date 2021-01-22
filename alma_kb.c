@@ -1588,7 +1588,7 @@ static void handle_true(kb *collection, clause *truth, kb_str *buf) {
       copy_clause_structure(quote->clause_quote, u);
 
       // True formula has its outermost quotation withdrawn
-      decrement_quote_level(u);
+      decrement_quote_level(u, 1);
 
       // Adjust variable IDs for the new formula
       set_variable_ids(u, 1, NULL, collection);

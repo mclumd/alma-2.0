@@ -67,35 +67,45 @@ int release_matches(var_match_set *v, int retval) {
 
 // Substitution functions
 
+static void adjust_quasiquote_level(alma_term *term, int quote_lvl, int new_lvl);
+
+// Calls adjust_quasiquote_level on each term of a clause
+static void adjust_clause_quote_level(clause *c, int quote_lvl, int new_lvl) {
+  for (int i = 0; i < c->pos_count; i++)
+    for (int j = 0; j < c->pos_lits[i]->term_count; j++)
+      adjust_quasiquote_level(c->pos_lits[i]->terms+j, quote_lvl, new_lvl);
+  for (int i = 0; i < c->neg_count; i++)
+    for (int j = 0; j < c->neg_lits[i]->term_count; j++)
+      adjust_quasiquote_level(c->neg_lits[i]->terms+j, quote_lvl, new_lvl);
+}
+
+void increment_quote_level(clause *c, int quote_lvl) {
+  adjust_clause_quote_level(c, quote_lvl, quote_lvl+1);
+}
+
+void decrement_quote_level(clause *c, int quote_lvl) {
+  adjust_clause_quote_level(c, quote_lvl, quote_lvl-1);
+}
+
 // Function used for substitution and cases like truth predicate
-// Arg term is adjusted to begin inside quotation level new_lvl
+// Escaping variables are adjusted to begin inside quotation level new_lvl
 // Thus deeper levels of quotation increment new_lvl as they recursively descend
-static void adjust_quasiquote_level(alma_term *term, int new_lvl) {
-  if (term->type == VARIABLE) {
-    if (new_lvl != 0) {
-      term->type = QUASIQUOTE;
-      alma_variable *temp = term->variable;
-      term->quasiquote = malloc(sizeof(*term->quasiquote));
-      term->quasiquote->backtick_count = new_lvl;
-      term->quasiquote->variable = temp;
-    }
+static void adjust_quasiquote_level(alma_term *term, int quote_lvl, int new_lvl) {
+  if (term->type == VARIABLE && quote_lvl == 0 && new_lvl != 0) {
+    term->type = QUASIQUOTE;
+    alma_variable *temp = term->variable;
+    term->quasiquote = malloc(sizeof(*term->quasiquote));
+    term->quasiquote->backtick_count = new_lvl;
+    term->quasiquote->variable = temp;
   }
   else if (term->type == FUNCTION) {
     for (int i = 0; i < term->function->term_count; i++)
-      adjust_quasiquote_level(term->function->terms+i, new_lvl);
+      adjust_quasiquote_level(term->function->terms+i, quote_lvl, new_lvl);
   }
-  else if (term->type == QUOTE) {
-    if (term->quote->type == CLAUSE) {
-      clause *c = term->quote->clause_quote;
-      for (int i = 0; i < c->pos_count; i++)
-        for (int j = 0; j < c->pos_lits[i]->term_count; j++)
-          adjust_quasiquote_level(c->pos_lits[i]->terms+j, new_lvl+1);
-      for (int i = 0; i < c->neg_count; i++)
-        for (int j = 0; j < c->neg_lits[i]->term_count; j++)
-          adjust_quasiquote_level(c->neg_lits[i]->terms+j, new_lvl+1);
-    }
+  else if (term->type == QUOTE && term->quote->type == CLAUSE) {
+      adjust_clause_quote_level(term->quote->clause_quote, quote_lvl+1, new_lvl+1);
   }
-  else if (term->type == QUASIQUOTE) {
+  else if (term->type == QUASIQUOTE && term->quasiquote->backtick_count == quote_lvl) {
     // Override amount of quasi-quotation marks with new level
     if (new_lvl != 0)
       term->quasiquote->backtick_count = new_lvl;
@@ -108,25 +118,6 @@ static void adjust_quasiquote_level(alma_term *term, int new_lvl) {
     }
   }
 }
-
-// Calls adjust_quasiquote_level on each term of a clause
-static void adjust_clause_quote_level(clause *c, int new_lvl) {
-  for (int i = 0; i < c->pos_count; i++)
-    for (int j = 0; j < c->pos_lits[i]->term_count; j++)
-      adjust_quasiquote_level(c->pos_lits[i]->terms+j, new_lvl);
-  for (int i = 0; i < c->neg_count; i++)
-    for (int j = 0; j < c->neg_lits[i]->term_count; j++)
-      adjust_quasiquote_level(c->neg_lits[i]->terms+j, new_lvl);
-}
-
-void increment_quote_level(clause *c) {
-  adjust_clause_quote_level(c, 1);
-}
-
-void decrement_quote_level(clause *c) {
-  adjust_clause_quote_level(c, 0);
-}
-
 
 static void subst_func(binding_list *theta, alma_function *func, int level) {
   for (int i = 0; i < func->term_count; i++)
@@ -146,7 +137,7 @@ void subst(binding_list *theta, alma_term *term, int quote_level) {
       // If a variable is being substituted for a binding, and that binding comes from quotation,
       // then must decrease quasi-quotation to match unquoted substitution context
       if (quote_level == 0 && contained->term_quote_lvl != quote_level)
-        adjust_quasiquote_level(term, quote_level);
+        adjust_quasiquote_level(term, contained->term_quote_lvl, quote_level);
     }
   }
   else if (term->type == FUNCTION) {
@@ -171,7 +162,7 @@ void subst(binding_list *theta, alma_term *term, int quote_level) {
 
       // If quote levels aren't equal, must adjust when substitute into new quote context
       if (quasiquote_amount == quote_level && contained->term_quote_lvl != quote_level)
-        adjust_quasiquote_level(term, quote_level);
+        adjust_quasiquote_level(term, contained->term_quote_lvl, quote_level);
     }
   }
 }
