@@ -37,8 +37,11 @@ typedef struct binding_list {
   var_match_set *quoted_var_matches;
 } binding_list;
 
+struct clause;
+void increment_quote_level(struct clause *c);
+void decrement_quote_level(struct clause *c);
+
 binding* bindings_contain(binding_list *theta, alma_variable *var);
-void adjust_quasiquote_level(alma_term *term, int new_lvl);
 void subst(binding_list *theta, alma_term *term, int quote_level);
 
 int quote_term_unify(alma_quote *x, alma_quote *y, binding_list *theta);

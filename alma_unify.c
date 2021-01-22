@@ -69,8 +69,18 @@ int release_matches(var_match_set *v, int retval) {
 
 // Function used for substitution and cases like truth predicate
 // Arg term is adjusted to begin inside quotation level new_lvl
-void adjust_quasiquote_level(alma_term *term, int new_lvl) {
-  if (term->type == FUNCTION) {
+// Thus deeper levels of quotation increment new_lvl as they recursively descend
+static void adjust_quasiquote_level(alma_term *term, int new_lvl) {
+  if (term->type == VARIABLE) {
+    if (new_lvl != 0) {
+      term->type = QUASIQUOTE;
+      alma_variable *temp = term->variable;
+      term->quasiquote = malloc(sizeof(*term->quasiquote));
+      term->quasiquote->backtick_count = new_lvl;
+      term->quasiquote->variable = temp;
+    }
+  }
+  else if (term->type == FUNCTION) {
     for (int i = 0; i < term->function->term_count; i++)
       adjust_quasiquote_level(term->function->terms+i, new_lvl);
   }
@@ -98,6 +108,25 @@ void adjust_quasiquote_level(alma_term *term, int new_lvl) {
     }
   }
 }
+
+// Calls adjust_quasiquote_level on each term of a clause
+static void adjust_clause_quote_level(clause *c, int new_lvl) {
+  for (int i = 0; i < c->pos_count; i++)
+    for (int j = 0; j < c->pos_lits[i]->term_count; j++)
+      adjust_quasiquote_level(c->pos_lits[i]->terms+j, new_lvl);
+  for (int i = 0; i < c->neg_count; i++)
+    for (int j = 0; j < c->neg_lits[i]->term_count; j++)
+      adjust_quasiquote_level(c->neg_lits[i]->terms+j, new_lvl);
+}
+
+void increment_quote_level(clause *c) {
+  adjust_clause_quote_level(c, 1);
+}
+
+void decrement_quote_level(clause *c) {
+  adjust_clause_quote_level(c, 0);
+}
+
 
 static void subst_func(binding_list *theta, alma_function *func, int level) {
   for (int i = 0; i < func->term_count; i++)
@@ -364,19 +393,9 @@ static int unify_quasiquote(alma_term *qqterm, alma_term *x, void *qq_parent, vo
       // For now, same kinds of binding and occurs checks as for regular unification
       binding *res = bindings_contain(theta, qq->variable);
       if (res != NULL) {
-        if (res->var_quasi_quote_lvl != qq->backtick_count || res->term->type != QUASIQUOTE || res->term->quasiquote->backtick_count != x->quasiquote->backtick_count) {
-          // Debug
-          printf("Surprising mismatch of quasi-quote type or mark amounts to unify %lld with %lld\n", res->var->id, x->quasiquote->variable->id);
-          return 0;
-        }
         return unify(res->term, x, res->term_parent, x_parent, res->term_quote_lvl, x_quote_lvl, theta);
       }
       else if ((res = bindings_contain(theta, x->quasiquote->variable)) != NULL) {
-        if (res->var_quasi_quote_lvl != x->quasiquote->backtick_count || res->term->type != QUASIQUOTE || res->term->quasiquote->backtick_count != qq->backtick_count) {
-          // Debug
-          printf("Surprising mismatch of quasi-quote type or mark amounts to unify %lld with %lld\n", res->var->id, qq->variable->id);
-          return 0;
-        }
         return unify(qqterm, res->term, qq_parent, res->term_parent, qq_quote_lvl, res->term_quote_lvl, theta);
       }
       else if (occurs_check(theta, qq->variable, x)) {
@@ -445,7 +464,7 @@ static int unify_quasiquote(alma_term *qqterm, alma_term *x, void *qq_parent, vo
         printf("Cannot unify %lld with fully-escaping %lld\n", qq->variable->id, x->quasiquote->variable->id);
         return 0;
       }
-      // For a pair of fully-escaped quasi-quoted variables,
+      // For a pair of fully-escaped quasi-quoted variables, add binding
       else {
         add_binding_detailed(theta, qq->variable, qq_quote_lvl, qq->backtick_count, x, x_quote_lvl, x_parent, 1);
         return 1;

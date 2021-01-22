@@ -30,7 +30,7 @@ int proc_bound_check(alma_function *proc, binding_list *bindings) {
 static int introspect(alma_function *arg, binding_list *bindings, kb *collection, int kind) {
   // Create copy and substitute based on bindings available
   alma_term *search_term = malloc(sizeof(*search_term));
-  copy_alma_term(arg->terms, search_term);
+  copy_alma_term(arg->terms+0, search_term);
   subst(bindings, search_term, 0);
 
   alma_function *search = NULL;
@@ -54,7 +54,7 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *collection
       }
 
       alma_term *temp = search_term;
-      search_term = search->terms;
+      search_term = search->terms+0;
       free(temp->function->name);
       free(temp->function);
       free(temp);
@@ -331,7 +331,7 @@ static int less_than(alma_term *x, alma_term *y, binding_list *bindings, kb *alm
   return xval < yval;
 }
 
-// If first argument is a digit that's valid index of formula, binds second arg to quote of it and returns true
+// If first argument is a digit that's valid index of formula, binds second arg to quote of its formula and returns true
 static int idx_to_form(alma_term *index_term, alma_term *result, binding_list *bindings, kb *alma) {
   char *idx_str;
   if (index_term->type == VARIABLE) {
@@ -377,6 +377,55 @@ static int idx_to_form(alma_term *index_term, alma_term *result, binding_list *b
     return 0;
 }
 
+// If first argument is a bound variable, constructs a quotation term out of term it's bound to, if able
+// Variable must be bound to a function, which is treated as standing for a singleton clause
+static int quote_cons(alma_term *to_quote, alma_variable *result, binding_list *bindings, kb *alma) {
+  binding *res = bindings_contain(bindings, to_quote->variable);
+  if (res == NULL || res->term->type != FUNCTION) {
+    return 0;
+  }
+
+  alma_function *func = res->term->function;
+  int neg = 0;
+  if (strcmp(func->name, "not") == 0) {
+    if (func->term_count != 1 || func->terms->type != FUNCTION) {
+      return 0;
+    }
+    func = func->terms->function;
+    neg = 1;
+  }
+
+  clause *formula = malloc(sizeof(*formula));
+  formula->pos_count = neg ? 0 : 1;
+  formula->neg_count = neg ? 1 : 0;
+  formula->pos_lits = neg ? NULL : malloc(sizeof(*formula->pos_lits));
+  formula->neg_lits = neg ? malloc(sizeof(*formula->pos_lits)) : NULL;
+  if (neg) {
+    formula->neg_lits[0] = malloc(sizeof(*formula->neg_lits[0]));
+    copy_alma_function(func, formula->neg_lits[0]);
+  }
+  else {
+    formula->pos_lits[0] = malloc(sizeof(*formula->pos_lits[0]));
+    copy_alma_function(func, formula->pos_lits[0]);
+  }
+  formula->parent_set_count = formula->children_count = 0;
+  formula->parents = NULL;
+  formula->children = NULL;
+  formula->tag = NONE;
+  formula->fif = NULL;
+  increment_quote_level(formula);
+
+  alma_term *quoted = malloc(sizeof(*quoted));
+  quoted->type = QUOTE;
+  quoted->quote = malloc(sizeof(*quoted->quote));
+  quoted->quote->type = CLAUSE;
+  quoted->quote->clause_quote = formula;
+
+  add_binding(bindings, result, quoted, to_quote, 0);
+
+  return 1;
+}
+
 // If proc is a valid procedure, runs and returns truth value
 int proc_run(alma_function *proc, binding_list *bindings, kb *alma) {
   alma_function *func = proc->terms[0].function;
@@ -391,7 +440,7 @@ int proc_run(alma_function *proc, binding_list *bindings, kb *alma) {
       return introspect(func, bindings, alma, run_pos_int);
   }
   else if (strcmp(func->name, "acquired") == 0) {
-    // Must match (given bindings) the schema acquired(literal(...), Var) OR acquired(not(literal(...)), Var) and Var unbound
+    // Must match (given bindings) the schema acquired(literal(...), Var) OR acquired(not(literal(...)), Var); Var must be unbound
     if (func->term_count == 2 && func->terms[1].type == VARIABLE && !bindings_contain(bindings, func->terms[1].variable))
       return introspect(func, bindings, alma, run_acquired);
   }
@@ -406,6 +455,11 @@ int proc_run(alma_function *proc, binding_list *bindings, kb *alma) {
   else if (strcmp(func->name, "idx_to_form") == 0) {
     if (func->term_count == 2)
       return idx_to_form(func->terms+0, func->terms+1, bindings, alma);
+  }
+  else if (strcmp(func->name, "quote_cons") == 0) {
+    if (func->term_count == 2 && func->terms[0].type == VARIABLE && func->terms[1].type == VARIABLE
+        && !bindings_contain(bindings, func->terms[1].variable))
+      return quote_cons(func->terms+0, (func->terms+1)->variable, bindings, alma);
   }
   return 0;
 }

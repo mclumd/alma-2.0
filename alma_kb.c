@@ -1587,13 +1587,8 @@ static void handle_true(kb *collection, clause *truth, kb_str *buf) {
       clause *u = malloc(sizeof(*u));
       copy_clause_structure(quote->clause_quote, u);
 
-      // True formula has its outermost quotation withdrawn; must adjust quasiquotation for this
-      for (int i = 0; i < u->pos_count; i++)
-        for (int j = 0; j < u->pos_lits[i]->term_count; j++)
-          adjust_quasiquote_level(u->pos_lits[i]->terms+j, 0);
-      for (int i = 0; i < u->neg_count; i++)
-        for (int j = 0; j < u->neg_lits[i]->term_count; j++)
-          adjust_quasiquote_level(u->neg_lits[i]->terms+j, 0);
+      // True formula has its outermost quotation withdrawn
+      decrement_quote_level(u);
 
       // Adjust variable IDs for the new formula
       set_variable_ids(u, 1, NULL, collection);
@@ -1602,7 +1597,8 @@ static void handle_true(kb *collection, clause *truth, kb_str *buf) {
 
     for (int i = 0; i < tommy_array_size(&unquoted); i++) {
       clause *curr = tommy_array_get(&unquoted, i);
-      // Parent is true()
+
+      // Set parent as true() singleton
       curr->parent_set_count = 1;
       curr->parents = malloc(sizeof(*curr->parents));
       curr->parents[0].count = 1;
