@@ -137,7 +137,7 @@ char* now(long t);
 char* walltime(void);
 void free_clause(clause *c);
 void copy_clause_structure(clause *orignal, clause *copy);
-void set_variable_ids(clause *c, int id_from_name, binding_list *bs_bindings, kb *collection);
+void set_variable_ids(clause *c, int id_from_name, int non_escaping_only, binding_list *bs_bindings, kb *collection);
 void flatten_node(kb *collection, alma_node *node, tommy_array *clauses, int print, kb_str *buf);
 void nodes_to_clauses(kb *collection, alma_node *trees, int num_trees, tommy_array *clauses, int print, kb_str *buf);
 void free_predname_mapping(void *arg);

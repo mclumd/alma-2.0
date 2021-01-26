@@ -156,7 +156,7 @@ static clause* fif_conclude(kb *collection, fif_task *task, binding_list *bindin
   conclusion->tag = NONE;
   conclusion->fif = NULL;
 
-  set_variable_ids(conclusion, 1, NULL, collection);
+  set_variable_ids(conclusion, 1, 0, NULL, collection);
 
   return conclusion;
 }

@@ -88,7 +88,7 @@ void decrement_quote_level(clause *c, int quote_lvl) {
 }
 
 // Function used for substitution and cases like truth predicate
-// Escaping variables are adjusted to begin inside quotation level new_lvl
+// Only fully-escaped variables are adjusted to begin inside quotation level new_lvl
 // Thus deeper levels of quotation increment new_lvl as they recursively descend
 static void adjust_quasiquote_level(alma_term *term, int quote_lvl, int new_lvl) {
   if (term->type == VARIABLE && quote_lvl == 0 && new_lvl != 0) {
@@ -509,7 +509,7 @@ static int unify(alma_term *x, alma_term *y, void *x_parent, void *y_parent, int
 // Functions used outside to initiate unification
 
 int quote_term_unify(alma_quote *x, alma_quote *y, binding_list *theta) {
-  return unify_quotes(x, y, x, y, 0, 0, theta);
+  return unify_quotes(x, y, x, y, 1, 1, theta);
 }
 
 int term_unify(alma_term *x, alma_term *y, binding_list *theta) {
@@ -563,7 +563,6 @@ static void add_binding_detailed(binding_list *theta, alma_variable *var, int va
   }
   theta->list[theta->num_bindings-1].term_quote_lvl = term_quote_lvl;
   theta->list[theta->num_bindings-1].term_parent = parent;
-
 
   // Cascade substitution call to deal with bound variables inside other bindings
   cascade_substitution(theta);

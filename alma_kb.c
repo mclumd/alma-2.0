@@ -143,15 +143,15 @@ static void set_var_name(record_tree *records, alma_variable *var, int id_from_n
   collection->variable_id_count++;
 }
 
-static void set_variable_ids_rec(record_tree *records, clause *c, int id_from_name, int quote_level, kb *collection);
+static void set_variable_ids_rec(record_tree *records, clause *c, int id_from_name, int non_escaping_only, int quote_level, kb *collection);
 
-static void set_variable_names(record_tree *records, alma_term *term, int id_from_name, int quote_level, kb *collection) {
-  if (term->type == VARIABLE) {
+static void set_variable_names(record_tree *records, alma_term *term, int id_from_name, int non_escaping_only, int quote_level, kb *collection) {
+  if (term->type == VARIABLE && (!non_escaping_only || quote_level > 0)) {
     set_var_name(records, term->variable, id_from_name, quote_level, collection);
   }
   else if (term->type == FUNCTION) {
     for (int i = 0; i < term->function->term_count; i++)
-      set_variable_names(records, term->function->terms+i, id_from_name, quote_level, collection);
+      set_variable_names(records, term->function->terms+i, id_from_name, non_escaping_only, quote_level, collection);
   }
   else if (term->type == QUOTE) {
     if (term->quote->type == CLAUSE) {
@@ -161,10 +161,10 @@ static void set_variable_names(record_tree *records, alma_term *term, int id_fro
       records->next_level[records->next_level_count-1] = malloc(sizeof(*records->next_level[records->next_level_count-1]));
       init_record_tree(records->next_level[records->next_level_count-1], quote_level+1, records);
 
-      set_variable_ids_rec(records->next_level[records->next_level_count-1], term->quote->clause_quote, id_from_name, quote_level+1, collection);
+      set_variable_ids_rec(records->next_level[records->next_level_count-1], term->quote->clause_quote, id_from_name, non_escaping_only, quote_level+1, collection);
     }
   }
-  else {
+  else if (term->type == QUASIQUOTE && (!non_escaping_only || quote_level > term->quasiquote->backtick_count)) {
     // Trace back up along parents based on amount of quasi-quotation
     for (int i = 0; i < term->quasiquote->backtick_count; i++)
       records = records->parent;
@@ -172,13 +172,13 @@ static void set_variable_names(record_tree *records, alma_term *term, int id_fro
   }
 }
 
-static void set_variable_ids_rec(record_tree *records, clause *c, int id_from_name, int quote_level, kb *collection) {
+static void set_variable_ids_rec(record_tree *records, clause *c, int id_from_name, int non_escaping_only, int quote_level, kb *collection) {
   for (int i = 0; i < c->pos_count; i++)
     for (int j = 0; j < c->pos_lits[i]->term_count; j++)
-      set_variable_names(records, c->pos_lits[i]->terms+j, id_from_name, quote_level, collection);
+      set_variable_names(records, c->pos_lits[i]->terms+j, id_from_name, non_escaping_only, quote_level, collection);
   for (int i = 0; i < c->neg_count; i++)
     for (int j = 0; j < c->neg_lits[i]->term_count; j++)
-      set_variable_names(records, c->neg_lits[i]->terms+j, id_from_name, quote_level, collection);
+      set_variable_names(records, c->neg_lits[i]->terms+j, id_from_name, non_escaping_only, quote_level, collection);
 }
 
 
@@ -225,13 +225,14 @@ static void set_clause_from_records(record_tree *records, clause *c, int quote_l
 // id_from_name is false in this case; distinct variables are tracked using ID given names may not be unique
 // 2) Otherwise, give variables with the same name matching IDs
 // id_from_name is true in this case; distinct variables are tracked by name
+// non_escaping_only sets variable IDs only in the case where they don't escape quotation
 // Fresh ID values drawn from variable_id_count global variable
-void set_variable_ids(clause *c, int id_from_name, binding_list *bs_bindings, kb *collection) {
+void set_variable_ids(clause *c, int id_from_name, int non_escaping_only, binding_list *bs_bindings, kb *collection) {
   record_tree *records;
   records = malloc(sizeof(*records));
   init_record_tree(records, 0, NULL);
 
-  set_variable_ids_rec(records, c, id_from_name, 0, collection);
+  set_variable_ids_rec(records, c, id_from_name, non_escaping_only, 0, collection);
 
   // If bindings for a backsearch have been passed in, update variable names for them as well
   // Id_from_name always false in this case; omits that parameter
@@ -361,7 +362,7 @@ void flatten_node(kb *collection, alma_node *node, tommy_array *clauses, int pri
     c->dirty_bit = (char) 1;
     c->pyobject_bit = (char) 1;
     make_clause(node, c);
-    set_variable_ids(c, 1, NULL, collection);
+    set_variable_ids(c, 1, 0, NULL, collection);
 
     //    printf("ABOUT TO PRINT\n");
     if (print) {
@@ -378,6 +379,9 @@ void flatten_node(kb *collection, alma_node *node, tommy_array *clauses, int pri
 }
 
 void free_clause(clause *c) {
+  if (c == NULL)
+    return;
+
   for (int i = 0; i < c->pos_count; i++)
     free_function(c->pos_lits[i]);
   for (int i = 0; i < c->neg_count; i++)
@@ -1488,7 +1492,7 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
             res_result->children_count = 0;
             res_result->children = NULL;
 
-            set_variable_ids(res_result, 0, x_bindings, collection);
+            set_variable_ids(res_result, 0, 0, x_bindings, collection);
 
             tommy_array_insert(new_arr, res_result);
             if (bs)
@@ -1514,7 +1518,7 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
                 for (int j = 0; j < answer->neg_lits[0]->term_count; j++)
                   subst(x_bindings, answer->neg_lits[0]->terms+j, 0);
               }
-              set_variable_ids(answer, 0, NULL, collection);
+              set_variable_ids(answer, 0, 0, NULL, collection);
 
               // TODO: parent setup for answer?
               tommy_array_insert(&collection->new_clauses, answer);
@@ -1591,7 +1595,7 @@ static void handle_true(kb *collection, clause *truth, kb_str *buf) {
       decrement_quote_level(u, 1);
 
       // Adjust variable IDs for the new formula
-      set_variable_ids(u, 1, NULL, collection);
+      set_variable_ids(u, 1, 0, NULL, collection);
       tommy_array_insert(&unquoted, u);
     }
 
@@ -1747,7 +1751,7 @@ void process_new_clauses(kb *collection, kb_str *buf) {
                clause *to_reinstate = result->value;
                clause *reinstatement = malloc(sizeof(*reinstatement));
                copy_clause_structure(to_reinstate, reinstatement);
-               set_variable_ids(reinstatement, 1, NULL, collection);
+               set_variable_ids(reinstatement, 1, 0, NULL, collection);
                reinstatement->parent_set_count = to_reinstate->parent_set_count;
                if (reinstatement->parent_set_count > 0) {
                  reinstatement->parents = malloc(sizeof(*reinstatement->parents)*reinstatement->parent_set_count);

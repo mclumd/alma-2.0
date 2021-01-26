@@ -28,62 +28,52 @@ int proc_bound_check(alma_function *proc, binding_list *bindings) {
 }
 
 static int introspect(alma_function *arg, binding_list *bindings, kb *collection, int kind) {
-  // Create copy and substitute based on bindings available
-  alma_term *search_term = malloc(sizeof(*search_term));
-  copy_alma_term(arg->terms+0, search_term);
-  subst(bindings, search_term, 0);
-
-  alma_function *search = NULL;
-  tommy_hashlin *map = &collection->pos_map;
-
-  if (search_term->type == VARIABLE) {
-    free_term(search_term);
-    free(search_term);
+  alma_term *query = arg->terms+0;
+  binding *res;
+  // Argument must be a clause quote or variable bound to one
+  if ((query->type != QUOTE || query->quote->type != CLAUSE) && (query->type != VARIABLE || !(res = bindings_contain(bindings, query->variable))
+      || res->term->type != QUOTE || res->term->quote->type != CLAUSE)) {
     return 0;
   }
+
+  // Create copy and substitute based on bindings available
+  alma_term *search_term = malloc(sizeof(*search_term));
+  copy_alma_term(query, search_term);
+  subst(bindings, search_term, 0);
+
+  predname_mapping *result;
+  clause *search_clause = search_term->quote->clause_quote;
+  if (search_clause->pos_count != 0) {
+    char *name = name_with_arity(search_clause->pos_lits[0]->name, search_clause->pos_lits[0]->term_count);
+    result = tommy_hashlin_search(&collection->pos_map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
+    free(name);
+  }
   else {
-    search = search_term->function;
-
-    // Extract from not, if present
-    if (strcmp(search->name, "not") == 0) {
-      map = &collection->neg_map;
-      if (search->term_count != 1) {
-        free_term(search_term);
-        free(search_term);
-        return 0;
-      }
-
-      alma_term *temp = search_term;
-      search_term = search->terms+0;
-      free(temp->function->name);
-      free(temp->function);
-      free(temp);
-
-      if (search_term->type == FUNCTION)
-        search = search_term->function;
-      else {
-        free_term(search_term);
-        free(search_term);
-        return 0;
-      }
-    }
+    char *name = name_with_arity(search_clause->neg_lits[0]->name, search_clause->neg_lits[0]->term_count);
+    result = tommy_hashlin_search(&collection->neg_map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
+    free(name);
   }
 
-  char *name = name_with_arity(search->name, search->term_count);
-  predname_mapping *result = tommy_hashlin_search(map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
-  free(name);
   if (result != NULL) {
-    for (int i = result->num_clauses-1; i >= 0; i--) {
-      // Must be a non-distrusted singleton result
-      if (!is_distrusted(collection, result->clauses[i]->index) && result->clauses[i]->pos_count + result->clauses[i]->neg_count == 1) {
-        alma_function *lit = (map == &collection->pos_map ? result->clauses[i]->pos_lits[0] : result->clauses[i]->neg_lits[0]);
+    alma_quote *q = malloc(sizeof(*q));
+    q->type = CLAUSE;
+    q->clause_quote = NULL;
 
-        // Create copy as either empty list or copy of arg
+    for (int i = result->num_clauses-1; i >= 0; i--) {
+      // Must be a non-distrusted result with pos / neg literal count matching query
+      if (!is_distrusted(collection, result->clauses[i]->index) && result->clauses[i]->pos_count == search_clause->pos_count
+          && result->clauses[i]->neg_count == search_clause->neg_count) {
+        // Convert clause in question to quotation term
+        q->clause_quote = malloc(sizeof(*q->clause_quote));
+        copy_clause_structure(result->clauses[i], q->clause_quote);
+        increment_quote_level(q->clause_quote, 0);
+
+        // Create bindings copy as either empty list or copy of arg
         binding_list *copy = malloc(sizeof(*copy));
         copy_bindings(copy, bindings);
 
         // Returning first match based at the moment
-        if (pred_unify(search, lit, copy)) {
+        if (quote_term_unify(search_term->quote, q, copy)) {
           if (kind != run_neg_int)
             swap_bindings(bindings, copy);
           cleanup_bindings(copy);
@@ -96,23 +86,22 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *collection
             time_term->function->name = long_to_str(result->clauses[i]->acquired);
             time_term->function->term_count = 0;
             time_term->function->terms = NULL;
-
-            // Insert answer of acquired query into binding set
-            bindings->num_bindings++;
-            bindings->list = realloc(bindings->list, sizeof(*bindings->list) * bindings->num_bindings);
-            bindings->list[bindings->num_bindings-1].var = malloc(sizeof(alma_variable));
-            copy_alma_var(arg->terms[1].variable, bindings->list[bindings->num_bindings-1].var);
-            bindings->list[bindings->num_bindings-1].term = time_term;
+            add_binding(bindings, arg->terms[1].variable, time_term, arg, 0);
           }
 
+          free_quote(q);
           free_term(search_term);
           free(search_term);
           return kind != run_neg_int;
         }
+        free_clause(q->clause_quote);
+        q->clause_quote = NULL;
         cleanup_bindings(copy);
       }
     }
+    free_quote(q);
   }
+
   free_term(search_term);
   free(search_term);
   return kind == run_neg_int;
@@ -361,7 +350,7 @@ static int idx_to_form(alma_term *index_term, alma_term *result, binding_list *b
     clause *formula = map_res->value;
     clause *quote_form = malloc(sizeof(*quote_form));
     copy_clause_structure(formula, quote_form);
-    set_variable_ids(quote_form, 1, NULL, alma);
+    set_variable_ids(quote_form, 1, 1, NULL, alma);
 
     alma_term *quoted = malloc(sizeof(*quoted));
     quoted->type = QUOTE;
@@ -378,10 +367,20 @@ static int idx_to_form(alma_term *index_term, alma_term *result, binding_list *b
 }
 
 // If first argument is a bound variable, constructs a quotation term out of term it's bound to, if able
-// Variable must be bound to a function, which is treated as standing for a singleton clause
+// If variable is bound to a function, this is treated as standing for a singleton clause
+// If variable is bound to a quote, this can be used directly with no difference
 static int quote_cons(alma_term *to_quote, alma_variable *result, binding_list *bindings, kb *alma) {
   binding *res = bindings_contain(bindings, to_quote->variable);
   if (res == NULL || res->term->type != FUNCTION) {
+    return 0;
+  }
+  else if (res->term->type == QUOTE) {
+    alma_term *quoted = malloc(sizeof(*quoted));
+    copy_alma_term(res->term, quoted);
+    add_binding(bindings, result, quoted, to_quote, 0);
+    return 1;
+  }
+  else if (res->term->type != FUNCTION) {
     return 0;
   }
 
@@ -395,6 +394,7 @@ static int quote_cons(alma_term *to_quote, alma_variable *result, binding_list *
     neg = 1;
   }
 
+  // Copy is constructed into a clause
   clause *formula = malloc(sizeof(*formula));
   formula->pos_count = neg ? 0 : 1;
   formula->neg_count = neg ? 1 : 0;
@@ -413,7 +413,10 @@ static int quote_cons(alma_term *to_quote, alma_variable *result, binding_list *
   formula->children = NULL;
   formula->tag = NONE;
   formula->fif = NULL;
-  //set_variable_ids(formula, 0, NULL, alma);
+
+  // Replace non-escaping variable IDs
+  set_variable_ids(formula, 0, 1, NULL, alma);
+  // Place inside quotation
   increment_quote_level(formula, 0);
 
   alma_term *quoted = malloc(sizeof(*quoted));
@@ -421,9 +424,7 @@ static int quote_cons(alma_term *to_quote, alma_variable *result, binding_list *
   quoted->quote = malloc(sizeof(*quoted->quote));
   quoted->quote->type = CLAUSE;
   quoted->quote->clause_quote = formula;
-
   add_binding(bindings, result, quoted, to_quote, 0);
-
   return 1;
 }
 
