@@ -52,19 +52,20 @@ class rpb_dqn(res_prebuffer):
         batch_size = len(X)
         #dataset = simple_graph_dataset(X,np.zeros(len(X)))
         dataset = simple_graph_dataset(X)
-        loader = DisjointLoader(dataset, batch_size = batch_size)
-        preds = []
-        total_loss = 0
-        total_acc = 0
-        b = loader.__next__()
-        #inputs = (b[0], b[1], b[3])
-        inputs = b
-        future_rewards = self.target_model.graph_net(inputs, training=False)
-        updated_q_values = np.array(batch.rewards).reshape(-1) + self.gamma * future_rewards
-        q_values = self.current_model.graph_net(inputs, training=True)
-        updated_q_values = q_values + 1
-        loss = self.loss_fn(updated_q_values, q_values)
         with tf.GradientTape() as tape:
+            loader = DisjointLoader(dataset, batch_size = batch_size)
+            preds = []
+            total_loss = 0
+            total_acc = 0
+            b = loader.__next__()
+            #inputs = (b[0], b[1], b[3])
+            inputs = b
+            future_rewards = self.target_model.graph_net(inputs, training=False)
+            updated_q_values = np.array(batch.rewards).reshape(-1) + self.gamma * future_rewards
+            q_values = self.current_model.graph_net(inputs, training=True)
+            #updated_q_values = q_values + 1
+            loss = self.loss_fn(updated_q_values, q_values)
+
             # Backpropagation
             grads = tape.gradient(loss, self.current_model.graph_net.trainable_variables)
             self.optimizer.apply_gradients(zip(grads, self.current_model.graph_net.trainable_variables))
