@@ -1,5 +1,5 @@
 """  Functions for producting vector and graph representations. """
-import alma_functions
+import alma_functions as aw
 import numpy as np
 import queue
 import unif.unifier as un

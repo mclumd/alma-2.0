@@ -12,7 +12,7 @@ from tensorflow import keras
 from tensorflow.keras.models import Model
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.losses import BinaryCrossentropy
-from tensorflow.keras.metrics import CategoricalAccuracy
+from tensorflow.keras.metrics import BinaryAccuracy
 from tensorflow.keras.layers import Dense, Dropout
 from spektral.layers import GCNConv, GlobalSumPool
 from spektral.data.graph import Graph
@@ -27,9 +27,9 @@ import sys
 import pickle
 import alma_functions as aw
 from sklearn.utils import shuffle
-from vectorization import graph_representation, unifies
+from vectorization import graph_representation, unifies, vectorize_bow1
 
-def forward_model(use_tf = False):
+def forward_model(use_tf = False, subjects=[]):
     # TODO:  fix use_tf code to return everything if this ever gets used.
     if use_tf:
         import tensorflow as tf
@@ -62,12 +62,16 @@ class history_struct:
 class gnn_model(Model):
     def __init__(self, max_nodes=20):
         super().__init__()
-        self.graph_net = spektral.models.general_gnn.GeneralGNN(1, activation='softmax', hidden=256, message_passing=4, pre_process=2, post_process=2, connectivity='cat', batch_norm=True, dropout=0.2, aggregate='sum', hidden_activation='prelu', pool='sum')
+        # TODO:  See if tanh works better as a hidden activation function
+        self.graph_net = spektral.models.general_gnn.GeneralGNN(1, activation='sigmoid', hidden=16, message_passing=4,
+                                                                 pre_process=2, post_process=2, connectivity='cat', batch_norm=True,
+                                                                 dropout=0.2, aggregate='sum', pool='sum', hidden_activation='sigmoid')
+        #self.graph_net = spektral.models.gcn.GCN(1)
         self.graph_net.compile('adam', 'binary_crossentropy')
         self.optimizer = Adam(learning_rate=0.00025, clipnorm=1.0)
         #self.loss_fn = BinaryCrossentropy()
         self.loss_fn = keras.losses.Huber()
-        self.acc_fn = CategoricalAccuracy()
+        self.acc_fn = BinaryAccuracy()
 
     def call(self, inputs):
         return self.graph_net(inputs)
@@ -108,9 +112,9 @@ class gnn_model(Model):
         
 
 class res_prebuffer:
-    def __init__(self, subjects, words, use_tf=False, debug=True, use_gnn=False, gnn_nodes = 20):
+    def __init__(self, subjects, words, use_tf=False, debug=True, use_gnn=False, gnn_nodes = 2000):
         self.use_tf = use_tf
-        self.model = forward_model(use_tf) if not use_gnn else gnn_model()
+        self.model = forward_model(use_tf, subjects) if not use_gnn else gnn_model()
         self.model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy', 'binary_crossentropy'])
 
         self.subjects = subjects
@@ -176,10 +180,11 @@ class res_prebuffer:
 
     def vectorize(self, inputs):
         if self.vectorize_alg == 'bow1':
-            return self.vectorize_bow1(inputs)
+            return vectorize_bow1(inputs, self.subjects_dict)
         elif self.vectorize_alg == 'gnn1':
             res = []
             for inp0, inp1 in inputs:
+                #print(inp0, inp1)
                 res.append(self.graph_rep.inputs_to_graphs(inp0, inp1))
             print('done')
             #test = np.array(res)
@@ -231,7 +236,8 @@ class res_prebuffer:
         total_pos = 0
         Xres, yres = [], []
         num_neg = num_samples - num_pos
-        while (total_samples < num_samples) and (total_pos < num_pos):
+        while (total_samples < num_samples):
+            #print("Total samples: {} \t Xbuf_len: {}  \t ybuf_len: {}\t\t\t pos: {} \t neg: {}\n".format(total_samples, len(self.Xbuffer), len(self.ybuffer), total_pos, total_samples - total_pos))
             x, y = self.Xbuffer.pop(), self.ybuffer.pop()
             if self.debug:
                self.saved_prbs.pop(), self.saved_inputs.pop()
@@ -355,7 +361,7 @@ class res_prebuffer:
 
     def model_save(self, id_str, numeric_bits):
         pkl_file = open("rl_model_{}.pkl".format(id_str), "wb")
-        pickle.dump((self.subjects, self.words, self.num_subjects, self.num_words, self.subjects_dict, self.words_dict, self.batch_size, self.use_tf, numeric_bits), pkl_file)
+        pickle.dump((self.subjects, self.words, self.num_subjects, self.num_words, self.subjects_dict, self.words_dict, self.batch_size, self.use_tf, numeric_bits, self.use_gnn, self.max_gnn_nodes), pkl_file)
         if self.use_gnn:
             self.model.graph_net.save("rl_model_{}".format(id_str))
         else:
@@ -367,7 +373,7 @@ class res_prebuffer:
             # raise NotImplementedError
             # TODO:  test the following code
             pkl_file = open("rl_model_{}.pkl".format(id_str), "rb")
-            (self.subjects, self.words, self.num_subjects, self.num_words, self.subjects_dict, self.words_dict, self.batch_size, self.use_tf, numeric_bits) = pickle.load(pkl_file)
+            (self.subjects, self.words, self.num_subjects, self.num_words, self.subjects_dict, self.words_dict, self.batch_size, self.use_tf, numeric_bits, self.use_gnn, self.max_gnn_nodes) = pickle.load(pkl_file)
             self.model.graph_net = keras.models.load_model("rl_model_{}".format(id_str))
         else:
             self.model = keras.models.load_model("rl_model_{}".format(id_str))
@@ -377,10 +383,10 @@ class res_prebuffer:
         return self.model.predict(X)
     
 
-def rpf_load(id_str):
+def rpf_load(id_str, debug=False):
     pkl_file = open("rl_model_{}.pkl".format(id_str), "rb")
-    subjects, words, num_subjects, num_words, subjects_dict, words_dict, batch_size, use_tf, num_bits = pickle.load(pkl_file)
-    rpf = res_prefilter(subjects, words, use_tf)
+    subjects, words, num_subjects, num_words, subjects_dict, words_dict, batch_size, use_tf, num_bits, use_gnn, gnn_nodes = pickle.load(pkl_file)
+    rpf = res_prebuffer(subjects, words, use_tf, debug, use_gnn, gnn_nodes)
     rpf.num_subjects = num_subjects
     rpf.num_words = num_words
     rpf.subjects_dict = subjects_dict
@@ -389,4 +395,3 @@ def rpf_load(id_str):
     rpf.model_load(id_str)
     rpf.num_bits = num_bits
     return rpf
-

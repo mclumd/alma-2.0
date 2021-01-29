@@ -286,7 +286,7 @@ def produce_graphs():
             ax.legend()
             plt.savefig("hw_img_agg_{}_{}.png".format(condition, threshold), bbox_inches='tight')
             
-#collect_data()
+collect_data()
 produce_graphs()            
 
 #  Idea:  No heat map.

@@ -54,7 +54,7 @@ def train(explosion_steps=50, num_steps=500, numeric_bits=10, model_name="test1"
             subjects.append("{}/{}".format(cat_subj, place))
         for num_subj in range(2**numeric_bits):
             subjects.append("{}/{}".format(num_subj, place))
-    network = rl_functions.res_prefilter(subjects, [])
+    network = rl_functions.res_prebuffer(subjects, [])
     for b in range(num_rounds):
         print("Starting round ", b)
         alma_inst,res = alma.init(1,axiom_file, '0', 1, 1000, [], [])
@@ -79,7 +79,7 @@ def train(explosion_steps=50, num_steps=500, numeric_bits=10, model_name="test1"
                     network.save_batch(res_task_input, res_lits)
                 priorities = 1 - network.get_priorities(res_task_input)
                 alma.set_priors_prb(alma_inst, priorities.flatten().tolist())
-                alma.prb_to_res_task(alma_inst)
+                alma.prb_to_res_task(alma_inst, 1.0)
             #alma.add(alma_inst, "distanceAt(a, {}, {}).".format(idx, idx))
             if idx > 0 and idx % 50 == 0:
                 print("Network has {} samples, {} of which are positive".format(len(network.ybuffer), network.ypos_count))
