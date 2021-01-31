@@ -192,21 +192,22 @@ def train_models():
 
 def test_subprocess(condition, prb_threshold):
     exp_steps = 50
-    reasoning_steps = 3000
+    #reasoning_steps = 3000
+    reasoning_steps = 500
     num_bits = 6
     model_name = "january_preglut50-6"
 
     if condition:
-        #cmd = subprocess.run("python ./test3.py {} {} {} 0 0 {} {} --reload {}".format(condition, exp_steps, reasoning_steps, num_bits, prb_threshold, model_name), shell=True, stdout=subprocess.PIPE)
-        cmd = subprocess.run(
-            "python ./test3.py  {} {} 0 0  --prb_threshold {} --use_network --reload {}".format(exp_steps, reasoning_steps,  prb_threshold, model_name), shell=True,
-            stdout=subprocess.PIPE)
+        cmd = subprocess.run("python ./test1.py {} {} {} 0 0 {} {} --retrain {}".format(condition, exp_steps, reasoning_steps, num_bits, prb_threshold, model_name), shell=True, stdout=subprocess.PIPE)
+        #cmd = subprocess.run(
+        #    "python ./test3.py  {} {} {} 0 0  --prb_threshold {} --use_network --reload {}".format(exp_steps, reasoning_steps,  prb_threshold, model_name), shell=True,
+        #    stdout=subprocess.PIPE)
     else:
-        #cmd = subprocess.run("python ./test3.py {} {} {} 0 0 {} {} --reload {}".format(condition, exp_steps, reasoning_steps, num_bits, prb_threshold, model_name), shell=True, stdout=subprocess.PIPE)
-        cmd = subprocess.run(
-            "python ./test3.py {} {} {} 0 0 {} {} --reload {}".format(condition, exp_steps, reasoning_steps, num_bits,
-                                                                      prb_threshold, model_name), shell=True,
-            stdout=subprocess.PIPE)
+        cmd = subprocess.run("python ./test1.py {} {} {} 0 0 {} {} --retrain {}".format(condition, exp_steps, reasoning_steps, num_bits, prb_threshold, model_name), shell=True, stdout=subprocess.PIPE)
+        #cmd = subprocess.run(
+        #    "python ./test3.py {} {} {} 0 0 {} {} --reload {}".format(exp_steps, reasoning_steps, reasoning_steps, num_bits,
+        #    prb_threshold, model_name), shell=True,
+        #    stdout=subprocess.PIPE)
     print("cmd=", cmd)
 
     stdout = cmd.stdout.decode('UTF-8')

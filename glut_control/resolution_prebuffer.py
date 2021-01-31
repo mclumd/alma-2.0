@@ -84,8 +84,8 @@ class gnn_model(Model):
             loss = self.loss_fn(target, predictions) + sum(self.graph_net.losses)
             acc = self.acc_fn(target, predictions)
 
-        gradients = tape.gradient(loss, self.graph_net.trainable_variables)
-        self.optimizer.apply_gradients(zip(gradients, self.graph_net.trainable_variables))
+            gradients = tape.gradient(loss, self.graph_net.trainable_variables)
+            self.optimizer.apply_gradients(zip(gradients, self.graph_net.trainable_variables))
         return loss, acc
 
     def fit(self, X, y, batch_size=16, verbose=True):
@@ -100,6 +100,7 @@ class gnn_model(Model):
             num_epochs += 1    # Extra batch for remainder
         for i in range(num_epochs):
             b = loader.__next__()
+            #b[0] looks like features, b[1] looks like graph, b[2] is targets, b[3] is some kind of large index array
             inputs = (b[0], b[1], b[3])
             target = b[2]
             loss, acc = self.train_on_batch(inputs, target )
@@ -221,6 +222,23 @@ class res_prebuffer:
         self.yneg_count += yneg
         self.ypos_count += ypos
 
+    """  Get rid of excess samples; this should help prevent memory leaks. """
+    def clean(self):
+        if self.debug:
+            self.Xbuffer, self.ybuffer, self.saved_prbs, self.saved_inputs = shuffle(self.Xbuffer, self.ybuffer, self.saved_prbs, self.saved_inputs)
+        else:
+            self.Xbuffer, self.ybuffer = shuffle(self.Xbuffer, self.ybuffer)
+
+        pos_floor  = self.batch_size
+        neg_floor = self.batch_size
+        while (self.ypos_count > pos_floor) and (self.yneg_count > neg_floor):
+            x, y = self.Xbuffer.pop(), self.ybuffer.pop()
+            if self.debug:
+               self.saved_prbs.pop(), self.saved_inputs.pop()
+            if y == 0:
+                self.yneg_count -= 1
+            else:
+                self.ypos_count -= 1
             
 
     # Get a batch (X,y) of num_samples training pairs, 
@@ -350,7 +368,8 @@ class res_prebuffer:
                 b = loader.__next__()
                 # b is now a triple:  b[0] is a batch of X, b[1] is a batch of A (as a SparseTensor),
                 # b[2] is is some kind of index array
-                batch_preds = self.model.graph_net(b, training=False)
+                inputs = (b[0], b[1], b[2])
+                batch_preds = self.model.graph_net(inputs, training=True)
                 preds.append(batch_preds.numpy())
             result = np.concatenate(preds).reshape(-1)
             return result

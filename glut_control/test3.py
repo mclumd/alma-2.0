@@ -17,6 +17,8 @@ import gc
 from importlib import reload
 import alma
 import argparse
+#from memory_profiler import profile
+import random
 
 #os.environ["LD_LIBRARY_PATH"] = "/home/justin/alma-2.0/"
 test_params = {
@@ -35,7 +37,9 @@ def explosion(size, kb):
        if(and(distanceAt(Item1, D1, T), distanceAt(Item2, D2, T)), distanceBetweenBoundedBy(D1, Item1, Item2, T)).
     """
     global alma_inst,res
-    for i in range(size):
+    ilist = list(range(size))
+    random.shuffle(ilist)
+    for i in ilist:
         print("i=", i)
         if "test1_kb.pl" in kb:
             obs_fmla_a = "distanceAt(a, {}, {}).".format(random.randint(0, 10), i)
@@ -50,8 +54,8 @@ def explosion(size, kb):
     print("Explosion done.")
     print("="*80)
     return r
-
-def train(explosion_steps=50, num_steps=500, numeric_bits=3, model_name="test1", use_gnn = False, num_trainings=1000, train_interval=500, kb='/home/justin/alma-2.0/glut_control/test1_kb.pl'):
+#@profile
+def train(explosion_steps=50, num_steps=500, numeric_bits=3, model_name="test1", use_gnn = False, num_trainings=1000, train_interval=500, kb='/home/justin/alma-2.0/glut_control/test1_kb.pl', net_clear=20):
     global alma_inst,res
     if "test1_kb.pl" in kb:
         subjects = ['a', 'b', 'distanceAt', 'distanceBetweenBoundedBy']
@@ -73,9 +77,13 @@ def train(explosion_steps=50, num_steps=500, numeric_bits=3, model_name="test1",
         #res_lits = exp[1]
         res_task_input = [ x[:2] for x in res_tasks]
         #network.train_batch(res_task_input, res_lits)
+        print("Network has {} samples, {} of which are positive".format(len(network.ybuffer), network.ypos_count))
+        print("Cleaning network...")
+        network.clean()
+        print("Network has {} samples, {} of which are positive".format(len(network.ybuffer), network.ypos_count))
+        next_clear = net_clear
         for idx in range(num_steps):
             prb = alma.prebuf(alma_inst)
-
             res_tasks = prb[0]
             print("idx={}\tnum(res_tasks)={}".format(idx, len(prb[0])), end=" ")
             if len(res_tasks) > 0:
@@ -83,11 +91,13 @@ def train(explosion_steps=50, num_steps=500, numeric_bits=3, model_name="test1",
                 res_lits = res_task_lits(prb[2])
                 res_task_input = [x[:2] for x in res_tasks]
                 #network.train_batch(res_task_input, res_lits)
-                # the conditional below is just for debugging.
-                if idx % 500 == 0:   
-                    network.save_batch(res_task_input, res_lits)
-                else:
-                    network.save_batch(res_task_input, res_lits)
+                network.save_batch(res_task_input, res_lits)
+                if idx >= next_clear:
+                    print("Network has {} samples, {} of which are positive".format(len(network.ybuffer), network.ypos_count))
+                    print("Cleaning network...")
+                    network.clean()
+                    print("Network has {} samples, {} of which are positive".format(len(network.ybuffer), network.ypos_count))
+                    next_clear += net_clear
                 priorities = 1 - network.get_priorities(res_task_input)
                 print("len(priorirites)={}".format(len(priorities)), end=" ")
                 alma.set_priors_prb(alma_inst, priorities.flatten().tolist())
@@ -105,15 +115,19 @@ def train(explosion_steps=50, num_steps=500, numeric_bits=3, model_name="test1",
                         network.model_save(model_name, numeric_bits)
                         return
                 else:
-                    print("Breaking...")
-                    break
+                    print("Continuing...")
+                    continue
+
+            if idx > 0 and idx%200 == 0:
+                network.model_save(model_name+"ckpt{}".format(idx), numeric_bits)
 
             alma.astep(alma_inst)
-
     network.model_save(model_name, numeric_bits)
+    return network
 
-def test(network_priors, exp_size=10, num_steps=500, alma_heap_print_size=100, prb_print_size=30, numeric_bits=10, heap_print_freq=10, model_name='test1', prb_threshold=-1, use_gnn = False, kb='/home/justin/alma-2.0/glut_control/test1_kb.pl'):
+def test(network, network_priors, exp_size=10, num_steps=500, alma_heap_print_size=100, prb_print_size=30, numeric_bits=10, heap_print_freq=10, prb_threshold=-1, use_gnn = False, kb='/home/justin/alma-2.0/glut_control/test1_kb.pl'):
     global alma_inst,res
+    alma_inst,res = alma.init(1,kb, '0', 1, 1000, [], [])
     dbb_instances = []
     exp = explosion(exp_size, kb)
     res_tasks = exp[0]
@@ -137,7 +151,6 @@ def test(network_priors, exp_size=10, num_steps=500, alma_heap_print_size=100, p
 
     res_task_input = [ x[:2] for x in res_tasks]
     if network_priors:
-        network = resolution_prebuffer.rpf_load(model_name)
         priorities = 1 - network.get_priorities(res_task_input)
     else:
         priorities = np.random.uniform(size=len(res_task_input))
@@ -188,13 +201,14 @@ def main():
     parser = argparse.ArgumentParser(description="Run test with specified parameters.")
     parser.add_argument("explosion_steps", type=int, default=10)
     parser.add_argument("reasoning_steps", type=int, default=500)
+    parser.add_argument("testing_reasoning_steps", type=int, default=1000)
     parser.add_argument("--heap_print_size", type=int, default=0)
     parser.add_argument("--prb_print_size", type=int, default=0)
     parser.add_argument("--numeric_bits", type=int, default=10)
     parser.add_argument("--prb_threshold", type=float, default=1.0)
     parser.add_argument("--use_network", action='store_true')
     parser.add_argument("--retrain", action='store', required=False, default="NONE")
-    parser.add_argument("--num_trainings", type=int, default=10000)
+    parser.add_argument("--num_trainings", type=int, default=100)
     parser.add_argument("--train_interval", type=int, default=500)
     parser.add_argument("--reload", action='store', required=False, default="NONE")
     parser.add_argument("--kb", action='store', required=False, default="test1_kb.pl")
@@ -215,16 +229,18 @@ def main():
         assert(args.reload == "NONE")
         print("Read network {}, expsteps {}   rsteps {}    model_name {}".format(use_net, args.explosion_steps, args.reasoning_steps, model_name))
         print('Retraining; model name is ', args.retrain)
-        train(args.explosion_steps, args.reasoning_steps, args.numeric_bits, model_name, args.gnn, args.num_trainings, args.train_interval, args.kb)
+        network = train(args.explosion_steps, args.reasoning_steps, args.numeric_bits, model_name, args.gnn, args.num_trainings, args.train_interval, args.kb)
     if args.reload != "NONE":
         assert(args.retrain == "NONE")
         model_name = args.reload
         print("Read network {}, expsteps {}   rsteps {}    model_name {}".format(use_net, args.explosion_steps, args.reasoning_steps, model_name))
+        network = resolution_prebuffer.rpf_load(model_name)
+
     
 
     #res = test(use_net, args.explosion_steps, args.reasoning_steps, args.heap_print_size, args.prb_print_size, args.numeric_bits, heap_print_freq=10, model_name = model_name, prb_threshold=0.25)
-    res = test(use_net, args.explosion_steps, args.reasoning_steps, args.heap_print_size, args.prb_print_size, args.numeric_bits,
-               heap_print_freq=1, model_name = model_name, prb_threshold=args.prb_threshold, use_gnn=args.gnn, kb=args.kb)
+    res = test(network, use_net, args.explosion_steps, args.testing_reasoning_steps, args.heap_print_size, args.prb_print_size, args.numeric_bits,
+               heap_print_freq=1, prb_threshold=args.prb_threshold, use_gnn=args.gnn, kb=args.kb)
     print("Final result is", res)
     print("Final number is", len(res))
 
