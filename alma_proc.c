@@ -3,9 +3,7 @@
 #include "alma_proc.h"
 #include "tommy.h"
 
-#define run_pos_int 0
-#define run_neg_int 1
-#define run_acquired 2
+typedef enum introspect_kind {POS_INT, POS_INT_GEN, NEG_INT, NEG_INT_GEN, ACQUIRED} introspect_kind;
 
 // Returns a boolean value for if proc matches the procedure schema (binary function proc, first arg function)
 int proc_valid(alma_function *proc) {
@@ -27,7 +25,7 @@ int proc_bound_check(alma_function *proc, binding_list *bindings) {
   return 0;
 }
 
-static int introspect(alma_function *arg, binding_list *bindings, kb *collection, int kind) {
+static int introspect(alma_function *arg, binding_list *bindings, kb *collection, introspect_kind kind) {
   alma_term *query = arg->terms+0;
   binding *res;
   // Argument must be a clause quote or variable bound to one
@@ -41,32 +39,39 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *collection
   copy_alma_term(query, search_term);
   subst(bindings, search_term, 0);
 
-  predname_mapping *result;
   clause *search_clause = search_term->quote->clause_quote;
+  tommy_hashlin *map = &collection->pos_map;
+  alma_function *pred;
   if (search_clause->pos_count != 0) {
-    char *name = name_with_arity(search_clause->pos_lits[0]->name, search_clause->pos_lits[0]->term_count);
-    result = tommy_hashlin_search(&collection->pos_map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
-    free(name);
+    pred = search_clause->pos_lits[0];
   }
   else {
-    char *name = name_with_arity(search_clause->neg_lits[0]->name, search_clause->neg_lits[0]->term_count);
-    result = tommy_hashlin_search(&collection->neg_map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
-    free(name);
+    pred = search_clause->neg_lits[0];
+    map = &collection->neg_map;
   }
+  char *name = name_with_arity(pred->name, pred->term_count);
+  predname_mapping *result = tommy_hashlin_search(map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
+  free(name);
 
   if (result != NULL) {
     alma_quote *q = malloc(sizeof(*q));
     q->type = CLAUSE;
     q->clause_quote = NULL;
 
+    int gen_introspect = kind == POS_INT_GEN || kind == NEG_INT_GEN;
     for (int i = result->num_clauses-1; i >= 0; i--) {
       // Must be a non-distrusted result with pos / neg literal count matching query
       if (!is_distrusted(collection, result->clauses[i]->index) && result->clauses[i]->pos_count == search_clause->pos_count
           && result->clauses[i]->neg_count == search_clause->neg_count) {
         // Convert clause in question to quotation term
-        q->clause_quote = malloc(sizeof(*q->clause_quote));
-        copy_clause_structure(result->clauses[i], q->clause_quote);
-        increment_quote_level(q->clause_quote, 0);
+        if (gen_introspect) {
+          q->clause_quote = malloc(sizeof(*q->clause_quote));
+          copy_clause_structure(result->clauses[i], q->clause_quote);
+          increment_quote_level(q->clause_quote, 0);
+        }
+        else {
+          q->clause_quote = result->clauses[i];
+        }
 
         // Create bindings copy as either empty list or copy of arg
         binding_list *copy = malloc(sizeof(*copy));
@@ -74,11 +79,11 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *collection
 
         // Returning first match based at the moment
         if (quote_term_unify(search_term->quote, q, copy)) {
-          if (kind != run_neg_int)
+          if (kind != NEG_INT && kind != NEG_INT_GEN)
             swap_bindings(bindings, copy);
           cleanup_bindings(copy);
 
-          if (kind == run_acquired) {
+          if (kind == ACQUIRED) {
             // If they unify, create term out of acquired answer
             alma_term *time_term = malloc(sizeof(*time_term));
             time_term->type = FUNCTION;
@@ -89,12 +94,18 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *collection
             add_binding(bindings, arg->terms[1].variable, time_term, arg, 0);
           }
 
+          // Don't free clause unless gen case
+          if (!gen_introspect)
+            q->clause_quote = NULL;
           free_quote(q);
+
           free_term(search_term);
           free(search_term);
-          return kind != run_neg_int;
+          return kind != NEG_INT && kind != NEG_INT_GEN;
         }
-        free_clause(q->clause_quote);
+
+        if (gen_introspect)
+          free_clause(q->clause_quote);
         q->clause_quote = NULL;
         cleanup_bindings(copy);
       }
@@ -104,7 +115,7 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *collection
 
   free_term(search_term);
   free(search_term);
-  return kind == run_neg_int;
+  return kind == NEG_INT || kind == NEG_INT_GEN;
 }
 
 // ancestor(A, B) returns true if a A appears as an ancestor in any derivation of B
@@ -431,20 +442,32 @@ static int quote_cons(alma_term *to_quote, alma_variable *result, binding_list *
 // If proc is a valid procedure, runs and returns truth value
 int proc_run(alma_function *proc, binding_list *bindings, kb *alma) {
   alma_function *func = proc->terms[0].function;
-  if (strcmp(func->name, "neg_int") == 0) {
-    // Must match (given bindings) the schema neg_int(literal(...))
-    if (func->term_count == 1)
-      return introspect(func, bindings, alma, run_neg_int);
+  if (strstr(func->name, "neg_int") == func->name) {
+    // Must match (given bindings) the schema neg_int(literal(...)) / neg_int_gen(literal(...))
+    if (func->term_count == 1) {
+      if (strlen(func->name) == strlen("neg_int")) {
+        return introspect(func, bindings, alma, NEG_INT);
+      }
+      else if (strcmp(func->name, "neg_int_gen") == 0) {
+        return introspect(func, bindings, alma, NEG_INT_GEN);
+      }
+    }
   }
-  else if (strcmp(func->name, "pos_int") == 0) {
-    // Must match (given bindings) the schema pos_int(literal(...))
-    if (func->term_count == 1)
-      return introspect(func, bindings, alma, run_pos_int);
+  else if (strstr(func->name, "pos_int") == func->name) {
+    // Must match (given bindings) the schema pos_int(literal(...)) / pos_int_gen(literal(...))
+    if (func->term_count == 1) {
+      if (strlen(func->name) == strlen("pos_int")) {
+        return introspect(func, bindings, alma, POS_INT);
+      }
+      else if (strcmp(func->name, "pos_int_gen") == 0) {
+        return introspect(func, bindings, alma, POS_INT_GEN);
+      }
+    }
   }
   else if (strcmp(func->name, "acquired") == 0) {
     // Must match (given bindings) the schema acquired(literal(...), Var) OR acquired(not(literal(...)), Var); Var must be unbound
     if (func->term_count == 2 && func->terms[1].type == VARIABLE && !bindings_contain(bindings, func->terms[1].variable))
-      return introspect(func, bindings, alma, run_acquired);
+      return introspect(func, bindings, alma, ACQUIRED);
   }
   else if (strcmp(func->name, "ancestor") == 0) {
     if (func->term_count == 2)

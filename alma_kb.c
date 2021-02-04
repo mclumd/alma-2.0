@@ -1616,37 +1616,47 @@ static void handle_true(kb *collection, clause *truth, kb_str *buf) {
 }
 
 // Special semantic operator: distrust
-// Must be a singleton positive literal with unary function arg [TODO: make quote later]
-// If argument matches a formula in the KB exactly (possibly change this later), derives distrusted
+// If argument unifies with a formula in the KB, derives distrusted
+// Note that in some cases, a unifiable formula that is more general than the argument may be distrusted
 static void handle_distrust(kb *collection, clause *distrust, kb_str *buf) {
-  if (distrust->pos_lits[0]->term_count == 1 && distrust->pos_lits[0]->terms[0].type == FUNCTION) {
-    alma_function *func = distrust->pos_lits[0]->terms[0].function;
-
+  alma_function *lit = distrust->pos_lits[0];
+  if (lit->term_count == 1 && lit->terms[0].type == QUOTE && lit->terms[0].quote->type == CLAUSE) {
     tommy_hashlin *map = &collection->pos_map;
+    alma_function *pred;
     // Can also distrust negated formula
-    if (strcmp(func->name, "not") == 0) {
-      if (func->term_count != 1 || func->terms[0].type == FUNCTION)
-        return;
-      func = func->terms[0].function;
+    if (lit->terms[0].quote->clause_quote->pos_count != 0) {
+      pred = lit->terms[0].quote->clause_quote->pos_lits[0];
+    }
+    else {
+      pred = lit->terms[0].quote->clause_quote->neg_lits[0];
       map = &collection->neg_map;
     }
 
-    char *name = name_with_arity(func->name, func->term_count);
+    char *name = name_with_arity(pred->name, pred->term_count);
     predname_mapping *result = tommy_hashlin_search(map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
     free(name);
     if (result != NULL) {
-      for (int i = result->num_clauses-1; i >= 0; i--) {
-        if (!is_distrusted(collection, result->clauses[i]->index) && result->clauses[i]->pos_count + result->clauses[i]->neg_count == 1) {
-          alma_function *lit = (map == &collection->pos_map ? result->clauses[i]->pos_lits[0] : result->clauses[i]->neg_lits[0]);
+      alma_quote *q = malloc(sizeof(*q));
+      q->type = CLAUSE;
+      q->clause_quote = NULL;
 
-          var_match_set matches;
-          var_match_init(&matches);
+      for (int i = result->num_clauses-1; i >= 0; i--) {
+        if (!is_distrusted(collection, result->clauses[i]->index) &&
+            result->clauses[i]->pos_count == lit->terms[0].quote->clause_quote->pos_count &&
+            result->clauses[i]->neg_count == lit->terms[0].quote->clause_quote->neg_count) {
+          q->clause_quote = result->clauses[i];
+          binding_list *theta = malloc(sizeof(*theta));
+          init_bindings(theta);
+
           // Distrust each match found
-          if (function_compare(&func, &lit) == 0 || !functions_differ(func, lit, &matches, 0))
+          if (quote_term_unify(lit->terms[0].quote, q, theta))
             distrust_recursive(collection, result->clauses[i], distrust, buf);
-          release_matches(&matches, 1);
+          cleanup_bindings(theta);
+
+          q->clause_quote = NULL;
         }
       }
+      free_quote(q);
     }
   }
 }
