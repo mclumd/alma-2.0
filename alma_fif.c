@@ -44,7 +44,7 @@ void fif_task_map_init(kb *collection, clause *c, int init_to_unify) {
           predname_mapping *pm_result = tommy_hashlin_search(map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
           if (pm_result != NULL) {
             for (int j = 0; j < pm_result->num_clauses; j++) {
-              if (pm_result->clauses[j]->pos_count + pm_result->clauses[j]->neg_count == 1) {
+              if (!pm_result->clauses[j]->distrusted && pm_result->clauses[j]->pos_count + pm_result->clauses[j]->neg_count == 1) {
                 task->num_to_unify++;
                 task->to_unify = realloc(task->to_unify, sizeof(*task->to_unify) * task->num_to_unify);
                 task->to_unify[task->num_to_unify-1] = pm_result->clauses[j];
@@ -106,9 +106,12 @@ void fif_tasks_from_clause(kb *collection, clause *c) {
 // Checks if each of task's unified_clauses is distrusted
 // Returns 1 if any are
 static int fif_unified_distrusted(kb *collection, fif_task *task) {
-  for (int i = 0; i < task->num_unified; i++)
-    if (is_distrusted(collection, task->unified_clauses[i]))
+  for (int i = 0; i < task->num_unified; i++) {
+    long index = task->unified_clauses[i];
+    index_mapping *result = tommy_hashlin_search(&collection->index_map, im_compare, &index, tommy_hash_u64(0, &index, sizeof(index)));
+    if (result != NULL && result->value->distrusted)
       return 1;
+  }
   return 0;
 }
 
@@ -209,7 +212,7 @@ static void fif_task_unify_loop(kb *collection, tommy_list *tasks, tommy_list *s
       if (m != NULL) {
         for (int j = 0; j < m->num_clauses; j++) {
           clause *jth = m->clauses[j];
-          if (jth->pos_count + jth->neg_count == 1) {
+          if (!jth->distrusted && jth->pos_count + jth->neg_count == 1) {
             alma_function *to_unify = search_pos ? jth->pos_lits[0] : jth->neg_lits[0];
 
             binding_list *copy = malloc(sizeof(*copy));
@@ -298,7 +301,7 @@ static void process_fif_task_mapping(kb *collection, fif_task_mapping *entry, to
             clause *unify_target = f->to_unify[i];
 
             // Clause to unify must not have become distrusted since it was connected to the fif task
-            if (!is_distrusted(collection, unify_target->index)) {
+            if (!unify_target->distrusted) {
               alma_function *to_unify_func = (unify_target->pos_count > 0) ? unify_target->pos_lits[0] : unify_target->neg_lits[0];
 
               // Debug

@@ -696,28 +696,10 @@ static void remove_dupe_literals(int *count, alma_function ***triple) {
   }
 }
 
-// Checks if c is a distrusted clause's duplicate; returns pointer ot that clause if so
-clause* distrusted_dupe_check(kb *collection, clause *c) {
-  // Loop over hashlin contents of distrusted; based on tommy_hashlin_foreach
-  // TODO: may want double indexing if this loops too many times
-  tommy_size_t bucket_max = collection->distrusted.low_max + collection->distrusted.split;
-  for (tommy_size_t pos = 0; pos < bucket_max; ++pos) {
-    tommy_hashlin_node *node = *tommy_hashlin_pos(&collection->distrusted, pos);
-
-    while (node) {
-      distrust_mapping *data = node->data;
-      node = node->next;
-
-      if (!clauses_differ(data->value, c))
-        return data->value;
-    }
-  }
-  return NULL;
-}
-
 // If c is found to be a clause's duplicate, returns a pointer to that clause; null otherwise
 // See comments preceding clauses_differ function for further detail
-clause* duplicate_check(kb *collection, clause *c) {
+// Check_distrusted flag determines whether distrusted clauses are used for dupe comparison as well
+clause* duplicate_check(kb *collection, clause *c, int check_distrusted) {
   if (c->tag == FIF) {
     char *name = c->fif->conclusion->name;
     fif_mapping *result = tommy_hashlin_search(&collection->fif_map, fifm_compare, name, tommy_hash_u64(0, name, strlen(name)));
@@ -736,30 +718,26 @@ clause* duplicate_check(kb *collection, clause *c) {
     remove_dupe_literals(&c->pos_count, &c->pos_lits);
     remove_dupe_literals(&c->neg_count, &c->neg_lits);
 
+    char *name;
+    tommy_hashlin *map;
+    // If clause has a positive literal, all duplicate candidates must have that same positive literal
+    // Arbitrarily pick first positive literal as one to use; may be able to do smarter literal choice later
     if (c->pos_count > 0) {
-      // If clause has a positive literal, all duplicate candidates must have that same positive literal
-      // Arbitrarily pick first positive literal as one to use; may be able to do smarter literal choice later
-      char *name = name_with_arity(c->pos_lits[0]->name, c->pos_lits[0]->term_count);
-      predname_mapping *result = tommy_hashlin_search(&collection->pos_map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
-      free(name);
-      if (result != NULL) {
-        for (int i = 0; i < result->num_clauses; i++) {
-          if (c->tag == result->clauses[i]->tag && !clauses_differ(c, result->clauses[i]))
-            return result->clauses[i];
-        }
-      }
+      map = &collection->pos_map;
+      name = name_with_arity(c->pos_lits[0]->name, c->pos_lits[0]->term_count);
     }
-    else if (c->neg_count > 0) {
-      // If clause has a negative literal, all duplicate candidates must have that same negative literal
-      // Arbitrarily pick first negative literal as one to use; may be able to do smarter literal choice later
-      char *name = name_with_arity(c->neg_lits[0]->name, c->neg_lits[0]->term_count);
-      predname_mapping *result = tommy_hashlin_search(&collection->neg_map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
-      free(name);
-      if (result != NULL) {
-        for (int i = 0; i < result->num_clauses; i++) {
-          if (c->tag == result->clauses[i]->tag && !clauses_differ(c, result->clauses[i]))
-            return result->clauses[i];
-        }
+    else {
+      map = &collection->neg_map;
+      name = name_with_arity(c->neg_lits[0]->name, c->neg_lits[0]->term_count);
+    }
+    predname_mapping *result = tommy_hashlin_search(map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
+    free(name);
+    if (result != NULL) {
+      for (int i = 0; i < result->num_clauses; i++) {
+        // A distrusted clause learned this timestep is still checked against
+        if ((check_distrusted || !result->clauses[i]->distrusted || result->clauses[i]->acquired == collection->time) &&
+            c->tag == result->clauses[i]->tag && !clauses_differ(c, result->clauses[i]))
+          return result->clauses[i];
       }
     }
   }
@@ -771,10 +749,11 @@ void add_clause(kb *collection, clause *c) {
   // Add clause to overall clause list and index map
   index_mapping *ientry = malloc(sizeof(*ientry));
   c->index = ientry->key = collection->next_index++;
+  c->acquired = collection->time;
+  c->distrusted = 0;
   c->dirty_bit = (char) 1;
   c->pyobject_bit = (char) 1;
   ientry->value = c;
-  c->acquired = collection->time;
   tommy_list_insert_tail(&collection->clauses, &ientry->list_node, ientry);
   tommy_hashlin_insert(&collection->index_map, &ientry->hash_node, ientry, tommy_hash_u64(0, &ientry->key, sizeof(ientry->key)));
 
@@ -839,12 +818,6 @@ static void remove_child(clause *p, clause *c) {
   }
 }
 
-// Compare function to be used by tommy_hashlin_search for distrust_mapping
-// Compares long arg to key of distrust_mapping
-static int dm_compare(const void *arg, const void *obj) {
-  return *(const long*)arg - ((const distrust_mapping*)obj)->key;
-}
-
 // Given a clause already existing in KB, remove from data structures
 // Note that fif removal, or removal of a singleton clause used in a fif rule, may be very expensive
 void remove_clause(kb *collection, clause *c, kb_str *buf) {
@@ -877,21 +850,11 @@ void remove_clause(kb *collection, clause *c, kb_str *buf) {
     }
   }
   else {
-    // If a clause is distrusted in KB, remove its distrust_mapping from hashmap
-    distrust_mapping *d = tommy_hashlin_search(&collection->distrusted, dm_compare, &c->index, tommy_hash_u64(0, &c->index, sizeof(c->index)));
-    if (d != NULL) {
-      if(d->value == c) {
-      tommy_hashlin_remove_existing(&collection->distrusted, &d->node);
-      free(d);
-      }
-    }
-    else {
-      // Non-fif must be unindexed from pos/neg maps, have resolution tasks and fif tasks (if in any) removed
-      for (int i = 0; i < c->pos_count; i++)
-        map_remove_clause(&collection->pos_map, &collection->pos_list, c->pos_lits[i], c);
-      for (int i = 0; i < c->neg_count; i++)
-        map_remove_clause(&collection->neg_map, &collection->neg_list, c->neg_lits[i], c);
-    }
+    // Non-fif must be unindexed from pos/neg maps, have resolution tasks and fif tasks (if in any) removed
+    for (int i = 0; i < c->pos_count; i++)
+      map_remove_clause(&collection->pos_map, &collection->pos_list, c->pos_lits[i], c);
+    for (int i = 0; i < c->neg_count; i++)
+      map_remove_clause(&collection->neg_map, &collection->neg_list, c->neg_lits[i], c);
 
     remove_res_tasks(collection, c);
 
@@ -1007,10 +970,6 @@ void remove_clause(kb *collection, clause *c, kb_str *buf) {
   //  printf("ALMA: LEAVING REMOVE CLAUSE\n");
 }
 
-int is_distrusted(kb *collection, long index) {
-  return tommy_hashlin_search(&collection->distrusted, dm_compare, &index, tommy_hash_u64(0, &index, sizeof(index))) != NULL;
-}
-
 void make_single_task(kb *collection, clause *c, alma_function *c_lit, clause *other, tommy_array *tasks, int use_bif, int pos) {
   if (c != other && (other->tag != BIF || use_bif) && other->tag != FIF) {
     alma_function *other_lit = literal_by_name(other, c_lit->name, pos);
@@ -1043,7 +1002,8 @@ void make_res_tasks(kb *collection, clause *c, int count, alma_function **c_lits
     // New tasks are from Cartesian product of result's clauses with clauses' ith
     if (result != NULL)
       for (int j = 0; j < result->num_clauses; j++)
-        make_single_task(collection, c, c_lits[i], result->clauses[j], tasks, use_bif, pos);
+        if (!result->clauses[j]->distrusted)
+          make_single_task(collection, c, c_lits[i], result->clauses[j], tasks, use_bif, pos);
 
     free(name);
   }
@@ -1099,12 +1059,9 @@ int delete_formula(kb *collection, char *string, int print, kb_str *buf) {
     // Process and remove each clause
     for (tommy_size_t i = 0; i < tommy_array_size(&clauses); i++) {
       clause *curr = tommy_array_get(&clauses, i);
-      clause *c = duplicate_check(collection, curr);
+      clause *c = duplicate_check(collection, curr, 1);
 
       //      tee_alt("ALMA IN DELETE FORMULA LOOP: CLAUSE POINTER %p\n",buf,(void *)c);
-
-      if (c == NULL && curr->tag != FIF)
-        c = distrusted_dupe_check(collection, curr);
 
       if (c != NULL) {
         if (print) {
@@ -1161,13 +1118,13 @@ int update_formula(kb *collection, char *string, kb_str *buf) {
       tee_alt("-a: Cannot update with fif clause\n", collection, buf);
       update_fail = 1;
     }
-    else if ((t_dupe = duplicate_check(collection, target)) == NULL) {
+    else if ((t_dupe = duplicate_check(collection, target, 1)) == NULL) {
       tee_alt("-a: Clause ", collection, buf);
       clause_print(collection, target, buf);
       tee_alt(" to update not present\n", collection, buf);
       update_fail = 1;
     }
-    else if ((u_dupe = duplicate_check(collection, update)) != NULL) {
+    else if ((u_dupe = duplicate_check(collection, update, 1)) != NULL) {
       tee_alt("-a: New version of clause already present\n", collection, buf);
       update_fail = 1;
     }
@@ -1339,7 +1296,7 @@ void transfer_parent(kb *collection, clause *target, clause *source, int add_chi
       int distrust = 0;
       for (int j = 0; j < source->parents[0].count; j++) {
         int insert = 1;
-        if (is_distrusted(collection, source->parents[0].clauses[j]->index))
+        if (source->parents[0].clauses[j]->distrusted)
           distrust = 1;
         for (int k = 0; k < source->parents[0].clauses[j]->children_count; k++) {
           if (source->parents[0].clauses[j]->children[k] == target) {
@@ -1350,7 +1307,7 @@ void transfer_parent(kb *collection, clause *target, clause *source, int add_chi
         if (insert)
           add_child(source->parents[0].clauses[j], target);
       }
-      if (distrust && !is_distrusted(collection, target->index))
+      if (distrust && !target->distrusted)
         distrust_recursive(collection, target, NULL, buf);
 
     }
@@ -1358,11 +1315,7 @@ void transfer_parent(kb *collection, clause *target, clause *source, int add_chi
 }
 
 void distrust_recursive(kb *collection, clause *c, clause *parent, kb_str *buf) {
-  // Add c to distrusted set
-  distrust_mapping *d = malloc(sizeof(*d));
-  d->key = c->index;
-  d->value = c;
-  tommy_hashlin_insert(&collection->distrusted, &d->node, d, tommy_hash_u64(0, &d->key, sizeof(d->key)));
+  c->distrusted = 1;
 
   // Assert distrusted formula
   char *index = long_to_str(c->index);
@@ -1381,12 +1334,6 @@ void distrust_recursive(kb *collection, clause *c, clause *parent, kb_str *buf) 
   clause *distrusted = assert_formula(collection, distrust_str, 0, buf);
   free(distrust_str);
 
-  // Unindex c from pos_map/list, neg_map/list to prevent use in inference
-  for (int i = 0; i < c->pos_count; i++)
-    map_remove_clause(&collection->pos_map, &collection->pos_list, c->pos_lits[i], c);
-  for (int i = 0; i < c->neg_count; i++)
-    map_remove_clause(&collection->neg_map, &collection->neg_list, c->neg_lits[i], c);
-
   // Parent argument provided will be set for distrusted formula
   if (parent != NULL) {
     distrusted->parent_set_count = 1;
@@ -1399,7 +1346,7 @@ void distrust_recursive(kb *collection, clause *c, clause *parent, kb_str *buf) 
   // Recursively distrust children that aren't distrusted already
   if (c->children != NULL) {
     for (int i = 0; i < c->children_count; i++) {
-      if (!is_distrusted(collection, c->children[i]->index)) {
+      if (!c->children[i]->distrusted) {
         distrust_recursive(collection, c->children[i], parent, buf);
       }
     }
@@ -1434,7 +1381,7 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
     res_task *current_task = tommy_array_get(tasks, i);
     if (current_task != NULL) {
       // Does not do resolution with a distrusted clause
-      if (!is_distrusted(collection, current_task->x->index) && !is_distrusted(collection,  current_task->y->index)) {
+      if (!current_task->x->distrusted && !current_task->y->distrusted) {
         binding_list *theta = malloc(sizeof(*theta));
         init_bindings(theta);
         // Debug
@@ -1647,7 +1594,7 @@ static void handle_distrust(kb *collection, clause *distrust, kb_str *buf) {
       q->type = CLAUSE;
 
       for (int i = result->num_clauses-1; i >= 0; i--) {
-        if (!is_distrusted(collection, result->clauses[i]->index) &&
+        if (!result->clauses[i]->distrusted &&
             result->clauses[i]->pos_count == lit->terms[0].quote->clause_quote->pos_count &&
             result->clauses[i]->neg_count == lit->terms[0].quote->clause_quote->neg_count) {
           q->clause_quote = result->clauses[i];
@@ -1681,21 +1628,17 @@ static void handle_distrusted_parent(kb *collection, clause *dist) {
       // Can thus retrieve any distrusted parent
       for (int i = 0; i < dist_formula->parent_set_count; i++) {
         for (int j = 0; j < dist_formula->parents[i].count; j++) {
-          distrust_mapping *res;
           index = dist_formula->parents[i].clauses[j]->index;
 
-          // Parent found distrusted
-          if ((res = tommy_hashlin_search(&collection->distrusted, dm_compare, &index, tommy_hash_u64(0, &index, sizeof(index))))) {
-            clause *parent_dist = res->value;
-
-            // Get clause for parent's distrust sentence by searching distrusted predicates
+          if (dist_formula->parents[i].clauses[j]->distrusted) {
+            // Get clause for parent's distrust sentence by searching distrusted() atoms
             char *name = name_with_arity("distrusted", 2);
             predname_mapping *p_res = tommy_hashlin_search(&collection->pos_map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
             free(name);
             char *index_str = long_to_str(index);
             if (p_res != NULL) {
               for (int k = 0; k < p_res->num_clauses; k++) {
-                parent_dist = p_res->clauses[k];
+                clause *parent_dist = p_res->clauses[k];
                 if (strcmp(parent_dist->pos_lits[0]->name, "distrusted") == 0 && parent_dist->pos_lits[0]->terms[0].type == FUNCTION
                     && strcmp(parent_dist->pos_lits[0]->terms[0].function->name, index_str) == 0 && parent_dist->pos_count == 1
                     && parent_dist->neg_count == 0) {
@@ -1728,7 +1671,7 @@ void process_new_clauses(kb *collection, kb_str *buf) {
 
   for (tommy_size_t i = 0; i < tommy_array_size(&collection->new_clauses); i++) {
     clause *c = tommy_array_get(&collection->new_clauses, i);
-    clause *dupe = duplicate_check(collection, c);
+    clause *dupe = duplicate_check(collection, c, 0);
     int reinstate = c->pos_count == 1 && c->neg_count == 0 && strcmp(c->pos_lits[0]->name, "reinstate") == 0 && c->pos_lits[0]->term_count == 1;
     if (dupe == NULL || reinstate) {
       //      c->dirty_bit = (char) 1;
@@ -1761,7 +1704,7 @@ void process_new_clauses(kb *collection, kb_str *buf) {
            if (digits) {
              long index = atol(index_str);
              index_mapping *result = tommy_hashlin_search(&collection->index_map, im_compare, &index, tommy_hash_u64(0, &index, sizeof(index)));
-             if (result != NULL && is_distrusted(collection, index)) {
+             if (result != NULL && result->value->distrusted) {
                clause *to_reinstate = result->value;
                clause *reinstatement = malloc(sizeof(*reinstatement));
                copy_clause_structure(to_reinstate, reinstatement);
@@ -1813,7 +1756,7 @@ void process_new_clauses(kb *collection, kb_str *buf) {
         // Update child info for parents of new clause, check for distrusted parents
         for (int j = 0; j < c->parents[0].count; j++) {
           add_child(c->parents[0].clauses[j], c);
-          if (is_distrusted(collection, c->parents[0].clauses[j]->index))
+          if (c->parents[0].clauses[j]->distrusted)
             distrust = c->parents[0].clauses[j]->index;
         }
         // Unable to always retrieve the parent of distrusted sentence for c's parent; pass NULL for now

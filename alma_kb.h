@@ -31,6 +31,7 @@ typedef struct clause {
   struct fif_info *fif; // Data used to store additional fif information; non-null only if FIF tagged
   long index; // Index of clause, used as key in index_map of KB
   long acquired; // Time asserted to KB
+  int distrusted; // Boolean for distrust status
   char dirty_bit;
   char pyobject_bit;
 } clause;
@@ -70,14 +71,10 @@ typedef struct kb {
 
   tommy_list backsearch_tasks;
 
-  tommy_hashlin distrusted; // Stores distrusted items by clause index
-
   long size;
-
   FILE *almalog;
 
   long long variable_id_count;
-
   long next_index;
 } kb;
 
@@ -98,13 +95,6 @@ typedef struct predname_mapping {
   tommy_node list_node; // Node used for storage in tommy_list
 } predname_mapping;
 
-// Used to track entries in distrusted map
-typedef struct distrust_mapping {
-  long key;
-  clause *value;
-  tommy_node node;
-} distrust_mapping;
-
 typedef struct res_task {
   clause *x;
   clause *y;
@@ -115,8 +105,7 @@ typedef struct res_task {
 int formulas_from_source(char *source, int file_src, int *formula_count, alma_node **formulas, kb *collection, kb_str *buf);
 void make_clause(alma_node *node, clause *c);
 int clauses_differ(clause *x, clause *y);
-clause* distrusted_dupe_check(kb *collection, clause *c);
-clause* duplicate_check(kb *collection, clause *c);
+clause* duplicate_check(kb *collection, clause *c, int check_distrusted);
 void add_clause(kb *collection, clause *curr);
 void remove_clause(kb *collection, clause *c, kb_str *buf);
 struct backsearch_task;
@@ -141,7 +130,6 @@ void set_variable_ids(clause *c, int id_from_name, int non_escaping_only, bindin
 void flatten_node(kb *collection, alma_node *node, tommy_array *clauses, int print, kb_str *buf);
 void nodes_to_clauses(kb *collection, alma_node *trees, int num_trees, tommy_array *clauses, int print, kb_str *buf);
 void free_predname_mapping(void *arg);
-int is_distrusted(kb *collection, long index);
 char* long_to_str(long x);
 void add_child(clause *parent, clause *child);
 

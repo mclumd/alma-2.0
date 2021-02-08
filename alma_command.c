@@ -37,7 +37,6 @@ void kb_init(kb **collection, char *file, char *agent, char *trialnum, char *log
   tommy_array_init(&collec->res_tasks);
   tommy_hashlin_init(&collec->fif_tasks);
   tommy_list_init(&collec->backsearch_tasks);
-  tommy_hashlin_init(&collec->distrusted);
 
   parse_init();
 
@@ -108,7 +107,7 @@ void kb_init(kb **collection, char *file, char *agent, char *trialnum, char *log
   for (tommy_size_t i = 0; i < tommy_array_size(&collec->new_clauses); i++) {
     clause *c = tommy_array_get(&collec->new_clauses, i);
     // Insert into KB if not duplicate
-    if (duplicate_check(collec, c) == NULL)
+    if (duplicate_check(collec, c, 0) == NULL)
       add_clause(collec, c);
     else
       free_clause(c);
@@ -270,9 +269,6 @@ void kb_halt(kb *collection) {
     curr = curr->next;
     backsearch_halt(data);
   }
-
-  tommy_hashlin_foreach(&collection->distrusted, free);
-  tommy_hashlin_done(&collection->distrusted);
 
   if (logs_on) {
     fclose(collection->almalog);

@@ -90,7 +90,7 @@ static clause* backsearch_duplicate_check(kb *collection, backsearch_task *task,
 void generate_backsearch_tasks(kb *collection, backsearch_task *bt, kb_str *buf) {
   for (int i = 0; i < tommy_array_size(&bt->new_clauses); i++) {
     clause *c = tommy_array_get(&bt->new_clauses, i);
-    clause *dupe = duplicate_check(collection, c);
+    clause *dupe = duplicate_check(collection, c, 0);
     int bs_dupe = 0;
     if (dupe == NULL) {
       dupe = backsearch_duplicate_check(collection, bt, c);

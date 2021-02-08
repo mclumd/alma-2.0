@@ -25,6 +25,8 @@ int proc_bound_check(alma_function *proc, binding_list *bindings) {
   return 0;
 }
 
+// For now, introspect fails on distrusted formulas
+// It seems intuitive to reject them, since introspection is based on current knowledge
 static int introspect(alma_function *arg, binding_list *bindings, kb *collection, introspect_kind kind) {
   alma_term *query = arg->terms+0;
   binding *res;
@@ -48,7 +50,7 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *collection
     int gen_introspect = kind == POS_INT_GEN || kind == NEG_INT_GEN;
     for (int i = result->num_clauses-1; i >= 0; i--) {
       // Must be a non-distrusted result with pos / neg literal count matching query
-      if (!is_distrusted(collection, result->clauses[i]->index)
+      if (!result->clauses[i]->distrusted
           && result->clauses[i]->pos_count == search_term->quote->clause_quote->pos_count
           && result->clauses[i]->neg_count == search_term->quote->clause_quote->neg_count) {
         // Convert clause in question to quotation term
@@ -134,7 +136,7 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, binding_list *bi
 
       for (int i = result->num_clauses-1; i >= 0; i--) {
         if (result->clauses[i]->pos_count == descendant_copy->quote->clause_quote->pos_count &&
-            result->clauses[i]->neg_count == ancestor_copy->quote->clause_quote->neg_count) {
+            result->clauses[i]->neg_count == descendant_copy->quote->clause_quote->neg_count) {
           // Create copy as either empty list or copy of arg
           desc_bindings = malloc(sizeof(*desc_bindings));
           copy_bindings(desc_bindings, bindings);
@@ -186,8 +188,8 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, binding_list *bi
             has_ancestor = 1;
             break;
           }
-          cleanup_bindings(anc_bindings);
         }
+        cleanup_bindings(anc_bindings);
 
         // Queue parents for expansion
         for (int i = 0; i < c->parent_set_count; i++)
