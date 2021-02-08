@@ -152,5 +152,6 @@ void distrust_recursive(kb *collection, clause *c, clause *parent, kb_str *buf);
 int im_compare(const void *arg, const void *obj);
 int pm_compare(const void *arg, const void *obj);
 char* name_with_arity(char *name, int arity);
+predname_mapping* clause_lookup(kb *collection, clause *c);
 
 #endif

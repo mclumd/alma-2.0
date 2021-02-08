@@ -4,10 +4,10 @@ fif(and(now(T), proc(less_than(h20, 100), bound)), conclusion(wat_less)).
 
 fif(and(fluent(X, V1),
     and(fluent(X, V2),
-    and(proc(acquired(fluent(X, V1), T1), bound),
-    and(proc(acquired(fluent(X, V2), T2), bound),
+    and(proc(acquired(quote(fluent(`X, `V1)), T1), bound),
+    and(proc(acquired(quote(fluent(`X, `V2)), T2), bound),
     proc(less_than(T1, T2), bound))))),
 conclusion(distrust(V1))).
 
-fluent(foo, bar).
+fluent(foo, quote(bar)).
 bar.

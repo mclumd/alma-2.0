@@ -478,6 +478,25 @@ char* name_with_arity(char *name, int arity) {
   return name_with_arity;
 }
 
+// Looks up predname mapping for a predicate used in clause c
+// Currently, simply picks the first positive or negative literal
+// Possibly to be replaced with more sophisticated method later
+predname_mapping* clause_lookup(kb *collection, clause *c) {
+  tommy_hashlin *map = &collection->pos_map;
+  alma_function *pred;
+  if (c->pos_count != 0) {
+    pred = c->pos_lits[0];
+  }
+  else {
+    pred = c->neg_lits[0];
+    map = &collection->neg_map;
+  }
+  char *name = name_with_arity(pred->name, pred->term_count);
+  predname_mapping *result = tommy_hashlin_search(map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
+  free(name);
+  return result;
+}
+
 // Inserts clause into the hashmap (with key based on lit), as well as the linked list
 // If the map entry already exists, append; otherwise create a new one
 static void map_add_clause(tommy_hashlin *map, tommy_list *list, alma_function *lit, clause *c) {
@@ -1617,28 +1636,15 @@ static void handle_true(kb *collection, clause *truth, kb_str *buf) {
 
 // Special semantic operator: distrust
 // If argument unifies with a formula in the KB, derives distrusted
-// Note that in some cases, a unifiable formula that is more general than the argument may be distrusted
+// Distrusted formulas cannot be more general than argument
+// Hence, clauses found are placed in a quotation term with no added quasi-quotation
 static void handle_distrust(kb *collection, clause *distrust, kb_str *buf) {
   alma_function *lit = distrust->pos_lits[0];
   if (lit->term_count == 1 && lit->terms[0].type == QUOTE && lit->terms[0].quote->type == CLAUSE) {
-    tommy_hashlin *map = &collection->pos_map;
-    alma_function *pred;
-    // Can also distrust negated formula
-    if (lit->terms[0].quote->clause_quote->pos_count != 0) {
-      pred = lit->terms[0].quote->clause_quote->pos_lits[0];
-    }
-    else {
-      pred = lit->terms[0].quote->clause_quote->neg_lits[0];
-      map = &collection->neg_map;
-    }
-
-    char *name = name_with_arity(pred->name, pred->term_count);
-    predname_mapping *result = tommy_hashlin_search(map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
-    free(name);
+    predname_mapping *result = clause_lookup(collection, lit->terms[0].quote->clause_quote);
     if (result != NULL) {
       alma_quote *q = malloc(sizeof(*q));
       q->type = CLAUSE;
-      q->clause_quote = NULL;
 
       for (int i = result->num_clauses-1; i >= 0; i--) {
         if (!is_distrusted(collection, result->clauses[i]->index) &&
@@ -1652,11 +1658,9 @@ static void handle_distrust(kb *collection, clause *distrust, kb_str *buf) {
           if (quote_term_unify(lit->terms[0].quote, q, theta))
             distrust_recursive(collection, result->clauses[i], distrust, buf);
           cleanup_bindings(theta);
-
-          q->clause_quote = NULL;
         }
       }
-      free_quote(q);
+      free(q);
     }
   }
 }

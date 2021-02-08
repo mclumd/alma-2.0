@@ -39,20 +39,7 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *collection
   copy_alma_term(query, search_term);
   subst(bindings, search_term, 0);
 
-  clause *search_clause = search_term->quote->clause_quote;
-  tommy_hashlin *map = &collection->pos_map;
-  alma_function *pred;
-  if (search_clause->pos_count != 0) {
-    pred = search_clause->pos_lits[0];
-  }
-  else {
-    pred = search_clause->neg_lits[0];
-    map = &collection->neg_map;
-  }
-  char *name = name_with_arity(pred->name, pred->term_count);
-  predname_mapping *result = tommy_hashlin_search(map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
-  free(name);
-
+  predname_mapping *result = clause_lookup(collection, search_term->quote->clause_quote);
   if (result != NULL) {
     alma_quote *q = malloc(sizeof(*q));
     q->type = CLAUSE;
@@ -61,8 +48,9 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *collection
     int gen_introspect = kind == POS_INT_GEN || kind == NEG_INT_GEN;
     for (int i = result->num_clauses-1; i >= 0; i--) {
       // Must be a non-distrusted result with pos / neg literal count matching query
-      if (!is_distrusted(collection, result->clauses[i]->index) && result->clauses[i]->pos_count == search_clause->pos_count
-          && result->clauses[i]->neg_count == search_clause->neg_count) {
+      if (!is_distrusted(collection, result->clauses[i]->index)
+          && result->clauses[i]->pos_count == search_term->quote->clause_quote->pos_count
+          && result->clauses[i]->neg_count == search_term->quote->clause_quote->neg_count) {
         // Convert clause in question to quotation term
         if (gen_introspect) {
           q->clause_quote = malloc(sizeof(*q->clause_quote));
@@ -130,99 +118,47 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, binding_list *bi
   subst(bindings, descendant_copy, 0);
 
   int has_ancestor = 0;
-  if ((ancestor_copy->type == FUNCTION || (ancestor_copy->type == QUOTE && ancestor_copy->quote->type == CLAUSE))
-      && (descendant_copy->type == FUNCTION || (descendant_copy->type == QUOTE && descendant_copy->quote->type == CLAUSE))) {
-
-    alma_function *ancestor_f;
-    int a_pos = 1;
-    alma_quote *quote_holder = NULL;
-    if (ancestor_copy->type == FUNCTION) {
-      ancestor_f = ancestor_copy->function;
-      // Extract from not, if present
-      if (strcmp(ancestor_f->name, "not") == 0) {
-        a_pos = 0;
-        if (ancestor_f->term_count != 1)
-          goto ancestor_ret;
-
-        alma_term *temp = ancestor_copy;
-        ancestor_copy = ancestor_f->terms;
-        free(temp->function->name);
-        free(temp->function);
-        free(temp);
-        if (ancestor_copy->type != FUNCTION)
-          goto ancestor_ret;
-
-        ancestor_f = ancestor_copy->function;
-      }
-    }
-    else if (ancestor_copy->type == QUOTE) {
-      quote_holder = malloc(sizeof(*quote_holder));
-      quote_holder->type = CLAUSE;
-    }
-
+  if (ancestor_copy->type == QUOTE && ancestor_copy->quote->type == CLAUSE
+      && descendant_copy->type == QUOTE && descendant_copy->quote->type == CLAUSE) {
     // Frontier of parents to expand
     tommy_array queue;
     tommy_array_init(&queue);
 
+    // Note: for now, will just use first unifying case for ancestor search
+    // If necessary, can make more general at later point, by trying all possibilities
+    predname_mapping *result = clause_lookup(alma, descendant_copy->quote->clause_quote);
     binding_list *desc_bindings = NULL;
-    // Unquoted case for desdendant: must locate clause unifying with descendant
-    if (descendant_copy->type == FUNCTION) {
-      alma_function *descendant_f = descendant_copy->function;
-      int d_pos = 1;
-      tommy_hashlin *d_map = &alma->pos_map;
-      if (strcmp(descendant_f->name, "not") == 0) {
-        d_pos = 0;
-        d_map = &alma->neg_map;
-        if (descendant_f->term_count != 1)
-          goto ancestor_ret;
+    if (result != NULL) {
+      alma_quote *q = malloc(sizeof(*q));
+      q->type = CLAUSE;
 
-        alma_term *temp = descendant_copy;
-        descendant_copy = descendant_f->terms;
-        free(temp->function->name);
-        free(temp->function);
-        free(temp);
-        if (descendant_copy->type != FUNCTION)
-          goto ancestor_ret;
+      for (int i = result->num_clauses-1; i >= 0; i--) {
+        if (result->clauses[i]->pos_count == descendant_copy->quote->clause_quote->pos_count &&
+            result->clauses[i]->neg_count == ancestor_copy->quote->clause_quote->neg_count) {
+          // Create copy as either empty list or copy of arg
+          desc_bindings = malloc(sizeof(*desc_bindings));
+          copy_bindings(desc_bindings, bindings);
+          q->clause_quote = result->clauses[i];
 
-        descendant_f = descendant_copy->function;
-      }
-
-      // Note: for now, will just use first unifying case for ancestor search
-      // If necessary, can make more general at later point, by trying all possibilities
-      char *name = name_with_arity(descendant_f->name, descendant_f->term_count);
-      predname_mapping *result = tommy_hashlin_search(d_map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
-      free(name);
-      if (result != NULL) {
-        for (int i = result->num_clauses-1; i >= 0; i--) {
-          if (result->clauses[i]->pos_count + result->clauses[i]->neg_count == 1) {
-            alma_function *lit = (d_pos ? result->clauses[i]->pos_lits[0] : result->clauses[i]->neg_lits[0]);
-            // Create copy as either empty list or copy of arg
-            desc_bindings = malloc(sizeof(*desc_bindings));
-            copy_bindings(desc_bindings, bindings);
-
-            if (pred_unify(descendant_f, lit, desc_bindings)) {
-              // Starting item for queue
-              tommy_array_insert(&queue, result->clauses[i]);
-              break;
-            }
-            cleanup_bindings(desc_bindings);
+          if (quote_term_unify(descendant_copy->quote, q, desc_bindings)) {
+            // Starting item for queue
+            tommy_array_insert(&queue, result->clauses[i]);
+            break;
           }
+          cleanup_bindings(desc_bindings);
+          desc_bindings = NULL;
         }
       }
-    }
-    // Quoted case for desdendant: can use duplicate check to retreive any matching clause from KB
-    else if (descendant_copy->type == QUOTE) {
-      clause *c = duplicate_check(alma, descendant_copy->quote->clause_quote);
-      if (c == NULL && descendant_copy->quote->clause_quote->tag != FIF)
-        c = distrusted_dupe_check(alma, descendant_copy->quote->clause_quote);
-      if (c != NULL)
-        tommy_array_insert(&queue, c);
+
+      free(q);
     }
 
     // Checked items to avoid cycles
     tommy_array checked;
     tommy_array_init(&checked);
 
+    alma_quote *quote_holder = malloc(sizeof(*quote_holder));
+    quote_holder->type = CLAUSE;
     // Continue processing queue in breadth-first manner
     for (int curr = 0; curr < tommy_array_size(&queue); curr++) {
       clause *c = tommy_array_get(&queue, curr);
@@ -233,36 +169,25 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, binding_list *bi
           present = 1;
           break;
         }
+
+      // Clause wasn't in the checked items
       if (!present) {
         tommy_array_insert(&checked, c);
 
-        int success = 0;
         binding_list *anc_bindings = malloc(sizeof(*anc_bindings));
-        if (desc_bindings == NULL) {
-          desc_bindings = malloc(sizeof(*desc_bindings));
-          copy_bindings(desc_bindings, bindings);
-        }
         copy_bindings(anc_bindings, desc_bindings);
 
-        if (ancestor_copy->type == FUNCTION && c->pos_count + c->neg_count == 1 && (a_pos ? c->pos_count : c->neg_count) == 1) {
-            alma_function *lit = (a_pos ? c->pos_lits[0] : c->neg_lits[0]);
-            // If singleton with literal sign matching ancestor's, try unifying with ancestor
-            success = pred_unify(ancestor_f, lit, anc_bindings);
-        }
-        else if (ancestor_copy->type == QUOTE && c->pos_count == ancestor_copy->quote->clause_quote->pos_count
-                 && c->neg_count == ancestor_copy->quote->clause_quote->neg_count) {
-            quote_holder->clause_quote = c;
-            // Try unifying pair of quotes
-            success = quote_term_unify(ancestor_copy->quote, quote_holder, anc_bindings);
-        }
-
-        if (success) {
-          swap_bindings(anc_bindings, bindings);
+        if (c->pos_count == ancestor_copy->quote->clause_quote->pos_count && c->neg_count == ancestor_copy->quote->clause_quote->neg_count) {
+          quote_holder->clause_quote = c;
+          // Try unifying pair of quotes
+          if (quote_term_unify(ancestor_copy->quote, quote_holder, anc_bindings)) {
+            swap_bindings(anc_bindings, bindings);
+            cleanup_bindings(anc_bindings);
+            has_ancestor = 1;
+            break;
+          }
           cleanup_bindings(anc_bindings);
-          has_ancestor = 1;
-          break;
         }
-        cleanup_bindings(anc_bindings);
 
         // Queue parents for expansion
         for (int i = 0; i < c->parent_set_count; i++)
@@ -273,18 +198,28 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, binding_list *bi
 
     if (desc_bindings != NULL)
       cleanup_bindings(desc_bindings);
-    if (quote_holder != NULL)
-      free(quote_holder);
+    free(quote_holder);
     tommy_array_done(&queue);
     tommy_array_done(&checked);
   }
 
-  ancestor_ret:
   free_term(ancestor_copy);
   free(ancestor_copy);
   free_term(descendant_copy);
   free(descendant_copy);
   return has_ancestor;
+}
+
+// Convert string to long while checking for only digits
+static int str_to_long(char *str, long *res) {
+  *res = 0;
+  for (int i = strlen(str)-1, j = 1; i >= 0; i--, j*=10) {
+    if (isdigit(str[i]))
+      *res += (str[i] - '0') * j;
+    else
+      return 0;
+  }
+  return 1;
 }
 
 // Returns true if digit value of x is less than digit value of y
@@ -313,22 +248,11 @@ static int less_than(alma_term *x, alma_term *y, binding_list *bindings, kb *alm
   else
     return 0;
 
-  int xval = 0;
-  int yval = 0;
-  for (int i = strlen(x_str)-1, j = 1; i >= 0; i--, j*=10) {
-    if (isdigit(x_str[i]))
-      xval += (x_str[i] - '0') * j;
-    else
-      return 0;
-  }
-  for (int i = strlen(y_str)-1, j = 1; i >= 0; i--, j*=10) {
-    if (isdigit(y_str[i]))
-      yval += (y_str[i] - '0') * j;
-    else
-      return 0;
-  }
-
-  return xval < yval;
+  long xval, yval;
+  if (!str_to_long(x_str, &xval) || !str_to_long(y_str, &yval))
+    return 0;
+  else
+    return xval < yval;
 }
 
 // If first argument is a digit that's valid index of formula, binds second arg to quote of its formula and returns true
@@ -348,13 +272,9 @@ static int idx_to_form(alma_term *index_term, alma_term *result, binding_list *b
   if (result->type != VARIABLE || bindings_contain(bindings, result->variable))
     return 0;
 
-  long index = 0;
-  for (int i = strlen(idx_str)-1, j = 1; i >= 0; i--, j*=10) {
-    if (isdigit(idx_str[i]))
-      index += (idx_str[i] - '0') * j;
-    else
-      return 0;
-  }
+  long index;
+  if (!str_to_long(idx_str, &index))
+    return 0;
 
   index_mapping *map_res = tommy_hashlin_search(&alma->index_map, im_compare, &index, tommy_hash_u64(0, &index, sizeof(index)));
   if (map_res != NULL) {
@@ -382,7 +302,7 @@ static int idx_to_form(alma_term *index_term, alma_term *result, binding_list *b
 // If variable is bound to a quote, this can be used directly with no difference
 static int quote_cons(alma_term *to_quote, alma_variable *result, binding_list *bindings, kb *alma) {
   binding *res = bindings_contain(bindings, to_quote->variable);
-  if (res == NULL || res->term->type != FUNCTION) {
+  if (res == NULL) {
     return 0;
   }
   else if (res->term->type == QUOTE) {
