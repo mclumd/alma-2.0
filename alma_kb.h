@@ -31,7 +31,7 @@ typedef struct clause {
   struct fif_info *fif; // Data used to store additional fif information; non-null only if FIF tagged
   long index; // Index of clause, used as key in index_map of KB
   long acquired; // Time asserted to KB
-  int distrusted; // Boolean for distrust status
+  long distrusted; // Distrust status; if nonzero the time it was distrusted
   char dirty_bit;
   char pyobject_bit;
 } clause;

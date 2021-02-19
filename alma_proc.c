@@ -109,7 +109,20 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *collection
 }
 
 // ancestor(A, B) returns true if a A appears as an ancestor in any derivation of B
-static int ancestor(alma_term *ancestor, alma_term *descendant, binding_list *bindings, kb *alma) {
+static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time, binding_list *bindings, kb *alma) {
+  // Ensure time argument is correctly constructed: either a numeric constant, or a variable bound to one
+  binding *res;
+  if (time->type == VARIABLE && (res = bindings_contain(bindings, time->variable))) {
+    time = res->term;
+  }
+  if (time->type != FUNCTION || time->function->term_count != 0)
+    return 0;
+  for (int j = 0; j < strlen(time->function->name); j++) {
+    if (!isdigit(time->function->name[j]))
+      return 0;
+  }
+  long query_time = atol(time->function->name);
+
   // Create copies and substitute based on bindings available
   alma_term *ancestor_copy = malloc(sizeof(*ancestor_copy));
   copy_alma_term(ancestor, ancestor_copy);
@@ -136,7 +149,9 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, binding_list *bi
 
       for (int i = result->num_clauses-1; i >= 0; i--) {
         if (result->clauses[i]->pos_count == descendant_copy->quote->clause_quote->pos_count &&
-            result->clauses[i]->neg_count == descendant_copy->quote->clause_quote->neg_count) {
+            result->clauses[i]->neg_count == descendant_copy->quote->clause_quote->neg_count &&
+            (!result->clauses[i]->distrusted || result->clauses[i]->distrusted >= query_time) &&
+            result->clauses[i]->acquired <= query_time) {
           // Create copy as either empty list or copy of arg
           desc_bindings = malloc(sizeof(*desc_bindings));
           copy_bindings(desc_bindings, bindings);
@@ -392,8 +407,8 @@ int proc_run(alma_function *proc, binding_list *bindings, kb *alma) {
       return introspect(func, bindings, alma, ACQUIRED);
   }
   else if (strcmp(func->name, "ancestor") == 0) {
-    if (func->term_count == 2)
-      return ancestor(func->terms+0, func->terms+1, bindings, alma);
+    if (func->term_count == 3)
+      return ancestor(func->terms+0, func->terms+1, func->terms+2, bindings, alma);
   }
   else if (strcmp(func->name, "less_than") == 0) {
     if (func->term_count == 2)

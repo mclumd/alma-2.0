@@ -682,13 +682,13 @@ static void remove_dupe_literals(int *count, alma_function ***triple) {
     int loc = 1;
     for (int i = 0; i < *count-1; i++) {
       if (lits[i] == NULL) {
+        loc = i+1;
         while (loc < *count && lits[loc] == NULL)
           loc++;
         if (loc >= *count)
           break;
         lits[i] = lits[loc];
         lits[loc] = NULL;
-        loc++;
       }
     }
     *triple = realloc(lits, sizeof(*lits) * new_count);
@@ -734,8 +734,8 @@ clause* duplicate_check(kb *collection, clause *c, int check_distrusted) {
     free(name);
     if (result != NULL) {
       for (int i = 0; i < result->num_clauses; i++) {
-        // A distrusted clause learned this timestep is still checked against
-        if ((check_distrusted || !result->clauses[i]->distrusted || result->clauses[i]->acquired == collection->time) &&
+        // A clause distrusted this timestep is still checked against
+        if ((check_distrusted || !result->clauses[i]->distrusted || result->clauses[i]->distrusted == collection->time) &&
             c->tag == result->clauses[i]->tag && !clauses_differ(c, result->clauses[i]))
           return result->clauses[i];
       }
@@ -1315,7 +1315,7 @@ void transfer_parent(kb *collection, clause *target, clause *source, int add_chi
 }
 
 void distrust_recursive(kb *collection, clause *c, clause *parent, kb_str *buf) {
-  c->distrusted = 1;
+  c->distrusted = collection->time;
 
   // Assert distrusted formula
   char *index = long_to_str(c->index);
@@ -1672,7 +1672,7 @@ void process_new_clauses(kb *collection, kb_str *buf) {
   for (tommy_size_t i = 0; i < tommy_array_size(&collection->new_clauses); i++) {
     clause *c = tommy_array_get(&collection->new_clauses, i);
     clause *dupe = duplicate_check(collection, c, 0);
-    int reinstate = c->pos_count == 1 && c->neg_count == 0 && strcmp(c->pos_lits[0]->name, "reinstate") == 0 && c->pos_lits[0]->term_count == 1;
+    int reinstate = c->pos_count == 1 && c->neg_count == 0 && strcmp(c->pos_lits[0]->name, "reinstate") == 0 && c->pos_lits[0]->term_count == 2;
     if (dupe == NULL || reinstate) {
       //      c->dirty_bit = (char) 1;
       if (c->pos_count == 1 && c->neg_count == 0) {
@@ -1688,12 +1688,15 @@ void process_new_clauses(kb *collection, kb_str *buf) {
       }
 
       // Special semantic operator: reinstate
-      // Must be a singleton positive literal with unary arg
-      // Reinstatement succeeds if have a valid index for a distrusted sentence
+      // Must be a singleton positive literal with binary args
+      // Reinstatement succeeds if have a quote of a distrusted sentence and matching timestep for when distrusted
       if (reinstate) {
-         alma_term *arg = c->pos_lits[0]->terms;
-         if (arg->type == FUNCTION && arg->function->term_count == 0) {
-           char *index_str = arg->function->name;
+         alma_term *arg1 = c->pos_lits[0]->terms+0;
+         alma_term *arg2 = c->pos_lits[0]->terms+1;
+
+         if (arg1->type == QUOTE && arg1->quote->type == CLAUSE &&
+             arg2->type == FUNCTION && arg2->function->term_count == 0) {
+           char *index_str = arg2->function->name;
            int digits = 1;
            for (int j = 0; j < strlen(index_str); j++) {
              if (!isdigit(index_str[j])) {
@@ -1702,21 +1705,19 @@ void process_new_clauses(kb *collection, kb_str *buf) {
              }
            }
            if (digits) {
-             long index = atol(index_str);
-             index_mapping *result = tommy_hashlin_search(&collection->index_map, im_compare, &index, tommy_hash_u64(0, &index, sizeof(index)));
-             if (result != NULL && result->value->distrusted) {
-               clause *to_reinstate = result->value;
+             clause *found = duplicate_check(collection, arg1->quote->clause_quote, 1);
+             if (found != NULL && found->distrusted == atol(index_str)) {
                clause *reinstatement = malloc(sizeof(*reinstatement));
-               copy_clause_structure(to_reinstate, reinstatement);
+               copy_clause_structure(found, reinstatement);
                set_variable_ids(reinstatement, 1, 0, NULL, collection);
-               reinstatement->parent_set_count = to_reinstate->parent_set_count;
+               reinstatement->parent_set_count = found->parent_set_count;
                if (reinstatement->parent_set_count > 0) {
                  reinstatement->parents = malloc(sizeof(*reinstatement->parents)*reinstatement->parent_set_count);
                  for (int j = 0; j < reinstatement->parent_set_count; j++) {
-                   reinstatement->parents[j].count = to_reinstate->parents[j].count;
-                   reinstatement->parents[j].clauses = malloc(sizeof(*reinstatement->parents[j].clauses)*to_reinstate->parents[j].count);
+                   reinstatement->parents[j].count = found->parents[j].count;
+                   reinstatement->parents[j].clauses = malloc(sizeof(*reinstatement->parents[j].clauses)*found->parents[j].count);
                    for (int k = 0; k < reinstatement->parents[j].count; k++)
-                     reinstatement->parents[j].clauses[k] = to_reinstate->parents[j].clauses[k];
+                     reinstatement->parents[j].clauses[k] = found->parents[j].clauses[k];
                  }
                }
                tommy_array_insert(&collection->new_clauses, reinstatement);

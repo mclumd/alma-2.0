@@ -69,4 +69,4 @@ python:
 	sudo python2 setup.py install
 	echo "\n\nMake sure to add /usr/local/lib to your library linking path: e.g. adding \"export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib\" to ~/.bashrc file"
 run:
-	./alma.x demo/fc-test.pl
+	./alma.x -f demo/fc-test.pl
