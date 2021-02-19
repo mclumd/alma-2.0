@@ -1318,21 +1318,33 @@ void distrust_recursive(kb *collection, clause *c, clause *parent, kb_str *buf) 
   c->distrusted = collection->time;
 
   // Assert distrusted formula
-  char *index = long_to_str(c->index);
-  char *time = long_to_str(collection->time);
-  char *distrust_str = malloc(strlen(index) + strlen(time) + 15);
-  strcpy(distrust_str, "distrusted(");
-  int loc = 11;
-  strcpy(distrust_str+loc, index);
-  loc += strlen(index);
-  free(index);
-  distrust_str[loc++] = ',';
-  strcpy(distrust_str+loc, time);
-  loc += strlen(time);
-  free(time);
-  strcpy(distrust_str+loc, ").");
-  clause *distrusted = assert_formula(collection, distrust_str, 0, buf);
-  free(distrust_str);
+  clause *distrusted = malloc(sizeof(*distrusted));
+  distrusted->pos_count = 1;
+  distrusted->neg_count = 0;
+  distrusted->pos_lits = malloc(sizeof(*distrusted->pos_lits));
+  distrusted->pos_lits[0] = malloc(sizeof(*distrusted->pos_lits[0]));
+  distrusted->pos_lits[0]->name = malloc(strlen("distrusted")+1);
+  strcpy(distrusted->pos_lits[0]->name, "distrusted");
+  distrusted->pos_lits[0]->term_count = 2;
+  distrusted->pos_lits[0]->terms = malloc(sizeof(*distrusted->pos_lits[0]->terms) * 2);
+  distrusted->pos_lits[0]->terms[0].type = QUOTE;
+  distrusted->pos_lits[0]->terms[0].quote = malloc(sizeof(*distrusted->pos_lits[0]->terms[0].quote));
+  distrusted->pos_lits[0]->terms[0].quote->type = CLAUSE;
+  distrusted->pos_lits[0]->terms[0].quote->clause_quote = malloc(sizeof(*distrusted->pos_lits[0]->terms[0].quote->clause_quote));
+  copy_clause_structure(c, distrusted->pos_lits[0]->terms[0].quote->clause_quote);
+  distrusted->pos_lits[0]->terms[1].type = FUNCTION;
+  distrusted->pos_lits[0]->terms[1].function = malloc(sizeof(*distrusted->pos_lits[0]->terms[1].function));
+  distrusted->pos_lits[0]->terms[1].function->name = long_to_str(collection->time);
+  distrusted->pos_lits[0]->terms[1].function->term_count = 0;
+  distrusted->pos_lits[0]->terms[1].function->terms = NULL;
+  distrusted->neg_lits = 0;
+  distrusted->children_count = 0;
+  distrusted->parents = NULL;
+  distrusted->children = NULL;
+  distrusted->tag = NONE;
+  distrusted->fif = NULL;
+  set_variable_ids(distrusted, 1, 0, NULL, collection);
+  tommy_array_insert(&collection->new_clauses, distrusted);
 
   // Parent argument provided will be set for distrusted formula
   if (parent != NULL) {
@@ -1341,6 +1353,9 @@ void distrust_recursive(kb *collection, clause *c, clause *parent, kb_str *buf) 
     distrusted->parents[0].count = 1;
     distrusted->parents[0].clauses = malloc(sizeof(*distrusted->parents[0].clauses));
     distrusted->parents[0].clauses[0] = parent;
+  }
+  else {
+    distrusted->parent_set_count = 0;
   }
 
   // Recursively distrust children that aren't distrusted already
@@ -1492,30 +1507,39 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
             }
             else {
               // If not a backward search, empty resolution result indicates a contradiction between clauses
+              clause *contra = malloc(sizeof(*contra));
+              contra->pos_count = 1;
+              contra->neg_count = 0;
+              contra->pos_lits = malloc(sizeof(*contra->pos_lits));
+              contra->pos_lits[0] = malloc(sizeof(*contra->pos_lits[0]));
+              contra->pos_lits[0]->name = malloc(strlen("contra")+1);
+              strcpy(contra->pos_lits[0]->name, "contra");
+              contra->pos_lits[0]->term_count = 3;
+              contra->pos_lits[0]->terms = malloc(sizeof(*contra->pos_lits[0]->terms) * 3);
+              contra->pos_lits[0]->terms[0].type = QUOTE;
+              contra->pos_lits[0]->terms[0].quote = malloc(sizeof(*contra->pos_lits[0]->terms[0].quote));
+              contra->pos_lits[0]->terms[0].quote->type = CLAUSE;
+              contra->pos_lits[0]->terms[0].quote->clause_quote = malloc(sizeof(*contra->pos_lits[0]->terms[0].quote->clause_quote));
+              copy_clause_structure(current_task->x, contra->pos_lits[0]->terms[0].quote->clause_quote);
+              contra->pos_lits[0]->terms[1].type = QUOTE;
+              contra->pos_lits[0]->terms[1].quote = malloc(sizeof(*contra->pos_lits[0]->terms[0].quote));
+              contra->pos_lits[0]->terms[1].quote->type = CLAUSE;
+              contra->pos_lits[0]->terms[1].quote->clause_quote = malloc(sizeof(*contra->pos_lits[0]->terms[1].quote->clause_quote));
+              copy_clause_structure(current_task->y, contra->pos_lits[0]->terms[1].quote->clause_quote);
+              contra->pos_lits[0]->terms[2].type = FUNCTION;
+              contra->pos_lits[0]->terms[2].function = malloc(sizeof(*contra->pos_lits[0]->terms[2].function));
+              contra->pos_lits[0]->terms[2].function->name = long_to_str(collection->time);
+              contra->pos_lits[0]->terms[2].function->term_count = 0;
+              contra->pos_lits[0]->terms[2].function->terms = NULL;
+              contra->neg_lits = 0;
+              contra->parent_set_count = contra->children_count = 0;
+              contra->parents = NULL;
+              contra->children = NULL;
+              contra->tag = NONE;
+              contra->fif = NULL;
+              set_variable_ids(contra, 1, 0, NULL, collection);
+              tommy_array_insert(&collection->new_clauses, contra);
 
-              char *arg1 = long_to_str(current_task->x->index);
-              char *arg2 = long_to_str(current_task->y->index);
-              char *time_str = long_to_str(collection->time);
-
-              char *contra_str = malloc(strlen(arg1) + strlen(arg2) + strlen(time_str) + 12);
-              strcpy(contra_str, "contra(");
-              int loc = 7;
-              strcpy(contra_str+loc, arg1);
-              loc += strlen(arg1);
-              free(arg1);
-              contra_str[loc++] = ',';
-              strcpy(contra_str+loc, arg2);
-              loc += strlen(arg2);
-              free(arg2);
-              contra_str[loc++] = ',';
-              strcpy(contra_str+loc, time_str);
-              loc += strlen(time_str);
-              free(time_str);
-              strcpy(contra_str+loc, ").");
-
-              // Assert contra and distrusted
-	            clause *contra = assert_formula(collection, contra_str, 0, buf);
-              free(contra_str);
               distrust_recursive(collection, current_task->x, contra, buf);
               distrust_recursive(collection, current_task->y, contra, buf);
             }

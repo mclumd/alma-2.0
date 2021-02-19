@@ -8,15 +8,11 @@ prefer(quote(fif(penguin(X), conclusion(not(fly(X))))), quote(fif(bird(X), concl
 
 fif(and(prefer(Rx, Ry),
     and(contra(X, Y, T),
-    and(proc(idx_to_form(X, Fx), bound(X)),
-    and(proc(ancestor(Rx, Fx, T), bound(Rx, Fx)),
-    and(proc(idx_to_form(Y, Fy), bound(Y)),
-    proc(ancestor(Ry, Fy, T), bound(Ry, Fy))))))),
-  conclusion(reinstate(Fx, T))).
+    and(proc(ancestor(Rx, X, T), bound(Rx, X)),
+    proc(ancestor(Ry, Y, T), bound(Ry, Y))))),
+  conclusion(reinstate(X, T))).
 fif(and(prefer(Rx, Ry),
     and(contra(Y, X, T),
-    and(proc(idx_to_form(Y, Fy), bound(Y)),
-    and(proc(ancestor(Ry, Fy, T), bound(Ry, Fy)),
-    and(proc(idx_to_form(X, Fx), bound(X)),
-    proc(ancestor(Rx, Fx, T), bound(Rx, Fx))))))),
-  conclusion(reinstate(Fx, T))).
+    and(proc(ancestor(Ry, Y, T), bound(Ry, Y)),
+    proc(ancestor(Rx, X, T), bound(Rx, X))))),
+  conclusion(reinstate(X, T))).
