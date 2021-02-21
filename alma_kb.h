@@ -134,7 +134,7 @@ char* long_to_str(long x);
 void add_child(clause *parent, clause *child);
 
 void transfer_parent(kb *collection, clause *target, clause *source, int add_children, kb_str *buf);
-void distrust_recursive(kb *collection, clause *c, clause *parent, kb_str *buf);
+void distrust_recursive(kb *collection, clause *c, clause *contra, kb_str *buf);
 
 
 int im_compare(const void *arg, const void *obj);
