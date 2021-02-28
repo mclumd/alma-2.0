@@ -4,7 +4,7 @@ CFLAGS = -std=gnu11 -pedantic-errors -Wall -Wshadow -Wpedantic -g -mno-avx2 -mtu
 
 TOMMY = tommyds/tommyds/
 
-all: alma.x shared static python
+all: res_task_heap.c alma.x shared static python
 
 alma.x: alma.o tommyarray.o tommyhashlin.o tommyhash.o tommylist.o mpc.o alma_parser.o alma_formula.o alma_kb.o alma_unify.o alma_command.o alma_print.o alma_proc.o alma_fif.o alma_backsearch.o res_task_heap.o alma_term_search.o compute_priority.o
 	$(CC) alma.o tommyarray.o tommyhashlin.o tommyhash.o tommylist.o mpc.o alma_parser.o alma_formula.o alma_kb.o alma_unify.o alma_command.o alma_print.o alma_proc.o alma_fif.o alma_backsearch.o res_task_heap.o alma_term_search.o compute_priority.o -o alma.x
