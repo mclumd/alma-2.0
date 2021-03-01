@@ -5,6 +5,8 @@
 #include "alma_print.h"
 #include "alma_kb.h"
 
+// Var matching functions
+
 void var_match_init(var_match_set *v) {
   v->levels = 1;
   v->level_counts = malloc(sizeof(*v->level_counts));

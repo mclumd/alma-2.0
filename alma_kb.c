@@ -272,7 +272,7 @@ static void init_ordering(fif_info *info, alma_node *node) {
 }
 
 // Comparison used by qsort of clauses -- orders by increasing function name and increasing arity
-static int function_compare(const void *p1, const void *p2) {
+int function_compare(const void *p1, const void *p2) {
   alma_function **f1 = (alma_function **)p1;
   alma_function **f2 = (alma_function **)p2;
   int compare = strcmp((*f1)->name, (*f2)->name);
@@ -479,7 +479,7 @@ char* name_with_arity(char *name, int arity) {
 }
 
 // Looks up predname mapping for a predicate used in clause c
-// Currently, simply picks the first positive or negative literal
+// Currently, simply picks the first positive or negative literal; looks up non-fif
 // Possibly to be replaced with more sophisticated method later
 predname_mapping* clause_lookup(kb *collection, clause *c) {
   tommy_hashlin *map = &collection->pos_map;
@@ -619,7 +619,7 @@ static int functions_differ(alma_function *x, alma_function *y, var_match_set *m
 // based on each location where a variable maps to another
 // Thus a(X, X) and a(X, Y) are here considered different
 int clauses_differ(clause *x, clause *y) {
-  if (x->pos_count == y->pos_count && x->neg_count == y->neg_count){
+  if (x->pos_count == y->pos_count && x->neg_count == y->neg_count) {
     var_match_set matches;
     var_match_init(&matches);
     if (x->tag == FIF) {
@@ -1263,7 +1263,7 @@ void add_child(clause *parent, clause *child) {
 static clause* get_distrusted_parent(kb *collection, clause *parent) {
   for (tommy_size_t i = 0; i < tommy_array_size(&collection->new_clauses); i++) {
     clause *parent_dist = tommy_array_get(&collection->new_clauses, i);
-    if (parent_dist->pos_count == 1 && strcmp(parent_dist->pos_lits[0]->name, "distrusted") == 0
+    if (parent_dist != NULL && parent_dist->pos_count == 1 && strcmp(parent_dist->pos_lits[0]->name, "distrusted") == 0
         && parent_dist->neg_count == 0 && parent_dist->pos_lits[0]->terms[0].type == QUOTE
         && parent_dist->pos_lits[0]->terms[0].quote->type == CLAUSE
         && !clauses_differ(parent, parent_dist->pos_lits[0]->terms[0].quote->clause_quote)) {
@@ -1756,6 +1756,7 @@ void process_new_clauses(kb *collection, kb_str *buf) {
         transfer_parent(collection, dupe, c, 1, buf);
 
       free_clause(c);
+      tommy_array_set(&collection->new_clauses, i, NULL);
     }
   }
 

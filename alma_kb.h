@@ -137,6 +137,7 @@ void transfer_parent(kb *collection, clause *target, clause *source, int add_chi
 void distrust_recursive(kb *collection, clause *c, clause *contra, kb_str *buf);
 
 
+int function_compare(const void *p1, const void *p2);
 int im_compare(const void *arg, const void *obj);
 int pm_compare(const void *arg, const void *obj);
 char* name_with_arity(char *name, int arity);

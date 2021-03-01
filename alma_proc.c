@@ -3,7 +3,7 @@
 #include "alma_proc.h"
 #include "tommy.h"
 
-typedef enum introspect_kind {POS_INT, POS_INT_GEN, NEG_INT, NEG_INT_GEN, ACQUIRED} introspect_kind;
+typedef enum introspect_kind {POS_INT_SPEC, POS_INT, POS_INT_GEN, NEG_INT_SPEC, NEG_INT, NEG_INT_GEN, ACQUIRED} introspect_kind;
 
 // Returns a boolean value for if proc matches the procedure schema (binary function proc, first arg function)
 int proc_valid(alma_function *proc) {
@@ -20,6 +20,62 @@ int proc_bound_check(alma_function *proc, binding_list *bindings) {
       if (func->terms[i].type == VARIABLE && bindings_contain(bindings, func->terms[i].variable) == NULL)
         return 0;
     }
+    return 1;
+  }
+  return 0;
+}
+
+static int structure_match(clause *original, clause *query, introspect_kind kind, int quote_level);
+
+static int quotes_match(alma_quote *original, alma_quote *query, introspect_kind kind, int quote_level) {
+  if (original->type == query->type && original->type == CLAUSE)
+    return structure_match(original->clause_quote, query->clause_quote, kind, quote_level);
+  return 0;
+}
+
+static int functions_match(alma_function *original, alma_function *query, introspect_kind kind, int quote_level) {
+  if (original->term_count == query->term_count && strcmp(original->name, query->name) == 0) {
+    for (int i = 0; i < original->term_count; i++) {
+      if (original->terms[i].type == query->terms[i].type) {
+        // Pair of variables / quasi-quotes don't need examination
+        if ((original->terms[i].type == FUNCTION && !functions_match(original->terms[i].function, query->terms[i].function, kind, quote_level))
+            || (original->terms[i].type == QUOTE && !quotes_match(original->terms[i].quote, query->terms[i].quote, kind, quote_level+1)))
+          return 0;
+      }
+      // Non-matching cases fail when original isn't variable, query isn't fully-escaped var (i.e. non-unifying cases)
+      else if (!(query->terms[i].type == QUASIQUOTE || query->terms[i].quasiquote->backtick_count == quote_level
+            && (kind == POS_INT_GEN || kind == NEG_INT_GEN)) && original->terms[i].type != VARIABLE) {
+          return 0;
+      }
+    }
+    return 1;
+  }
+  return 0;
+}
+
+static int structure_match(clause *original, clause *query, introspect_kind kind, int quote_level) {
+  if (original->pos_count == query->pos_count && original->neg_count == query->neg_count) {
+    for (int i = 0; i < original->pos_count; i++) {
+      if (!function_compare(original->pos_lits+i, query->pos_lits+i) || !functions_match(original->pos_lits[i], query->pos_lits[i], kind, quote_level))
+        return 0;
+    }
+    for (int i = 0; i < original->neg_count; i++) {
+      if (function_compare(original->neg_lits+i, query->neg_lits+i) || !functions_match(original->neg_lits[i], query->neg_lits[i], kind, quote_level))
+        return 0;
+    }
+  }
+  return 1;
+}
+
+// Duplicate original into copy as long as the structure of original matches query
+// Subject to constaints:
+// - If this is a GEN kind of introspection, query cannot have an escaped variable where original does not
+// - Original must have predicate and function structure conducive to unifying with query
+static int copy_and_quasiquote_clause(clause *original, clause *copy, clause *query, introspect_kind kind) {
+  // Scan for sufficient matching structure of original vs query
+  if (structure_match(original, query, kind, 0)) {
+    copy_clause_structure(original, query);
+    // scan and adjust quasiquote in copy
     return 1;
   }
   return 0;
@@ -47,17 +103,21 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *collection
     q->type = CLAUSE;
     q->clause_quote = NULL;
 
-    int gen_introspect = kind == POS_INT_GEN || kind == NEG_INT_GEN;
+    int non_specific = (kind == POS_INT || kind == POS_INT_GEN || kind == NEG_INT || kind == NEG_INT_GEN);
     for (int i = result->num_clauses-1; i >= 0; i--) {
       // Must be a non-distrusted result with pos / neg literal count matching query
       if (!result->clauses[i]->distrusted
           && result->clauses[i]->pos_count == search_term->quote->clause_quote->pos_count
           && result->clauses[i]->neg_count == search_term->quote->clause_quote->neg_count) {
         // Convert clause in question to quotation term
-        if (gen_introspect) {
+        if (non_specific) {
           q->clause_quote = malloc(sizeof(*q->clause_quote));
-          copy_clause_structure(result->clauses[i], q->clause_quote);
-          increment_quote_level(q->clause_quote, 0);
+          // copy_and_quasiquote_clause may reject copying, for which would free and continue
+          if (!copy_and_quasiquote_clause(result->clauses[i], q->clause_quote, search_term->quote->clause_quote, kind)) {
+            free_clause(q->clause_quote);
+            q->clause_quote = NULL;
+            continue;
+          }
         }
         else {
           q->clause_quote = result->clauses[i];
@@ -69,7 +129,7 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *collection
 
         // Returning first match based at the moment
         if (quote_term_unify(search_term->quote, q, copy)) {
-          if (kind != NEG_INT && kind != NEG_INT_GEN)
+          if (kind != NEG_INT_SPEC && kind != NEG_INT && kind != NEG_INT_GEN)
             swap_bindings(bindings, copy);
           cleanup_bindings(copy);
 
@@ -85,16 +145,16 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *collection
           }
 
           // Don't free clause unless gen case
-          if (!gen_introspect)
+          if (!non_specific)
             q->clause_quote = NULL;
           free_quote(q);
 
           free_term(search_term);
           free(search_term);
-          return kind != NEG_INT && kind != NEG_INT_GEN;
+          return kind != NEG_INT_SPEC && kind != NEG_INT && kind != NEG_INT_GEN;
         }
 
-        if (gen_introspect)
+        if (non_specific)
           free_clause(q->clause_quote);
         q->clause_quote = NULL;
         cleanup_bindings(copy);
@@ -105,7 +165,7 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *collection
 
   free_term(search_term);
   free(search_term);
-  return kind == NEG_INT || kind == NEG_INT_GEN;
+  return kind == NEG_INT_SPEC || kind == NEG_INT || kind == NEG_INT_GEN;
 }
 
 // ancestor(A, B) returns true if a A appears as an ancestor in any derivation of B
@@ -385,6 +445,9 @@ int proc_run(alma_function *proc, binding_list *bindings, kb *alma) {
       if (strlen(func->name) == strlen("neg_int")) {
         return introspect(func, bindings, alma, NEG_INT);
       }
+      else if (strcmp(func->name, "neg_int_spec") == 0) {
+        return introspect(func, bindings, alma, NEG_INT_SPEC);
+      }
       else if (strcmp(func->name, "neg_int_gen") == 0) {
         return introspect(func, bindings, alma, NEG_INT_GEN);
       }
@@ -395,6 +458,9 @@ int proc_run(alma_function *proc, binding_list *bindings, kb *alma) {
     if (func->term_count == 1) {
       if (strlen(func->name) == strlen("pos_int")) {
         return introspect(func, bindings, alma, POS_INT);
+      }
+      else if (strcmp(func->name, "pos_int_spec") == 0) {
+        return introspect(func, bindings, alma, POS_INT_SPEC);
       }
       else if (strcmp(func->name, "pos_int_gen") == 0) {
         return introspect(func, bindings, alma, POS_INT_GEN);
