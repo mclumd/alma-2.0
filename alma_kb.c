@@ -272,7 +272,7 @@ static void init_ordering(fif_info *info, alma_node *node) {
 }
 
 // Comparison used by qsort of clauses -- orders by increasing function name and increasing arity
-int function_compare(const void *p1, const void *p2) {
+static int function_compare(const void *p1, const void *p2) {
   alma_function **f1 = (alma_function **)p1;
   alma_function **f2 = (alma_function **)p2;
   int compare = strcmp((*f1)->name, (*f2)->name);
@@ -624,25 +624,23 @@ int clauses_differ(clause *x, clause *y) {
     var_match_init(&matches);
     if (x->tag == FIF) {
       for (int i = 0; i < x->fif->premise_count; i++) {
-        alma_function *xf = fif_access(x, i);
-        alma_function *yf = fif_access(y, i);
-        if (function_compare(&xf, &yf) || functions_differ(xf, yf, &matches, 0))
+        if (functions_differ(fif_access(x, i), fif_access(y, i), &matches, 0))
           return release_matches(&matches, 1);
       }
-      if (function_compare(&x->fif->conclusion, &y->fif->conclusion) || functions_differ(x->fif->conclusion, y->fif->conclusion, &matches, 0))
+      if (functions_differ(x->fif->conclusion, y->fif->conclusion, &matches, 0))
         return release_matches(&matches, 1);
     }
     else {
       for (int i = 0; i < x->pos_count; i++) {
         // TODO: account for case in which may have several literals with name
         // Ignoring this case, sorted literal lists allows comparing ith literals of each clause
-        if (function_compare(x->pos_lits+i, y->pos_lits+i) || functions_differ(x->pos_lits[i], y->pos_lits[i], &matches, 0))
+        if (functions_differ(x->pos_lits[i], y->pos_lits[i], &matches, 0))
           return release_matches(&matches, 1);
       }
       for (int i = 0; i < x->neg_count; i++) {
         // TODO: account for case in which may have several literals with name
         // Ignoring this case, sorted literal lists allows comparing ith literals of each clause
-        if (function_compare(x->neg_lits+i, y->neg_lits+i) || functions_differ(x->neg_lits[i], y->neg_lits[i], &matches, 0))
+        if (functions_differ(x->neg_lits[i], y->neg_lits[i], &matches, 0))
           return release_matches(&matches, 1);
       }
     }

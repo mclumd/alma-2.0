@@ -25,27 +25,31 @@ int proc_bound_check(alma_function *proc, binding_list *bindings) {
   return 0;
 }
 
+// Structure-checking code
+
 static int structure_match(clause *original, clause *query, introspect_kind kind, int quote_level);
 
-static int quotes_match(alma_quote *original, alma_quote *query, introspect_kind kind, int quote_level) {
+static int quote_structure_match(alma_quote *original, alma_quote *query, introspect_kind kind, int quote_level) {
   if (original->type == query->type && original->type == CLAUSE)
     return structure_match(original->clause_quote, query->clause_quote, kind, quote_level);
   return 0;
 }
 
-static int functions_match(alma_function *original, alma_function *query, introspect_kind kind, int quote_level) {
+static int function_structure_match(alma_function *original, alma_function *query, introspect_kind kind, int quote_level) {
   if (original->term_count == query->term_count && strcmp(original->name, query->name) == 0) {
     for (int i = 0; i < original->term_count; i++) {
-      if (original->terms[i].type == query->terms[i].type) {
-        // Pair of variables / quasi-quotes don't need examination
-        if ((original->terms[i].type == FUNCTION && !functions_match(original->terms[i].function, query->terms[i].function, kind, quote_level))
-            || (original->terms[i].type == QUOTE && !quotes_match(original->terms[i].quote, query->terms[i].quote, kind, quote_level+1)))
-          return 0;
+      // Pair of variables / quasi-quotes doesn't need examination
+      if (original->terms[i].type == query->terms[i].type
+          && ((original->terms[i].type == FUNCTION && !function_structure_match(original->terms[i].function, query->terms[i].function, kind, quote_level))
+              || (original->terms[i].type == QUOTE && !quote_structure_match(original->terms[i].quote, query->terms[i].quote, kind, quote_level+1)))) {
+        return 0;
       }
-      // Non-matching cases fail when original isn't variable, query isn't fully-escaped var (i.e. non-unifying cases)
-      else if (!(query->terms[i].type == QUASIQUOTE || query->terms[i].quasiquote->backtick_count == quote_level
-            && (kind == POS_INT_GEN || kind == NEG_INT_GEN)) && original->terms[i].type != VARIABLE) {
-          return 0;
+      // Non-matching cases fail when original isn't fully-escaped variable and query isn't fully-escaped var (i.e. non-unifying cases)
+      // Doing pos_int_gen/neg_int_gen prevents the case of query as fully-escaped var here
+      else if (!(query->terms[i].type == QUASIQUOTE && query->terms[i].quasiquote->backtick_count == quote_level
+               && kind != POS_INT_GEN && kind != NEG_INT_GEN) && original->terms[i].type != VARIABLE
+               && !(original->terms[i].type == QUASIQUOTE && original->terms[i].quasiquote->backtick_count == quote_level-1)) {
+        return 0;
       }
     }
     return 1;
@@ -56,11 +60,11 @@ static int functions_match(alma_function *original, alma_function *query, intros
 static int structure_match(clause *original, clause *query, introspect_kind kind, int quote_level) {
   if (original->pos_count == query->pos_count && original->neg_count == query->neg_count) {
     for (int i = 0; i < original->pos_count; i++) {
-      if (!function_compare(original->pos_lits+i, query->pos_lits+i) || !functions_match(original->pos_lits[i], query->pos_lits[i], kind, quote_level))
+      if (!function_structure_match(original->pos_lits[i], query->pos_lits[i], kind, quote_level))
         return 0;
     }
     for (int i = 0; i < original->neg_count; i++) {
-      if (function_compare(original->neg_lits+i, query->neg_lits+i) || !functions_match(original->neg_lits[i], query->neg_lits[i], kind, quote_level))
+      if (!function_structure_match(original->neg_lits[i], query->neg_lits[i], kind, quote_level))
         return 0;
     }
   }
@@ -73,13 +77,15 @@ static int structure_match(clause *original, clause *query, introspect_kind kind
 // - Original must have predicate and function structure conducive to unifying with query
 static int copy_and_quasiquote_clause(clause *original, clause *copy, clause *query, introspect_kind kind) {
   // Scan for sufficient matching structure of original vs query
-  if (structure_match(original, query, kind, 0)) {
-    copy_clause_structure(original, query);
-    // scan and adjust quasiquote in copy
+  if (structure_match(original, query, kind, 1)) {
+    copy_clause_structure(original, copy);
+    increment_clause_quote_level_paired(copy, query, 1);
     return 1;
   }
   return 0;
 }
+
+// Procedure functions and minor helpers
 
 // For now, introspect fails on distrusted formulas
 // It seems intuitive to reject them, since introspection is based on current knowledge

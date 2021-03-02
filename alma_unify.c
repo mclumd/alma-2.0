@@ -105,7 +105,7 @@ static void adjust_quasiquote_level(alma_term *term, int quote_lvl, int new_lvl)
       adjust_quasiquote_level(term->function->terms+i, quote_lvl, new_lvl);
   }
   else if (term->type == QUOTE && term->quote->type == CLAUSE) {
-      adjust_clause_quote_level(term->quote->clause_quote, quote_lvl+1, new_lvl+1);
+    adjust_clause_quote_level(term->quote->clause_quote, quote_lvl+1, new_lvl+1);
   }
   else if (term->type == QUASIQUOTE && term->quasiquote->backtick_count == quote_lvl) {
     // Override amount of quasi-quotation marks with new level
@@ -120,6 +120,56 @@ static void adjust_quasiquote_level(alma_term *term, int quote_lvl, int new_lvl)
     }
   }
 }
+
+// Only fully-escaped variables are adjusted to have an additional quasiquote backtick
+// And, only if corresponding place in the query is something other than a non-escaping variable
+// Since term has yet to be placed in its outermost quote context, changes are made when effective quote_lvl is 1
+// Query doesn't have this issue
+static void increment_quasiquote_level_paired(alma_term *term, alma_term *query, int quote_lvl) {
+  if (term->type == VARIABLE) {
+    if (quote_lvl == 1 && query != NULL && query->type != VARIABLE && !(query->type == QUASIQUOTE && query->quasiquote->backtick_count < quote_lvl)) {
+      term->type = QUASIQUOTE;
+      alma_variable *temp = term->variable;
+      term->quasiquote = malloc(sizeof(*term->quasiquote));
+      term->quasiquote->backtick_count = 1;
+      term->quasiquote->variable = temp;
+    }
+  }
+  else if (term->type == FUNCTION) {
+    for (int i = 0; i < term->function->term_count; i++) {
+      if (query != NULL && (query->type == VARIABLE || query->type == QUASIQUOTE))
+        query = NULL;
+      alma_term *query_term = (query == NULL) ? NULL : query->function->terms+i;
+      increment_quasiquote_level_paired(term->function->terms+i, query_term, quote_lvl);
+    }
+  }
+  else if (term->type == QUOTE && term->quote->type == CLAUSE) {
+    if (query != NULL && (query->type == VARIABLE || query->type == QUASIQUOTE))
+      query = NULL;
+    clause *query_clause = (query == NULL) ? NULL : query->quote->clause_quote;
+    increment_clause_quote_level_paired(term->quote->clause_quote, query_clause, quote_lvl+1);
+  }
+  else if (term->type == QUASIQUOTE && term->quasiquote->backtick_count+1 == quote_lvl) {
+    if (query != NULL && query->type != VARIABLE && !(query->type == QUASIQUOTE && query->quasiquote->backtick_count < quote_lvl)) {
+      term->quasiquote->backtick_count++;
+    }
+  }
+}
+
+// Calls adjust_quasiquote_level on each term of a clause
+void increment_clause_quote_level_paired(clause *c, clause *query, int quote_lvl) {
+  for (int i = 0; i < c->pos_count; i++)
+    for (int j = 0; j < c->pos_lits[i]->term_count; j++) {
+      alma_term *query_term = (query == NULL) ? NULL : query->pos_lits[i]->terms+j;
+      increment_quasiquote_level_paired(c->pos_lits[i]->terms+j, query_term, quote_lvl);
+    }
+  for (int i = 0; i < c->neg_count; i++)
+    for (int j = 0; j < c->neg_lits[i]->term_count; j++) {
+      alma_term *query_term = (query == NULL) ? NULL : query->neg_lits[i]->terms+j;
+      increment_quasiquote_level_paired(c->neg_lits[i]->terms+j, query_term, quote_lvl);
+    }
+}
+
 
 static void subst_func(binding_list *theta, alma_function *func, int level) {
   for (int i = 0; i < func->term_count; i++)

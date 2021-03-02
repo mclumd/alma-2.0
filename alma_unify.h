@@ -40,6 +40,7 @@ typedef struct binding_list {
 struct clause;
 void increment_quote_level(struct clause *c, int quote_lvl);
 void decrement_quote_level(struct clause *c, int quote_lvl);
+void increment_clause_quote_level_paired(struct clause *c, struct clause *query, int quote_lvl);
 
 binding* bindings_contain(binding_list *theta, alma_variable *var);
 void subst(binding_list *theta, alma_term *term, int quote_level);
