@@ -14,8 +14,8 @@ fif(proc(pos_int_spec(quote(q(`Y))), bound), conclusion(pos_int_spec2_worked(Y))
 fif(proc(pos_int(quote(q(`Y))), bound), conclusion(pos_int2_worked(Y))).
 fif(proc(pos_int_gen(quote(q(`Y))), bound), conclusion(pos_int_gen2_worked(Y))).
 
-p(aaa).
 p(A).
+p(aaa).
 
 q(aaa).
 q(B).

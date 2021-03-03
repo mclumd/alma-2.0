@@ -37,7 +37,7 @@ alma_command.o: alma_command.c alma_command.h alma_kb.h alma_formula.h alma_back
 alma_parser.o: alma_parser.c mpc/mpc.h alma_parser.h
 	$(CC) $(CFLAGS) -c alma_parser.c
 
-alma_formula.o: alma_formula.c mpc/mpc.h alma_parser.h alma_print.h alma_formula.h
+alma_formula.o: alma_formula.c mpc/mpc.h alma_parser.h alma_print.h alma_kb.h alma_formula.h
 	$(CC) $(CFLAGS) -c alma_formula.c
 
 alma_kb.o: alma_kb.c alma_unify.h alma_formula.h alma_print.h alma_kb.h alma_proc.h alma_backsearch.h alma_fif.h tommy.h

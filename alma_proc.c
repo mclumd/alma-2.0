@@ -1,6 +1,7 @@
 #include <string.h>
 #include <ctype.h>
 #include "alma_proc.h"
+#include "alma_print.h"
 #include "tommy.h"
 
 typedef enum introspect_kind {POS_INT_SPEC, POS_INT, POS_INT_GEN, NEG_INT_SPEC, NEG_INT, NEG_INT_GEN, ACQUIRED} introspect_kind;
@@ -103,6 +104,22 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *collection
   copy_alma_term(query, search_term);
   subst(bindings, search_term, 0);
 
+  // Debug
+  if (kind == POS_INT_SPEC)
+    tee_alt("Performing pos_int_spec on \"", collection, NULL);
+  else if (kind == POS_INT)
+    tee_alt("Performing pos_int on \"", collection, NULL);
+  else if (kind == POS_INT_GEN)
+    tee_alt("Performing pos_int_gen on \"", collection, NULL);
+  else if (kind == NEG_INT_SPEC)
+    tee_alt("Performing neg_int_spec on \"", collection, NULL);
+  else if (kind == NEG_INT)
+    tee_alt("Performing neg_int on \"", collection, NULL);
+  else if (kind == NEG_INT_GEN)
+    tee_alt("Performing neg_int_gen on \"", collection, NULL);
+  clause_print(collection, search_term->quote->clause_quote, NULL);
+  tee_alt("\"\n", collection, NULL);
+
   predname_mapping *result = clause_lookup(collection, search_term->quote->clause_quote);
   if (result != NULL) {
     alma_quote *q = malloc(sizeof(*q));
@@ -120,7 +137,12 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *collection
           q->clause_quote = malloc(sizeof(*q->clause_quote));
           // copy_and_quasiquote_clause may reject copying, for which would free and continue
           if (!copy_and_quasiquote_clause(result->clauses[i], q->clause_quote, search_term->quote->clause_quote, kind)) {
-            free_clause(q->clause_quote);
+            // Debug
+            tee_alt("Structure failure of \"", collection, NULL);
+            clause_print(collection, result->clauses[i], NULL);
+            tee_alt("\"\n", collection, NULL);
+
+            free(q->clause_quote);
             q->clause_quote = NULL;
             continue;
           }
@@ -132,6 +154,11 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *collection
         // Create bindings copy as either empty list or copy of arg
         binding_list *copy = malloc(sizeof(*copy));
         copy_bindings(copy, bindings);
+
+        // Debug
+        tee_alt("Attempting to unify with \"", collection, NULL);
+        clause_print(collection, q->clause_quote, NULL);
+        tee_alt("\"\n", collection, NULL);
 
         // Returning first match based at the moment
         if (quote_term_unify(search_term->quote, q, copy)) {
@@ -155,6 +182,9 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *collection
             q->clause_quote = NULL;
           free_quote(q);
 
+          // Debug
+          tee_alt("\n", collection, NULL);
+
           free_term(search_term);
           free(search_term);
           return kind != NEG_INT_SPEC && kind != NEG_INT && kind != NEG_INT_GEN;
@@ -168,6 +198,8 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *collection
     }
     free_quote(q);
   }
+  // Debug
+  tee_alt("\n", collection, NULL);
 
   free_term(search_term);
   free(search_term);
