@@ -40,10 +40,10 @@ static int function_structure_match(alma_function *original, alma_function *quer
   if (original->term_count == query->term_count && strcmp(original->name, query->name) == 0) {
     for (int i = 0; i < original->term_count; i++) {
       // Pair of variables / quasi-quotes doesn't need examination
-      if (original->terms[i].type == query->terms[i].type
-          && ((original->terms[i].type == FUNCTION && !function_structure_match(original->terms[i].function, query->terms[i].function, kind, quote_level))
-              || (original->terms[i].type == QUOTE && !quote_structure_match(original->terms[i].quote, query->terms[i].quote, kind, quote_level+1)))) {
-        return 0;
+      if (original->terms[i].type == query->terms[i].type) {
+        if ((original->terms[i].type == FUNCTION && !function_structure_match(original->terms[i].function, query->terms[i].function, kind, quote_level))
+            || (original->terms[i].type == QUOTE && !quote_structure_match(original->terms[i].quote, query->terms[i].quote, kind, quote_level+1)))
+          return 0;
       }
       // Non-matching cases fail when original isn't fully-escaped variable and query isn't fully-escaped var (i.e. non-unifying cases)
       // Doing pos_int_gen/neg_int_gen prevents the case of query as fully-escaped var here

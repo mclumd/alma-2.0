@@ -478,7 +478,7 @@ char* name_with_arity(char *name, int arity) {
   return name_with_arity;
 }
 
-// Looks up predname mapping for a predicate used in clause c
+// Looks up predname mapping for a predicate appearing as a literal in clause c
 // Currently, simply picks the first positive or negative literal; looks up non-fif
 // Possibly to be replaced with more sophisticated method later
 predname_mapping* clause_lookup(kb *collection, clause *c) {
