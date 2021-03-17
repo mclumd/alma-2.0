@@ -370,48 +370,6 @@ static int less_than(alma_term *x, alma_term *y, binding_list *bindings, kb *alm
     return xval < yval;
 }
 
-// If first argument is a digit that's valid index of formula, binds second arg to quote of its formula and returns true
-static int idx_to_form(alma_term *index_term, alma_term *result, binding_list *bindings, kb *alma) {
-  char *idx_str;
-  if (index_term->type == VARIABLE) {
-    binding *res = bindings_contain(bindings, index_term->variable);
-    if (res == NULL || res->term->type != FUNCTION || res->term->function->term_count != 0)
-      return 0;
-    idx_str = res->term->function->name;
-  }
-  else if (index_term->type == FUNCTION && index_term->function->term_count == 0)
-    idx_str = index_term->function->name;
-  else
-    return 0;
-
-  if (result->type != VARIABLE || bindings_contain(bindings, result->variable))
-    return 0;
-
-  long index;
-  if (!str_to_long(idx_str, &index))
-    return 0;
-
-  index_mapping *map_res = tommy_hashlin_search(&alma->index_map, im_compare, &index, tommy_hash_u64(0, &index, sizeof(index)));
-  if (map_res != NULL) {
-    clause *formula = map_res->value;
-    clause *quote_form = malloc(sizeof(*quote_form));
-    copy_clause_structure(formula, quote_form);
-    set_variable_ids(quote_form, 1, 1, NULL, alma);
-
-    alma_term *quoted = malloc(sizeof(*quoted));
-    quoted->type = QUOTE;
-    quoted->quote = malloc(sizeof(*quoted->quote));
-    quoted->quote->type = CLAUSE;
-    quoted->quote->clause_quote = quote_form;
-    // Within idx_to_form proc literal, index_term also can uniquely identify source of resulting binding
-    // Used as a proxy for the parent pointer to proc, instead of passing around further info
-    add_binding(bindings, result->variable, quoted, index_term, 0);
-    return 1;
-  }
-  else
-    return 0;
-}
-
 // If first argument is a bound variable, constructs a quotation term out of term it's bound to, if able
 // If variable is bound to a function, this is treated as standing for a singleton clause
 // If variable is bound to a quote, this can be used directly with no difference
@@ -518,14 +476,13 @@ int proc_run(alma_function *proc, binding_list *bindings, kb *alma) {
     if (func->term_count == 2)
       return less_than(func->terms+0, func->terms+1, bindings, alma);
   }
-  else if (strcmp(func->name, "idx_to_form") == 0) {
-    if (func->term_count == 2)
-      return idx_to_form(func->terms+0, func->terms+1, bindings, alma);
-  }
   else if (strcmp(func->name, "quote_cons") == 0) {
     if (func->term_count == 2 && func->terms[0].type == VARIABLE && func->terms[1].type == VARIABLE
         && !bindings_contain(bindings, func->terms[1].variable))
       return quote_cons(func->terms+0, (func->terms+1)->variable, bindings, alma);
+  }
+  else if (strcmp(func->name, "update") == 0) {
+    //if (func->term_count == 2 && )
   }
   return 0;
 }

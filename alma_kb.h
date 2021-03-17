@@ -52,6 +52,8 @@ typedef struct kb {
 
   int idling; // Boolean for idle KB state, from lack of tasks to advance
   tommy_array new_clauses; // Clauses to be permanently added when next step
+  tommy_array distrusted; // Root clauses distusted when stepping in last step
+  tommy_array distrust_parents; // Formula as parent to use for distrust() instance created from corresponding clause in distrusted
 
   tommy_list clauses; // Linked list storing index_mappings, keeps track of all clauses
   tommy_hashlin index_map; // Maps index value to a clause
@@ -131,11 +133,8 @@ void flatten_node(kb *collection, alma_node *node, tommy_array *clauses, int pri
 void nodes_to_clauses(kb *collection, alma_node *trees, int num_trees, tommy_array *clauses, int print, kb_str *buf);
 void free_predname_mapping(void *arg);
 char* long_to_str(long x);
-void add_child(clause *parent, clause *child);
 
 void transfer_parent(kb *collection, clause *target, clause *source, int add_children, kb_str *buf);
-void distrust_recursive(kb *collection, clause *c, clause *contra, kb_str *buf);
-
 
 int im_compare(const void *arg, const void *obj);
 int pm_compare(const void *arg, const void *obj);

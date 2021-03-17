@@ -237,6 +237,9 @@ void kb_halt(kb *collection) {
     free_clause(tommy_array_get(&collection->new_clauses, i));
   tommy_array_done(&collection->new_clauses);
 
+  tommy_array_done(&collection->distrusted);
+  tommy_array_done(&collection->distrust_parents);
+
   tommy_node *curr = tommy_list_head(&collection->clauses);
   while (curr) {
     index_mapping *data = curr->data;

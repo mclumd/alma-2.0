@@ -372,7 +372,6 @@ static int unify_quote_func(alma_function *x, alma_function *y, void *x_parent, 
   return 0;
 }
 
-// TODO -- generalize to unify quasiquoted variables when this is added
 static int unify_quotes(alma_quote *x, alma_quote *y, void *x_parent, void *y_parent, int x_quote_lvl, int y_quote_lvl, binding_list *theta) {
   if (x->type == y->type) {
     if (x->type == SENTENCE) {
@@ -382,6 +381,8 @@ static int unify_quotes(alma_quote *x, alma_quote *y, void *x_parent, void *y_pa
     else {
       clause *c_x = x->clause_quote;
       clause *c_y = y->clause_quote;
+      if (c_x->tag != c_y->tag)
+        return 0;
       for (int i = 0; i < c_x->pos_count; i++)
         if (!unify_quote_func(c_x->pos_lits[i], c_y->pos_lits[i], x_parent, y_parent, x_quote_lvl, y_quote_lvl, theta))
           return 0;

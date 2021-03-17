@@ -1250,28 +1250,25 @@ char* long_to_str(long x) {
   return str;
 }
 
-void add_child(clause *parent, clause *child) {
+static void add_child(clause *parent, clause *child) {
   parent->children_count++;
   parent->children = realloc(parent->children, sizeof(*parent->children) * parent->children_count);
   parent->children[parent->children_count-1] = child;
 }
 
-// Get clause for parent's distrust sentence by searching distrusted() atoms out of new_clauses
-// New_clauses is used since this deals with newly distrusted formulas; will be in new_clauses buffer still
-static clause* get_distrusted_parent(kb *collection, clause *parent) {
-  for (tommy_size_t i = 0; i < tommy_array_size(&collection->new_clauses); i++) {
-    clause *parent_dist = tommy_array_get(&collection->new_clauses, i);
-    if (parent_dist != NULL && parent_dist->pos_count == 1 && strcmp(parent_dist->pos_lits[0]->name, "distrusted") == 0
-        && parent_dist->neg_count == 0 && parent_dist->pos_lits[0]->terms[0].type == QUOTE
-        && parent_dist->pos_lits[0]->terms[0].quote->type == CLAUSE
-        && !clauses_differ(parent, parent_dist->pos_lits[0]->terms[0].quote->clause_quote)) {
-      if (parent_dist->parent_set_count > 0) {
-        // Can access the first parent of the distrusted() instance since there will be just one
-        return parent_dist->parents[0].clauses[0];
+static int derivations_distrusted(clause *c) {
+  for (int i = 0; i < c->parent_set_count; i++) {
+    int parent_distrusted = 0;
+    for (int j = 0; j < c->parents[i].count; j++) {
+      if (c->parents[i].clauses[j]->distrusted) {
+        parent_distrusted = 1;
+        break;
       }
     }
+    if (!parent_distrusted)
+      return 0;
   }
-  return NULL;
+  return 1;
 }
 
 // Transfers first parent of source into parent collection of target if it's not a repeat
@@ -1308,13 +1305,8 @@ void transfer_parent(kb *collection, clause *target, clause *source, int add_chi
 
     if (add_children) {
       // Parents of source also gain new child in target
-      // Also check if parents of source are distrusted
       for (int j = 0; j < source->parents[0].count; j++) {
         int insert = 1;
-        if (!target->distrusted && source->parents[0].clauses[j]->distrusted) {
-          clause *contra = get_distrusted_parent(collection, source->parents[0].clauses[j]);
-          distrust_recursive(collection, target, contra, buf);
-        }
         for (int k = 0; k < source->parents[0].clauses[j]->children_count; k++) {
           if (source->parents[0].clauses[j]->children[k] == target) {
             insert = 0;
@@ -1328,7 +1320,7 @@ void transfer_parent(kb *collection, clause *target, clause *source, int add_chi
   }
 }
 
-void distrust_recursive(kb *collection, clause *c, clause *contra, kb_str *buf) {
+static void distrust_recursive(kb *collection, clause *c, clause *contra, kb_str *buf) {
   // Formula becomes distrusted at current time
   c->distrusted = collection->time;
 
@@ -1373,7 +1365,7 @@ void distrust_recursive(kb *collection, clause *c, clause *contra, kb_str *buf) 
   // Recursively distrust children that aren't distrusted already
   if (c->children != NULL) {
     for (int i = 0; i < c->children_count; i++) {
-      if (!c->children[i]->distrusted) {
+      if (!c->children[i]->distrusted && derivations_distrusted(c->children[i])) {
         distrust_recursive(collection, c->children[i], contra, buf);
       }
     }
@@ -1552,8 +1544,10 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
               set_variable_ids(contra, 1, 0, NULL, collection);
               tommy_array_insert(&collection->new_clauses, contra);
 
-              distrust_recursive(collection, current_task->x, contra, buf);
-              distrust_recursive(collection, current_task->y, contra, buf);
+              tommy_array_insert(&collection->distrusted, current_task->x);
+              tommy_array_insert(&collection->distrust_parents, contra);
+              tommy_array_insert(&collection->distrusted, current_task->y);
+              tommy_array_insert(&collection->distrust_parents, contra);
             }
           }
         }
@@ -1638,8 +1632,10 @@ static void handle_distrust(kb *collection, clause *distrust, kb_str *buf) {
           init_bindings(theta);
 
           // Distrust each match found
-          if (quote_term_unify(lit->terms[0].quote, q, theta))
-            distrust_recursive(collection, result->clauses[i], distrust, buf);
+          if (quote_term_unify(lit->terms[0].quote, q, theta)) {
+            tommy_array_insert(&collection->distrusted, result->clauses[i]);
+            tommy_array_insert(&collection->distrust_parents, distrust);
+          }
           cleanup_bindings(theta);
         }
       }
@@ -1707,38 +1703,31 @@ void process_new_clauses(kb *collection, kb_str *buf) {
       }
       // Non-reinstate sentences generate tasks
       else {
+        // Update child info for parents of new clause
         if (c->parents != NULL) {
-          // Update child info for parents of new clause, check for distrusted parents
-          for (int j = 0; j < c->parents[0].count; j++) {
+          for (int j = 0; j < c->parents[0].count; j++)
             add_child(c->parents[0].clauses[j], c);
-            if (!c->distrusted && c->parents[0].clauses[j]->distrusted) {
-              clause *contra = get_distrusted_parent(collection, c->parents[0].clauses[j]);
-              distrust_recursive(collection, c, contra, buf);
-            }
-          }
         }
 
-        if (!c->distrusted) {
-          if (c->tag == FIF) {
-            fif_task_map_init(collection, c, 1);
-          }
-          else {
-            res_tasks_from_clause(collection, c, 1);
-            fif_tasks_from_clause(collection, c);
+        if (c->tag == FIF) {
+          fif_task_map_init(collection, c, 1);
+        }
+        else {
+          res_tasks_from_clause(collection, c, 1);
+          fif_tasks_from_clause(collection, c);
 
-            // Get tasks between new KB clauses and all bs clauses
-            tommy_node *curr = tommy_list_head(&collection->backsearch_tasks);
-            while (curr) {
-              backsearch_task *t = curr->data;
-              for (int j = 0; j < tommy_array_size(&t->clauses); j++) {
-                clause *bt_c = tommy_array_get(&t->clauses, j);
-                for (int k = 0; k < bt_c->pos_count; k++)
-                  make_single_task(collection, bt_c, bt_c->pos_lits[k], c, &t->to_resolve, 1, 0);
-                for (int k = 0; k < bt_c->neg_count; k++)
-                  make_single_task(collection, bt_c, bt_c->neg_lits[k], c, &t->to_resolve, 1, 1);
-              }
-              curr = curr->next;
+          // Get tasks between new KB clauses and all bs clauses
+          tommy_node *curr = tommy_list_head(&collection->backsearch_tasks);
+          while (curr) {
+            backsearch_task *t = curr->data;
+            for (int j = 0; j < tommy_array_size(&t->clauses); j++) {
+              clause *bt_c = tommy_array_get(&t->clauses, j);
+              for (int k = 0; k < bt_c->pos_count; k++)
+                make_single_task(collection, bt_c, bt_c->pos_lits[k], c, &t->to_resolve, 1, 0);
+              for (int k = 0; k < bt_c->neg_count; k++)
+                make_single_task(collection, bt_c, bt_c->neg_lits[k], c, &t->to_resolve, 1, 1);
             }
+            curr = curr->next;
           }
         }
       }
@@ -1760,4 +1749,16 @@ void process_new_clauses(kb *collection, kb_str *buf) {
 
   tommy_array_done(&collection->new_clauses);
   tommy_array_init(&collection->new_clauses);
+
+  for (tommy_size_t i = 0; i < tommy_array_size(&collection->distrusted); i++) {
+    clause *c = tommy_array_get(&collection->distrusted, i);
+    clause *parent = tommy_array_get(&collection->distrust_parents, i);
+    distrust_recursive(collection, c, parent, buf);
+  }
+
+  tommy_array_done(&collection->distrusted);
+  tommy_array_init(&collection->distrusted);
+  tommy_array_done(&collection->distrust_parents);
+  tommy_array_init(&collection->distrust_parents);
+
 }
