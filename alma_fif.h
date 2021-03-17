@@ -33,7 +33,7 @@ typedef struct fif_task {
   binding_list *bindings;
   int premises_done;
   int num_unified;
-  long *unified_clauses; // Indices of clauses task has unified with
+  clause **unified_clauses;
   int num_to_unify;
   clause **to_unify;
   int proc_next; // Boolean indicating next as a proc instead of unifiable

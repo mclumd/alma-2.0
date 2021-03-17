@@ -57,6 +57,7 @@ typedef struct kb {
 
   tommy_list clauses; // Linked list storing index_mappings, keeps track of all clauses
   tommy_hashlin index_map; // Maps index value to a clause
+  tommy_hashlin fif_map; // Tracks fif formulas in clauses
 
   // Hashsets and lists used together for multi-indexing http://www.tommyds.it/doc/multiindex.html
   tommy_hashlin pos_map; // Maps each predicate name to the set of clauses where it appears as positive literal
@@ -64,13 +65,9 @@ typedef struct kb {
   tommy_hashlin neg_map; // Maps each predicate name to the set of clauses where it appears as negative literal
   tommy_list neg_list; // Linked list for iterating neg_map
 
-  tommy_hashlin fif_map; // Tracks fif formulas in clauses
-
   tommy_array res_tasks; // Stores tasks for resolution (non-tagged clauses) in next step
-
   // If grow to have many fifs, having pos and neg versions may help
   tommy_hashlin fif_tasks; // Stores tasks for fif rules
-
   tommy_list backsearch_tasks;
 
   long size;
@@ -110,8 +107,14 @@ int clauses_differ(clause *x, clause *y);
 clause* duplicate_check(kb *collection, clause *c, int check_distrusted);
 void add_clause(kb *collection, clause *curr);
 void remove_clause(kb *collection, clause *c, kb_str *buf);
-struct backsearch_task;
+void free_clause(clause *c);
+void copy_clause_structure(clause *orignal, clause *copy);
+void set_variable_ids(clause *c, int id_from_name, int non_escaping_only, binding_list *bs_bindings, kb *collection);
+void flatten_node(kb *collection, alma_node *node, tommy_array *clauses, int print, kb_str *buf);
+void nodes_to_clauses(kb *collection, alma_node *trees, int num_trees, tommy_array *clauses, int print, kb_str *buf);
+predname_mapping* clause_lookup(kb *collection, clause *c);
 
+struct backsearch_task;
 void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr, struct backsearch_task *bs, kb_str *buf);
 void process_new_clauses(kb *collection, kb_str *buf);
 void make_single_task(kb *collection, clause *c, alma_function *c_lit, clause *other, tommy_array *tasks, int use_bif, int pos);
@@ -120,25 +123,11 @@ void res_tasks_from_clause(kb *collection, clause *c, int process_negatives);
 clause* assert_formula(kb *collection, char *string, int print, kb_str *buf);
 int delete_formula(kb *collection, char *string, int print, kb_str *buf);
 int update_formula(kb *collection, char *string, kb_str *buf);
-
-void resolve(res_task *t, binding_list *mgu, clause *result);
-
-// Functions used in alma_command
-char* now(long t);
-char* walltime(void);
-void free_clause(clause *c);
-void copy_clause_structure(clause *orignal, clause *copy);
-void set_variable_ids(clause *c, int id_from_name, int non_escaping_only, binding_list *bs_bindings, kb *collection);
-void flatten_node(kb *collection, alma_node *node, tommy_array *clauses, int print, kb_str *buf);
-void nodes_to_clauses(kb *collection, alma_node *trees, int num_trees, tommy_array *clauses, int print, kb_str *buf);
-void free_predname_mapping(void *arg);
-char* long_to_str(long x);
-
 void transfer_parent(kb *collection, clause *target, clause *source, int add_children, kb_str *buf);
 
-int im_compare(const void *arg, const void *obj);
+void free_predname_mapping(void *arg);
 int pm_compare(const void *arg, const void *obj);
+char* long_to_str(long x);
 char* name_with_arity(char *name, int arity);
-predname_mapping* clause_lookup(kb *collection, clause *c);
 
 #endif

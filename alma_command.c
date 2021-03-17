@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <time.h>
+#include <sys/time.h>
 #include "alma_command.h"
 #include "tommy.h"
 #include "alma_formula.h"
@@ -10,6 +11,28 @@
 
 extern char logs_on;
 extern char python_mode;
+
+static char* now(long t) {
+  int len = snprintf(NULL, 0, "%ld", t);
+  char *str = malloc(4 + len+1 + 2);
+  strcpy(str, "now(");
+  snprintf(str+4, len+1, "%ld", t);
+  strcpy(str+4+len, ").");
+  return str;
+}
+
+static char* walltime() {
+  struct timeval tval;
+  gettimeofday(&tval, NULL);
+  int sec_len = snprintf(NULL, 0, "%ld", (long int)tval.tv_sec);
+  char *str = malloc(8 + sec_len + 10 + 1);
+  strcpy(str, "wallnow(");
+  snprintf(str+8, sec_len+1, "%ld", (long int)tval.tv_sec);
+  strcpy(str+8+sec_len, ", ");
+  snprintf(str+8+sec_len+2, 6+1, "%06ld", (long int)tval.tv_usec);
+  strcpy(str+8+sec_len+8, ").");
+  return str;
+}
 
 // Caller will need to free collection with kb_halt
 void kb_init(kb **collection, char *file, char *agent, char *trialnum, char *log_dir,  int verbose, kb_str *buf, int logon) {

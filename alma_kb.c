@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
-#include <sys/time.h>
 #include "alma_kb.h"
 #include "alma_backsearch.h"
 #include "alma_fif.h"
@@ -454,7 +453,7 @@ void free_predname_mapping(void *arg) {
 
 // Compare function to be used by tommy_hashlin_search for index_mapping
 // Compares long arg to key of index_mapping
-int im_compare(const void *arg, const void *obj) {
+static int im_compare(const void *arg, const void *obj) {
   return *(const long*)arg - ((const index_mapping*)obj)->key;
 }
 
@@ -1196,7 +1195,7 @@ static void lits_copy(int count, alma_function **lits, alma_function **cmp, bind
 }
 
 // Given an MGU, substitute on literals other than pair unified and make a single resulting clause
-void resolve(res_task *t, binding_list *mgu, clause *result) {
+static void resolve(res_task *t, binding_list *mgu, clause *result) {
   result->pos_count = 0;
   if (t->x->pos_count + t->y->pos_count - 1 > 0) {
     result->pos_lits = malloc(sizeof(*result->pos_lits) * (t->x->pos_count + t->y->pos_count - 1));
@@ -1221,28 +1220,6 @@ void resolve(res_task *t, binding_list *mgu, clause *result) {
   result->fif = NULL;
 }
 
-char* now(long t) {
-  int len = snprintf(NULL, 0, "%ld", t);
-  char *str = malloc(4 + len+1 + 2);
-  strcpy(str, "now(");
-  snprintf(str+4, len+1, "%ld", t);
-  strcpy(str+4+len, ").");
-  return str;
-}
-
-char* walltime() {
-  struct timeval tval;
-  gettimeofday(&tval, NULL);
-  int sec_len = snprintf(NULL, 0, "%ld", (long int)tval.tv_sec);
-  char *str = malloc(8 + sec_len + 10 + 1);
-  strcpy(str, "wallnow(");
-  snprintf(str+8, sec_len+1, "%ld", (long int)tval.tv_sec);
-  strcpy(str+8+sec_len, ", ");
-  snprintf(str+8+sec_len+2, 6+1, "%06ld", (long int)tval.tv_usec);
-  strcpy(str+8+sec_len+8, ").");
-  return str;
-}
-
 char* long_to_str(long x) {
   int length = snprintf(NULL, 0, "%ld", x);
   char *str = malloc(length+1);
@@ -1254,21 +1231,6 @@ static void add_child(clause *parent, clause *child) {
   parent->children_count++;
   parent->children = realloc(parent->children, sizeof(*parent->children) * parent->children_count);
   parent->children[parent->children_count-1] = child;
-}
-
-static int derivations_distrusted(clause *c) {
-  for (int i = 0; i < c->parent_set_count; i++) {
-    int parent_distrusted = 0;
-    for (int j = 0; j < c->parents[i].count; j++) {
-      if (c->parents[i].clauses[j]->distrusted) {
-        parent_distrusted = 1;
-        break;
-      }
-    }
-    if (!parent_distrusted)
-      return 0;
-  }
-  return 1;
 }
 
 // Transfers first parent of source into parent collection of target if it's not a repeat
@@ -1318,6 +1280,21 @@ void transfer_parent(kb *collection, clause *target, clause *source, int add_chi
       }
     }
   }
+}
+
+static int derivations_distrusted(clause *c) {
+  for (int i = 0; i < c->parent_set_count; i++) {
+    int parent_distrusted = 0;
+    for (int j = 0; j < c->parents[i].count; j++) {
+      if (c->parents[i].clauses[j]->distrusted) {
+        parent_distrusted = 1;
+        break;
+      }
+    }
+    if (!parent_distrusted)
+      return 0;
+  }
+  return 1;
 }
 
 static void distrust_recursive(kb *collection, clause *c, clause *contra, kb_str *buf) {
