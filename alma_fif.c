@@ -87,7 +87,7 @@ void fif_tasks_from_clause(kb *collection, clause *c) {
         fif_task *data = curr->data;
 
         // Only modify add entry to to_unify if next for fif isn't a procedure predicate
-        if (!data->proc_next) {
+        if (!data->fif->distrusted && !data->proc_next) {
           int sign_match = (pos && data->fif->fif->ordering[data->num_unified] < 0) || (!pos && data->fif->fif->ordering[data->num_unified] >= 0);
           if (sign_match) {
             data->num_to_unify++;

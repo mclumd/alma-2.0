@@ -57,7 +57,7 @@ typedef struct kb {
 
   tommy_list clauses; // Linked list storing index_mappings, keeps track of all clauses
   tommy_hashlin index_map; // Maps index value to a clause
-  tommy_hashlin fif_map; // Tracks fif formulas in clauses
+  tommy_hashlin fif_map; // Map of fif_mapping, tracks fif formulas
 
   // Hashsets and lists used together for multi-indexing http://www.tommyds.it/doc/multiindex.html
   tommy_hashlin pos_map; // Maps each predicate name to the set of clauses where it appears as positive literal
@@ -112,7 +112,9 @@ void copy_clause_structure(clause *orignal, clause *copy);
 void set_variable_ids(clause *c, int id_from_name, int non_escaping_only, binding_list *bs_bindings, kb *collection);
 void flatten_node(kb *collection, alma_node *node, tommy_array *clauses, int print, kb_str *buf);
 void nodes_to_clauses(kb *collection, alma_node *trees, int num_trees, tommy_array *clauses, int print, kb_str *buf);
-predname_mapping* clause_lookup(kb *collection, clause *c);
+void* clause_lookup(kb *collection, clause *c);
+clause* mapping_access(void *mapping, if_tag tag, int index);
+int mapping_num_clauses(void *mapping, if_tag tag);
 
 struct backsearch_task;
 void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr, struct backsearch_task *bs, kb_str *buf);

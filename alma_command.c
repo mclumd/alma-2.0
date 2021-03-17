@@ -60,6 +60,8 @@ void kb_init(kb **collection, char *file, char *agent, char *trialnum, char *log
   tommy_array_init(&collec->res_tasks);
   tommy_hashlin_init(&collec->fif_tasks);
   tommy_list_init(&collec->backsearch_tasks);
+  tommy_array_init(&collec->distrusted);
+  tommy_array_init(&collec->distrust_parents);
 
   parse_init();
 

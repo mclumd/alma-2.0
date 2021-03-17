@@ -120,26 +120,28 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *collection
   clause_print(collection, search_term->quote->clause_quote, NULL);
   tee_alt("\"\n", collection, NULL);
 
-  predname_mapping *result = clause_lookup(collection, search_term->quote->clause_quote);
-  if (result != NULL) {
+  void *mapping = clause_lookup(collection, search_term->quote->clause_quote);
+  if (mapping != NULL) {
     alma_quote *q = malloc(sizeof(*q));
     q->type = CLAUSE;
     q->clause_quote = NULL;
 
     int non_specific = (kind == POS_INT || kind == POS_INT_GEN || kind == NEG_INT || kind == NEG_INT_GEN);
-    for (int i = result->num_clauses-1; i >= 0; i--) {
+    if_tag tag = search_term->quote->clause_quote->tag;
+    for (int i = mapping_num_clauses(mapping, tag)-1; i >= 0; i--) {
+      clause *ith = mapping_access(mapping, tag, i);
       // Must be a non-distrusted result with pos / neg literal count matching query
-      if (!result->clauses[i]->distrusted
-          && result->clauses[i]->pos_count == search_term->quote->clause_quote->pos_count
-          && result->clauses[i]->neg_count == search_term->quote->clause_quote->neg_count) {
+      if (!ith->distrusted
+          && ith->pos_count == search_term->quote->clause_quote->pos_count
+          && ith->neg_count == search_term->quote->clause_quote->neg_count) {
         // Convert clause in question to quotation term
         if (non_specific) {
           q->clause_quote = malloc(sizeof(*q->clause_quote));
           // copy_and_quasiquote_clause may reject copying, for which would free and continue
-          if (!copy_and_quasiquote_clause(result->clauses[i], q->clause_quote, search_term->quote->clause_quote, kind)) {
+          if (!copy_and_quasiquote_clause(ith, q->clause_quote, search_term->quote->clause_quote, kind)) {
             // Debug
             tee_alt("Structure failure of \"", collection, NULL);
-            clause_print(collection, result->clauses[i], NULL);
+            clause_print(collection, ith, NULL);
             tee_alt("\"\n", collection, NULL);
 
             free(q->clause_quote);
@@ -148,7 +150,7 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *collection
           }
         }
         else {
-          q->clause_quote = result->clauses[i];
+          q->clause_quote = ith;
         }
 
         // Create bindings copy as either empty list or copy of arg
@@ -171,7 +173,7 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *collection
             alma_term *time_term = malloc(sizeof(*time_term));
             time_term->type = FUNCTION;
             time_term->function = malloc(sizeof(*time_term->function));
-            time_term->function->name = long_to_str(result->clauses[i]->acquired);
+            time_term->function->name = long_to_str(ith->acquired);
             time_term->function->term_count = 0;
             time_term->function->terms = NULL;
             add_binding(bindings, arg->terms[1].variable, time_term, arg, 0);
@@ -239,25 +241,27 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time,
 
     // Note: for now, will just use first unifying case for ancestor search
     // If necessary, can make more general at later point, by trying all possibilities
-    predname_mapping *result = clause_lookup(alma, descendant_copy->quote->clause_quote);
+    void *mapping = clause_lookup(alma, descendant_copy->quote->clause_quote);
     binding_list *desc_bindings = NULL;
-    if (result != NULL) {
+    if (mapping != NULL) {
       alma_quote *q = malloc(sizeof(*q));
       q->type = CLAUSE;
 
-      for (int i = result->num_clauses-1; i >= 0; i--) {
-        if (result->clauses[i]->pos_count == descendant_copy->quote->clause_quote->pos_count &&
-            result->clauses[i]->neg_count == descendant_copy->quote->clause_quote->neg_count &&
-            (!result->clauses[i]->distrusted || result->clauses[i]->distrusted >= query_time) &&
-            result->clauses[i]->acquired <= query_time) {
+      if_tag tag = descendant_copy->quote->clause_quote->tag;
+      for (int i = mapping_num_clauses(mapping, tag)-1; i >= 0; i--) {
+        clause *ith = mapping_access(mapping, tag, i);
+        if (ith->pos_count == descendant_copy->quote->clause_quote->pos_count &&
+            ith->neg_count == descendant_copy->quote->clause_quote->neg_count &&
+            (!ith->distrusted || ith->distrusted >= query_time) &&
+            ith->acquired <= query_time) {
           // Create copy as either empty list or copy of arg
           desc_bindings = malloc(sizeof(*desc_bindings));
           copy_bindings(desc_bindings, bindings);
-          q->clause_quote = result->clauses[i];
+          q->clause_quote = ith;
 
           if (quote_term_unify(descendant_copy->quote, q, desc_bindings)) {
             // Starting item for queue
-            tommy_array_insert(&queue, result->clauses[i]);
+            tommy_array_insert(&queue, ith);
             break;
           }
           cleanup_bindings(desc_bindings);
@@ -480,9 +484,6 @@ int proc_run(alma_function *proc, binding_list *bindings, kb *alma) {
     if (func->term_count == 2 && func->terms[0].type == VARIABLE && func->terms[1].type == VARIABLE
         && !bindings_contain(bindings, func->terms[1].variable))
       return quote_cons(func->terms+0, (func->terms+1)->variable, bindings, alma);
-  }
-  else if (strcmp(func->name, "update") == 0) {
-    //if (func->term_count == 2 && )
   }
   return 0;
 }

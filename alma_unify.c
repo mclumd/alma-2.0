@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "alma_unify.h"
-
+#include "alma_fif.h"
 #include "alma_print.h"
 #include "alma_kb.h"
 
@@ -383,12 +383,21 @@ static int unify_quotes(alma_quote *x, alma_quote *y, void *x_parent, void *y_pa
       clause *c_y = y->clause_quote;
       if (c_x->tag != c_y->tag)
         return 0;
-      for (int i = 0; i < c_x->pos_count; i++)
-        if (!unify_quote_func(c_x->pos_lits[i], c_y->pos_lits[i], x_parent, y_parent, x_quote_lvl, y_quote_lvl, theta))
+      if (c_x->tag == FIF && c_x->fif->premise_count == c_y->fif->premise_count) {
+        for (int i = 0; i < c_x->fif->premise_count; i++)
+          if (!unify_quote_func(fif_access(c_x, i), fif_access(c_y, i), x_parent, y_parent, x_quote_lvl, y_quote_lvl, theta))
+            return 0;
+        if (!unify_quote_func(c_x->fif->conclusion, c_y->fif->conclusion, x_parent, y_parent, x_quote_lvl, y_quote_lvl, theta))
           return 0;
-      for (int i = 0; i < c_x->neg_count; i++)
-        if (!unify_quote_func(c_x->neg_lits[i], c_y->neg_lits[i], x_parent, y_parent, x_quote_lvl, y_quote_lvl, theta))
-          return 0;
+      }
+      else {
+        for (int i = 0; i < c_x->pos_count; i++)
+          if (!unify_quote_func(c_x->pos_lits[i], c_y->pos_lits[i], x_parent, y_parent, x_quote_lvl, y_quote_lvl, theta))
+            return 0;
+        for (int i = 0; i < c_x->neg_count; i++)
+          if (!unify_quote_func(c_x->neg_lits[i], c_y->neg_lits[i], x_parent, y_parent, x_quote_lvl, y_quote_lvl, theta))
+            return 0;
+      }
       return 1;
     }
   }

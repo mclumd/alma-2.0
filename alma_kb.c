@@ -477,23 +477,48 @@ char* name_with_arity(char *name, int arity) {
   return name_with_arity;
 }
 
-// Looks up predname mapping for a predicate appearing as a literal in clause c
-// Currently, simply picks the first positive or negative literal; looks up non-fif
-// Possibly to be replaced with more sophisticated method later
-predname_mapping* clause_lookup(kb *collection, clause *c) {
-  tommy_hashlin *map = &collection->pos_map;
-  alma_function *pred;
-  if (c->pos_count != 0) {
-    pred = c->pos_lits[0];
+// Returns a mapping holding a set of clauses that contains those unifiable with clause c
+// Return type is a fif_mapping or predname_mapping depending on c's tag
+// For predname_mapping, looks up mapping for a predicate appearing as a literal in clause c;
+//  currently, simply picks the first positive or negative literal
+void* clause_lookup(kb *collection, clause *c) {
+  if (c->tag == FIF) {
+    char *name = c->fif->conclusion->name;
+    return tommy_hashlin_search(&collection->fif_map, fifm_compare, name, tommy_hash_u64(0, name, strlen(name)));
   }
   else {
-    pred = c->neg_lits[0];
-    map = &collection->neg_map;
+    tommy_hashlin *map = &collection->pos_map;
+    alma_function *pred;
+    if (c->pos_count != 0) {
+      pred = c->pos_lits[0];
+    }
+    else {
+      pred = c->neg_lits[0];
+      map = &collection->neg_map;
+    }
+    char *name = name_with_arity(pred->name, pred->term_count);
+    predname_mapping *result = tommy_hashlin_search(map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
+    free(name);
+    return result;
   }
-  char *name = name_with_arity(pred->name, pred->term_count);
-  predname_mapping *result = tommy_hashlin_search(map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
-  free(name);
-  return result;
+}
+
+// Retrieves index-th item from mapping
+// Tag determines interpreting it as fif_mapping or predname_mapping
+clause* mapping_access(void *mapping, if_tag tag, int index) {
+  if (tag == FIF)
+    return ((fif_mapping*)mapping)->clauses[index];
+  else
+    return ((predname_mapping*)mapping)->clauses[index];
+}
+
+// Retrieves number of clauses held by mapping
+// Tag determines interpreting it as fif_mapping or predname_mapping
+int mapping_num_clauses(void *mapping, if_tag tag) {
+  if (tag == FIF)
+    return ((fif_mapping*)mapping)->num_clauses;
+  else
+    return ((predname_mapping*)mapping)->num_clauses;
 }
 
 // Inserts clause into the hashmap (with key based on lit), as well as the linked list
@@ -577,14 +602,23 @@ static int quotes_differ(alma_quote *x, alma_quote *y, var_match_set *matches, i
     else {
       clause *c_x = x->clause_quote;
       clause *c_y = y->clause_quote;
-      if (c_x->pos_count != c_y->pos_count || c_x->neg_count != c_y->neg_count)
+      if (c_x->tag != c_y->tag || c_x->pos_count != c_y->pos_count || c_x->neg_count != c_y->neg_count)
         return 1;
-      for (int i = 0; i < c_x->pos_count; i++)
-        if (functions_differ(c_x->pos_lits[i], c_y->pos_lits[i], matches, quote_level))
+      if (c_x->tag == FIF) {
+        for (int i = 0; i < c_x->fif->premise_count; i++)
+          if (functions_differ(fif_access(c_x, i), fif_access(c_y, i), matches, 0))
+            return 1;
+        if (functions_differ(c_x->fif->conclusion, c_y->fif->conclusion, matches, 0))
           return 1;
-      for (int i = 0; i < c_x->neg_count; i++)
-        if (functions_differ(c_x->neg_lits[i], c_y->neg_lits[i], matches, quote_level))
-          return 1;
+      }
+      else {
+        for (int i = 0; i < c_x->pos_count; i++)
+          if (functions_differ(c_x->pos_lits[i], c_y->pos_lits[i], matches, quote_level))
+            return 1;
+        for (int i = 0; i < c_x->neg_count; i++)
+          if (functions_differ(c_x->neg_lits[i], c_y->neg_lits[i], matches, quote_level))
+            return 1;
+      }
     }
     return 0;
   }
@@ -815,36 +849,54 @@ static void remove_child(clause *p, clause *c) {
   }
 }
 
+// Removes fif from fif_map, and deletes all fif tasks using it
+static void remove_fif_tasks(kb *collection, clause *c) {
+  for (int i = 0; i < c->fif->premise_count; i++) {
+    alma_function *f = fif_access(c, i);
+    char *name = name_with_arity(f->name, f->term_count);
+    fif_task_mapping *tm = tommy_hashlin_search(&collection->fif_tasks, fif_taskm_compare, name, tommy_hash_u64(0, name, strlen(name)));
+    if (tm != NULL) {
+      tommy_node *curr = tommy_list_head(&tm->tasks);
+      while (curr) {
+        fif_task *currdata = curr->data;
+        curr = curr->next;
+        if (currdata->fif->index == c->index) {
+          tommy_list_remove_existing(&tm->tasks, &currdata->node);
+          free_fif_task(currdata);
+        }
+      }
+    }
+    free(name);
+  }
+}
+
 // Given a clause already existing in KB, remove from data structures
 // Note that fif removal, or removal of a singleton clause used in a fif rule, may be very expensive
 void remove_clause(kb *collection, clause *c, kb_str *buf) {
   //  printf("ALMA: IN REMOVE CLAUSE\n");
   if (c->tag == FIF) {
-    // fif must be removed from fif_map and all fif tasks using it deleted
     char *name = c->fif->conclusion->name;
     fif_mapping *fifm = tommy_hashlin_search(&collection->fif_map, fifm_compare, name, tommy_hash_u64(0, name, strlen(name)));
     if (fifm != NULL) {
-      tommy_hashlin_remove_existing(&collection->fif_map, &fifm->node);
-      free_fif_mapping(fifm);
-    }
-
-    for (int i = 0; i < c->fif->premise_count; i++) {
-      alma_function *f = fif_access(c, i);
-      name = name_with_arity(f->name, f->term_count);
-      fif_task_mapping *tm = tommy_hashlin_search(&collection->fif_tasks, fif_taskm_compare, name, tommy_hash_u64(0, name, strlen(name)));
-      if (tm != NULL) {
-        tommy_node *curr = tommy_list_head(&tm->tasks);
-        while (curr) {
-          fif_task *currdata = curr->data;
-          curr = curr->next;
-          if (currdata->fif == c) {
-            tommy_list_remove_existing(&tm->tasks, &currdata->node);
-            free_fif_task(currdata);
+      for (int i = 0; i < fifm->num_clauses; i++) {
+        if (fifm->clauses[i]->index == c->index) {
+          if (i < fifm->num_clauses-1) {
+            fifm->clauses[i] = fifm->clauses[fifm->num_clauses-1];
           }
+          fifm->num_clauses--;
+          if (fifm->num_clauses == 0) {
+            tommy_hashlin_remove_existing(&collection->fif_map, &fifm->node);
+            free_fif_mapping(fifm);
+          }
+          else {
+            fifm->clauses = realloc(fifm->clauses, sizeof(*fifm->clauses)*fifm->num_clauses);
+          }
+          break;
         }
       }
-      free(name);
     }
+
+    remove_fif_tasks(collection, c);
   }
   else {
     // Non-fif must be unindexed from pos/neg maps, have resolution tasks and fif tasks (if in any) removed
@@ -1301,6 +1353,9 @@ static void distrust_recursive(kb *collection, clause *c, clause *contra, kb_str
   // Formula becomes distrusted at current time
   c->distrusted = collection->time;
 
+  if (c->tag == FIF)
+    remove_fif_tasks(collection, c);
+
   // Assert atomic distrusted() formula
   clause *distrusted = malloc(sizeof(*distrusted));
   distrusted->pos_count = 1;
@@ -1595,22 +1650,24 @@ static void handle_true(kb *collection, clause *truth, kb_str *buf) {
 static void handle_distrust(kb *collection, clause *distrust, kb_str *buf) {
   alma_function *lit = distrust->pos_lits[0];
   if (lit->term_count == 1 && lit->terms[0].type == QUOTE && lit->terms[0].quote->type == CLAUSE) {
-    predname_mapping *result = clause_lookup(collection, lit->terms[0].quote->clause_quote);
-    if (result != NULL) {
+    void *mapping = clause_lookup(collection, lit->terms[0].quote->clause_quote);
+    if (mapping != NULL) {
       alma_quote *q = malloc(sizeof(*q));
       q->type = CLAUSE;
 
-      for (int i = result->num_clauses-1; i >= 0; i--) {
-        if (!result->clauses[i]->distrusted &&
-            result->clauses[i]->pos_count == lit->terms[0].quote->clause_quote->pos_count &&
-            result->clauses[i]->neg_count == lit->terms[0].quote->clause_quote->neg_count) {
-          q->clause_quote = result->clauses[i];
+      if_tag tag = lit->terms[0].quote->clause_quote->tag;
+      for (int i = mapping_num_clauses(mapping, tag)-1; i >= 0; i--) {
+        clause *ith = mapping_access(mapping, tag, i);
+        if (!ith->distrusted &&
+            ith->pos_count == lit->terms[0].quote->clause_quote->pos_count &&
+            ith->neg_count == lit->terms[0].quote->clause_quote->neg_count) {
+          q->clause_quote = ith;
           binding_list *theta = malloc(sizeof(*theta));
           init_bindings(theta);
 
           // Distrust each match found
           if (quote_term_unify(lit->terms[0].quote, q, theta)) {
-            tommy_array_insert(&collection->distrusted, result->clauses[i]);
+            tommy_array_insert(&collection->distrusted, ith);
             tommy_array_insert(&collection->distrust_parents, distrust);
           }
           cleanup_bindings(theta);
@@ -1622,7 +1679,7 @@ static void handle_distrust(kb *collection, clause *distrust, kb_str *buf) {
 }
 
 // Processing of new clauses: inserts non-duplicates derived, makes new tasks from
-// Special handling for true, reinstate, distrust
+// Special handling for true, reinstate, distrust, update
 void process_new_clauses(kb *collection, kb_str *buf) {
   fif_to_front(&collection->new_clauses);
 
