@@ -173,11 +173,11 @@ void increment_clause_quote_level_paired(clause *c, clause *query, int quote_lvl
 
 static void subst_func(binding_list *theta, alma_function *func, int level) {
   for (int i = 0; i < func->term_count; i++)
-    subst(theta, func->terms+i, level);
+    subst_term(theta, func->terms+i, level);
 }
 
 // For a given term, replace variables in the binding list, replace with what they're bound to
-void subst(binding_list *theta, alma_term *term, int quote_level) {
+void subst_term(binding_list *theta, alma_term *term, int quote_level) {
   if (term->type == VARIABLE) {
     binding *contained = bindings_contain(theta, term->variable);
     // If a variable is bound, replace it with whatever it is bound to
@@ -196,11 +196,7 @@ void subst(binding_list *theta, alma_term *term, int quote_level) {
     subst_func(theta, term->function, quote_level);
   }
   else if (term->type == QUOTE && term->quote->type == CLAUSE) {
-    clause *c = term->quote->clause_quote;
-    for (int i = 0; i < c->pos_count; i++)
-      subst_func(theta, c->pos_lits[i], quote_level+1);
-    for (int i = 0; i < c->neg_count; i++)
-      subst_func(theta, c->neg_lits[i], quote_level+1);
+    subst_clause(theta, term->quote->clause_quote, quote_level+1);
   }
   else if (term->type == QUASIQUOTE) {
     binding *contained = bindings_contain(theta, term->quasiquote->variable);
@@ -219,9 +215,16 @@ void subst(binding_list *theta, alma_term *term, int quote_level) {
   }
 }
 
+void subst_clause(binding_list *theta, clause *c, int quote_level) {
+  for (int i = 0; i < c->pos_count; i++)
+    subst_func(theta, c->pos_lits[i], quote_level);
+  for (int i = 0; i < c->neg_count; i++)
+    subst_func(theta, c->neg_lits[i], quote_level);
+}
+
 static void cascade_substitution(binding_list *theta) {
   for (int i = 0; i < theta->num_bindings; i++)
-    subst(theta, theta->list[i].term, 0);
+    subst_term(theta, theta->list[i].term, 0);
 
   // AIMA code examples process functions for a second time; may need to do here as well
 }

@@ -43,7 +43,8 @@ void decrement_quote_level(struct clause *c, int quote_lvl);
 void increment_clause_quote_level_paired(struct clause *c, struct clause *query, int quote_lvl);
 
 binding* bindings_contain(binding_list *theta, alma_variable *var);
-void subst(binding_list *theta, alma_term *term, int quote_level);
+void subst_term(binding_list *theta, alma_term *term, int quote_level);
+void subst_clause(binding_list *theta, struct clause *c, int quote_level);
 
 int quote_term_unify(alma_quote *x, alma_quote *y, binding_list *theta);
 int term_unify(alma_term *x, alma_term *y, binding_list *theta);

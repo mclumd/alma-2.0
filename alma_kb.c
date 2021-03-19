@@ -431,6 +431,21 @@ void copy_clause_structure(clause *original, clause *copy) {
     copy->fif = NULL;
 }
 
+void copy_parents(clause *original, clause *copy) {
+  copy->parent_set_count = original->parent_set_count;
+  if (copy->parent_set_count > 0) {
+    copy->parents = malloc(sizeof(*copy->parents)*copy->parent_set_count);
+    for (int i = 0; i < copy->parent_set_count; i++) {
+      copy->parents[i].count = original->parents[i].count;
+      copy->parents[i].clauses = malloc(sizeof(*copy->parents[i].clauses)*copy->parents[i].count);
+      for (int j = 0; j < copy->parents[i].count; j++)
+        copy->parents[i].clauses[j] = original->parents[i].clauses[j];
+    }
+  }
+  else
+    copy->parents = NULL;
+}
+
 // Flattens trees into set of clauses (tommy_array must be initialized prior)
 // trees argument freed here
 void nodes_to_clauses(kb *collection, alma_node *trees, int num_trees, tommy_array *clauses, int print, kb_str *buf) {
@@ -1239,7 +1254,7 @@ static void lits_copy(int count, alma_function **lits, alma_function **cmp, bind
       alma_function *litcopy = malloc(sizeof(*litcopy));
       copy_alma_function(lits[i], litcopy);
       for (int j = 0; j < litcopy->term_count; j++)
-        subst(mgu, litcopy->terms+j, 0);
+        subst_term(mgu, litcopy->terms+j, 0);
       res_lits[*res_count] = litcopy;
       (*res_count)++;
     }
@@ -1357,41 +1372,41 @@ static void distrust_recursive(kb *collection, clause *c, clause *contra, kb_str
     remove_fif_tasks(collection, c);
 
   // Assert atomic distrusted() formula
-  clause *distrusted = malloc(sizeof(*distrusted));
-  distrusted->pos_count = 1;
-  distrusted->neg_count = 0;
-  distrusted->pos_lits = malloc(sizeof(*distrusted->pos_lits));
-  distrusted->pos_lits[0] = malloc(sizeof(*distrusted->pos_lits[0]));
-  distrusted->pos_lits[0]->name = malloc(strlen("distrusted")+1);
-  strcpy(distrusted->pos_lits[0]->name, "distrusted");
-  distrusted->pos_lits[0]->term_count = 2;
-  distrusted->pos_lits[0]->terms = malloc(sizeof(*distrusted->pos_lits[0]->terms) * 2);
-  distrusted->pos_lits[0]->terms[0].type = QUOTE;
-  distrusted->pos_lits[0]->terms[0].quote = malloc(sizeof(*distrusted->pos_lits[0]->terms[0].quote));
-  distrusted->pos_lits[0]->terms[0].quote->type = CLAUSE;
-  distrusted->pos_lits[0]->terms[0].quote->clause_quote = malloc(sizeof(*distrusted->pos_lits[0]->terms[0].quote->clause_quote));
-  copy_clause_structure(c, distrusted->pos_lits[0]->terms[0].quote->clause_quote);
-  distrusted->pos_lits[0]->terms[1].type = FUNCTION;
-  distrusted->pos_lits[0]->terms[1].function = malloc(sizeof(*distrusted->pos_lits[0]->terms[1].function));
-  distrusted->pos_lits[0]->terms[1].function->name = long_to_str(collection->time);
-  distrusted->pos_lits[0]->terms[1].function->term_count = 0;
-  distrusted->pos_lits[0]->terms[1].function->terms = NULL;
-  distrusted->neg_lits = 0;
-  distrusted->children_count = 0;
-  distrusted->parents = NULL;
-  distrusted->children = NULL;
-  distrusted->tag = NONE;
-  distrusted->fif = NULL;
-  set_variable_ids(distrusted, 1, 0, NULL, collection);
-  tommy_array_insert(&collection->new_clauses, distrusted);
+  clause *d = malloc(sizeof(*d));
+  d->pos_count = 1;
+  d->neg_count = 0;
+  d->pos_lits = malloc(sizeof(*d->pos_lits));
+  d->pos_lits[0] = malloc(sizeof(*d->pos_lits[0]));
+  d->pos_lits[0]->name = malloc(strlen("distrusted")+1);
+  strcpy(d->pos_lits[0]->name, "distrusted");
+  d->pos_lits[0]->term_count = 2;
+  d->pos_lits[0]->terms = malloc(sizeof(*d->pos_lits[0]->terms) * 2);
+  d->pos_lits[0]->terms[0].type = QUOTE;
+  d->pos_lits[0]->terms[0].quote = malloc(sizeof(*d->pos_lits[0]->terms[0].quote));
+  d->pos_lits[0]->terms[0].quote->type = CLAUSE;
+  d->pos_lits[0]->terms[0].quote->clause_quote = malloc(sizeof(*d->pos_lits[0]->terms[0].quote->clause_quote));
+  copy_clause_structure(c, d->pos_lits[0]->terms[0].quote->clause_quote);
+  d->pos_lits[0]->terms[1].type = FUNCTION;
+  d->pos_lits[0]->terms[1].function = malloc(sizeof(*d->pos_lits[0]->terms[1].function));
+  d->pos_lits[0]->terms[1].function->name = long_to_str(collection->time);
+  d->pos_lits[0]->terms[1].function->term_count = 0;
+  d->pos_lits[0]->terms[1].function->terms = NULL;
+  d->neg_lits = 0;
+  d->children_count = 0;
+  d->parents = NULL;
+  d->children = NULL;
+  d->tag = NONE;
+  d->fif = NULL;
+  set_variable_ids(d, 1, 0, NULL, collection);
+  tommy_array_insert(&collection->new_clauses, d);
 
   // Parent argument provided will be set for distrusted formula
   if (contra != NULL) {
-    distrusted->parent_set_count = 1;
-    distrusted->parents = malloc(sizeof(*distrusted->parents));
-    distrusted->parents[0].count = 1;
-    distrusted->parents[0].clauses = malloc(sizeof(*distrusted->parents[0].clauses));
-    distrusted->parents[0].clauses[0] = contra;
+    d->parent_set_count = 1;
+    d->parents = malloc(sizeof(*d->parents));
+    d->parents[0].count = 1;
+    d->parents[0].clauses = malloc(sizeof(*d->parents[0].clauses));
+    d->parents[0].clauses[0] = contra;
   }
 
   // Recursively distrust children that aren't distrusted already
@@ -1406,7 +1421,7 @@ static void distrust_recursive(kb *collection, clause *c, clause *contra, kb_str
 
 static void binding_subst(binding_list *target, binding_list *theta) {
   for (int i = 0; i < target->num_bindings; i++)
-    subst(theta, target->list[i].term, 0);
+    subst_term(theta, target->list[i].term, 0);
 }
 
 static binding_list* parent_binding_prepare(backsearch_task *bs, long parent_index, binding_list *theta) {
@@ -1481,12 +1496,7 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
                 binding_subst(x_bindings, parent_theta);
 
                 // Apply parent_theta to resolution result as well
-                for (int j = 0; j < res_result->pos_count; j++)
-                  for (int k = 0; k < res_result->pos_lits[j]->term_count; k++)
-                    subst(parent_theta, res_result->pos_lits[j]->terms+k, 0);
-                for (int j = 0; j < res_result->neg_count; j++)
-                  for (int k = 0; k < res_result->neg_lits[j]->term_count; k++)
-                    subst(parent_theta, res_result->neg_lits[j]->terms+k, 0);
+                subst_clause(parent_theta, res_result, 0);
 
                 cleanup_bindings(parent_theta);
               }
@@ -1526,14 +1536,14 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
                 answer->pos_lits[0] = malloc(sizeof(*answer->pos_lits[0]));
                 copy_alma_function(bs->target->pos_lits[0], answer->pos_lits[0]);
                 for (int j = 0; j < answer->pos_lits[0]->term_count; j++)
-                  subst(x_bindings, answer->pos_lits[0]->terms+j, 0);
+                  subst_term(x_bindings, answer->pos_lits[0]->terms+j, 0);
               }
               else {
                 answer->neg_lits = malloc(sizeof(*answer->neg_lits));
                 answer->neg_lits[0] = malloc(sizeof(*answer->neg_lits[0]));
                 copy_alma_function(bs->target->neg_lits[0], answer->neg_lits[0]);
                 for (int j = 0; j < answer->neg_lits[0]->term_count; j++)
-                  subst(x_bindings, answer->neg_lits[0]->terms+j, 0);
+                  subst_term(x_bindings, answer->neg_lits[0]->terms+j, 0);
               }
               set_variable_ids(answer, 0, 0, NULL, collection);
 
@@ -1678,6 +1688,13 @@ static void handle_distrust(kb *collection, clause *distrust, kb_str *buf) {
   }
 }
 
+static int all_digits(char *str) {
+  for (int i = 0; i < strlen(str); i++)
+    if (!isdigit(str[i]))
+      return 0;
+  return 1;
+}
+
 // Processing of new clauses: inserts non-duplicates derived, makes new tasks from
 // Special handling for true, reinstate, distrust, update
 void process_new_clauses(kb *collection, kb_str *buf) {
@@ -1687,7 +1704,8 @@ void process_new_clauses(kb *collection, kb_str *buf) {
     clause *c = tommy_array_get(&collection->new_clauses, i);
     clause *dupe = duplicate_check(collection, c, 0);
     int reinstate = c->pos_count == 1 && c->neg_count == 0 && strcmp(c->pos_lits[0]->name, "reinstate") == 0 && c->pos_lits[0]->term_count == 2;
-    if (dupe == NULL || reinstate) {
+    int update = c->pos_count == 1 && c->neg_count == 0 && strcmp(c->pos_lits[0]->name, "update") == 0 && c->pos_lits[0]->term_count == 2;
+    if (dupe == NULL || reinstate || update) {
       //      c->dirty_bit = (char) 1;
       if (c->pos_count == 1 && c->neg_count == 0) {
         if (strcmp(c->pos_lits[0]->name, "true") == 0)
@@ -1699,41 +1717,92 @@ void process_new_clauses(kb *collection, kb_str *buf) {
 
       // Special semantic operator: reinstate
       // Must be a singleton positive literal with binary args
-      // Reinstatement succeeds if have a quote of a distrusted sentence and matching timestep for when distrusted
+      // Reinstatement succeeds if given a quote matching distrusted formula(s) and matching timestep for when distrusted
       if (reinstate) {
-         alma_term *arg1 = c->pos_lits[0]->terms+0;
-         alma_term *arg2 = c->pos_lits[0]->terms+1;
+        alma_term *arg1 = c->pos_lits[0]->terms+0;
+        alma_term *arg2 = c->pos_lits[0]->terms+1;
 
-         if (arg1->type == QUOTE && arg1->quote->type == CLAUSE &&
-             arg2->type == FUNCTION && arg2->function->term_count == 0) {
-           char *index_str = arg2->function->name;
-           int digits = 1;
-           for (int j = 0; j < strlen(index_str); j++) {
-             if (!isdigit(index_str[j])) {
-               digits = 0;
-               break;
-             }
-           }
-           if (digits) {
-             clause *found = duplicate_check(collection, arg1->quote->clause_quote, 1);
-             if (found != NULL && found->distrusted == atol(index_str)) {
-               clause *reinstatement = malloc(sizeof(*reinstatement));
-               copy_clause_structure(found, reinstatement);
-               set_variable_ids(reinstatement, 1, 0, NULL, collection);
-               reinstatement->parent_set_count = found->parent_set_count;
-               if (reinstatement->parent_set_count > 0) {
-                 reinstatement->parents = malloc(sizeof(*reinstatement->parents)*reinstatement->parent_set_count);
-                 for (int j = 0; j < reinstatement->parent_set_count; j++) {
-                   reinstatement->parents[j].count = found->parents[j].count;
-                   reinstatement->parents[j].clauses = malloc(sizeof(*reinstatement->parents[j].clauses)*found->parents[j].count);
-                   for (int k = 0; k < reinstatement->parents[j].count; k++)
-                     reinstatement->parents[j].clauses[k] = found->parents[j].clauses[k];
-                 }
-               }
-               tommy_array_insert(&collection->new_clauses, reinstatement);
-             }
-           }
-         }
+        if (arg1->type == QUOTE && arg1->quote->type == CLAUSE &&
+            arg2->type == FUNCTION && arg2->function->term_count == 0 && all_digits(arg2->function->name)) {
+          void *mapping = clause_lookup(collection, arg1->quote->clause_quote);
+          if (mapping != NULL) {
+            alma_quote *q = malloc(sizeof(*q));
+            q->type = CLAUSE;
+
+            if_tag tag = arg1->quote->clause_quote->tag;
+            for (int j = mapping_num_clauses(mapping, tag)-1; j >= 0; j--) {
+              clause *jth = mapping_access(mapping, tag, j);
+              if (jth->distrusted == atol(arg2->function->name) &&
+                  jth->pos_count == arg1->quote->clause_quote->pos_count &&
+                  jth->neg_count == arg1->quote->clause_quote->neg_count) {
+                q->clause_quote = jth;
+                binding_list *theta = malloc(sizeof(*theta));
+                init_bindings(theta);
+
+                // Unification succeeded, create and add the reinstatement clause
+                if (quote_term_unify(arg1->quote, q, theta)) {
+                  clause *reinstatement = malloc(sizeof(*reinstatement));
+                  copy_clause_structure(jth, reinstatement);
+                  copy_parents(jth, reinstatement);
+                  subst_clause(theta, reinstatement, 0);
+                  set_variable_ids(reinstatement, 1, 0, NULL, collection);
+                  tommy_array_insert(&collection->new_clauses, reinstatement);
+                }
+                cleanup_bindings(theta);
+              }
+            }
+            free(q);
+          }
+        }
+      }
+      // Special semantic operator: update
+      // Must be a singleton positive literal with binary args
+      // Updating succeeds if given a quote matching KB formula(s) and a quote to update to
+      else if (update) {
+        alma_term *arg1 = c->pos_lits[0]->terms+0;
+        alma_term *arg2 = c->pos_lits[0]->terms+1;
+
+        if (arg1->type == QUOTE && arg1->quote->type == CLAUSE &&
+            arg2->type == QUOTE && arg2->quote->type == CLAUSE) {
+          void *mapping = clause_lookup(collection, arg1->quote->clause_quote);
+          if (mapping != NULL) {
+            alma_quote *q = malloc(sizeof(*q));
+            q->type = CLAUSE;
+
+            if_tag tag = arg1->quote->clause_quote->tag;
+            for (int j = mapping_num_clauses(mapping, tag)-1; j >= 0; j--) {
+              clause *jth = mapping_access(mapping, tag, j);
+              if (!jth->distrusted && jth->pos_count == arg1->quote->clause_quote->pos_count &&
+                  jth->neg_count == arg1->quote->clause_quote->neg_count) {
+                q->clause_quote = jth;
+                binding_list *theta = malloc(sizeof(*theta));
+                init_bindings(theta);
+
+                // Unification succeeded, create and add the updated clause and distrust original
+                if (quote_term_unify(arg1->quote, q, theta)) {
+                  clause *update_clause = malloc(sizeof(*update_clause));
+                  copy_clause_structure(arg2->quote->clause_quote, update_clause);
+
+                  // Parent set as update clause itself
+                  update_clause->parent_set_count = 1;
+                  update_clause->parents = malloc(sizeof(*update_clause->parents));
+                  update_clause->parents[0].count = 1;
+                  update_clause->parents[0].clauses = malloc(sizeof(*update_clause->parents[0].clauses));
+                  update_clause->parents[0].clauses[0] = c;
+
+                  subst_clause(theta, update_clause, 0);
+                  set_variable_ids(update_clause, 1, 0, NULL, collection);
+                  tommy_array_insert(&collection->new_clauses, update_clause);
+
+                  tommy_array_insert(&collection->distrusted, jth);
+                  tommy_array_insert(&collection->distrust_parents, c);
+                }
+                cleanup_bindings(theta);
+              }
+            }
+            free(q);
+          }
+        }
       }
       // Non-reinstate sentences generate tasks
       else {

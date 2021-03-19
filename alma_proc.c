@@ -102,7 +102,7 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *collection
   // Create copy and substitute based on bindings available
   alma_term *search_term = malloc(sizeof(*search_term));
   copy_alma_term(query, search_term);
-  subst(bindings, search_term, 0);
+  subst_term(bindings, search_term, 0);
 
   // Debug
   if (kind == POS_INT_SPEC)
@@ -226,11 +226,11 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time,
   // Create copies and substitute based on bindings available
   alma_term *ancestor_copy = malloc(sizeof(*ancestor_copy));
   copy_alma_term(ancestor, ancestor_copy);
-  subst(bindings, ancestor_copy, 0);
+  subst_term(bindings, ancestor_copy, 0);
 
   alma_term *descendant_copy = malloc(sizeof(*descendant_copy));
   copy_alma_term(descendant, descendant_copy);
-  subst(bindings, descendant_copy, 0);
+  subst_term(bindings, descendant_copy, 0);
 
   int has_ancestor = 0;
   if (ancestor_copy->type == QUOTE && ancestor_copy->quote->type == CLAUSE

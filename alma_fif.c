@@ -124,7 +124,7 @@ static clause* fif_conclude(kb *collection, fif_task *task, binding_list *bindin
   print_bindings(collection, bindings, 1, NULL);
 
   for (int k = 0; k < conc_func->term_count; k++)
-    subst(bindings, conc_func->terms+k, 0);
+    subst_term(bindings, conc_func->terms+k, 0);
 
   if (task->fif->fif->neg_conc) {
     conclusion->pos_count = 0;
