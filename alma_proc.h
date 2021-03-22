@@ -3,10 +3,16 @@
 
 #include "alma_formula.h"
 #include "alma_unify.h"
-#include "alma_kb.h"
 
-int proc_valid(alma_function *proc);
-int proc_bound_check(alma_function *proc, binding_list *bindings);
-int proc_run(alma_function *proc, binding_list *bindings, kb *alma);
+struct kb;
+
+typedef struct alma_proc {
+  char *name;
+  int arity;
+} alma_proc;
+
+int is_proc(alma_function *proc, struct kb *alma);
+int proc_bound_check(alma_function *proc, binding_list *bindings, struct kb *alma);
+int proc_run(alma_function *proc, binding_list *bindings, struct kb *alma);
 
 #endif

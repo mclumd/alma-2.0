@@ -7,6 +7,7 @@
 #include "alma_backsearch.h"
 #include "alma_fif.h"
 #include "alma_parser.h"
+#include "alma_proc.h"
 #include "alma_print.h"
 
 extern char logs_on;
@@ -62,6 +63,10 @@ void kb_init(kb **collection, char *file, char *agent, char *trialnum, char *log
   tommy_list_init(&collec->backsearch_tasks);
   tommy_array_init(&collec->distrusted);
   tommy_array_init(&collec->distrust_parents);
+
+  const alma_proc procs[10] = {{"neg_int", 1}, {"neg_int_spec", 1}, {"neg_int_gen", 1}, {"pos_int", 1}, {"pos_int_spec", 1},
+                   {"pos_int_gen", 1}, {"acquired", 2}, {"ancestor", 3}, {"less_than", 2}, {"quote_cons", 2}};
+  memcpy(collec->procs, procs, sizeof(procs));
 
   parse_init();
 

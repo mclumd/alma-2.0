@@ -1,9 +1,9 @@
 fif(and(foo,
-    proc(ancestor(quote(bar), quote(foo)), bound)),
+    ancestor(quote(bar), quote(foo), 8)),
     conclusion(yes_foo)).
 foo.
 fif(and(aaaa,
-    proc(ancestor(quote(a(`X)), quote(g(`X,`Y))), bound)),
+    ancestor(quote(a(`X)), quote(g(`X,`Y)), 8)),
     conclusion(a_anc(X,Y))).
 bar.
 fif(a(Q), conclusion(b(Q))).

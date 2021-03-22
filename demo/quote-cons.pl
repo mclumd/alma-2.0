@@ -1,4 +1,4 @@
-fif(and(foo(X), proc(quote_cons(X, Qx), bound(X))),
+fif(and(foo(X), quote_cons(X, Qx, bound(X))),
 conclusion(bar(Qx))).
 
 foo(baz(Y)).

@@ -1,5 +1,5 @@
 fif(and(now(T),
-    and(proc(neg_int(seen(Loc, Obj)), bound(T)),
+    and(neg_int(quote(seen(`Loc, `Obj))),
     and(empty(L),
-    proc(neg_int(doing(X)), bound)))),
+    neg_int(quote(doing(`X)))))),
     conclusion(canDo(move(L)))).

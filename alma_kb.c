@@ -1251,17 +1251,14 @@ static void lits_copy(int count, alma_function **lits, alma_function **cmp, bind
   for (int i = 0; i < count; i++) {
     // In calls cmp can be assigned to resolvent to not copy it
     if (cmp == NULL || lits[i] != *cmp) {
-      alma_function *litcopy = malloc(sizeof(*litcopy));
-      copy_alma_function(lits[i], litcopy);
-      for (int j = 0; j < litcopy->term_count; j++)
-        subst_term(mgu, litcopy->terms+j, 0);
-      res_lits[*res_count] = litcopy;
+      res_lits[*res_count] = malloc(sizeof(*res_lits[*res_count]));
+      copy_alma_function(lits[i], res_lits[*res_count]);
       (*res_count)++;
     }
   }
 }
 
-// Given an MGU, substitute on literals other than pair unified and make a single resulting clause
+// Given an MGU, make a single resulting clause without unified literal pair, then substitute
 static void resolve(res_task *t, binding_list *mgu, clause *result) {
   result->pos_count = 0;
   if (t->x->pos_count + t->y->pos_count - 1 > 0) {
@@ -1285,6 +1282,7 @@ static void resolve(res_task *t, binding_list *mgu, clause *result) {
 
   result->tag = NONE;
   result->fif = NULL;
+  subst_clause(mgu, result, 0);
 }
 
 char* long_to_str(long x) {

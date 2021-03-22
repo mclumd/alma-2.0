@@ -5,7 +5,7 @@
 #include "tommy.h"
 #include "alma_formula.h"
 #include "alma_unify.h"
-
+#include "alma_proc.h"
 // TODO: Further consider style of using **, esp. for pos_lits/neg_lits in clause
 
 struct parent_set;
@@ -75,6 +75,8 @@ typedef struct kb {
 
   long long variable_id_count;
   long next_index;
+
+  alma_proc procs[10];
 } kb;
 
 // Map used for entries in index_map
