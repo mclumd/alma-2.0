@@ -384,7 +384,7 @@ static int unify_quotes(alma_quote *x, alma_quote *y, void *x_parent, void *y_pa
     else {
       clause *c_x = x->clause_quote;
       clause *c_y = y->clause_quote;
-      if (c_x->tag != c_y->tag)
+      if (c_x->tag != c_y->tag || c_x->pos_count != c_y->pos_count || c_x->neg_count != c_y->neg_count)
         return 0;
       if (c_x->tag == FIF && c_x->fif->premise_count == c_y->fif->premise_count) {
         for (int i = 0; i < c_x->fif->premise_count; i++)

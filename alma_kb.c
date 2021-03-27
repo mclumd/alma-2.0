@@ -1700,10 +1700,10 @@ void process_new_clauses(kb *collection, kb_str *buf) {
 
   for (tommy_size_t i = 0; i < tommy_array_size(&collection->new_clauses); i++) {
     clause *c = tommy_array_get(&collection->new_clauses, i);
-    clause *dupe = duplicate_check(collection, c, 0);
+    clause *dupe;
     int reinstate = c->pos_count == 1 && c->neg_count == 0 && strcmp(c->pos_lits[0]->name, "reinstate") == 0 && c->pos_lits[0]->term_count == 2;
     int update = c->pos_count == 1 && c->neg_count == 0 && strcmp(c->pos_lits[0]->name, "update") == 0 && c->pos_lits[0]->term_count == 2;
-    if (dupe == NULL || reinstate || update) {
+    if (reinstate || (dupe = duplicate_check(collection, c, 0)) == NULL) {
       //      c->dirty_bit = (char) 1;
       if (c->pos_count == 1 && c->neg_count == 0) {
         if (strcmp(c->pos_lits[0]->name, "true") == 0)
