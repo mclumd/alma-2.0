@@ -533,16 +533,21 @@ static int unify_quasiquote(alma_term *qqterm, alma_term *x, void *qq_parent, vo
 // Unification function based on algorithm in AIMA book
 // Modified for quotation and quasi-quootation
 static int unify(alma_term *x, alma_term *y, void *x_parent, void *y_parent, int x_quote_lvl, int y_quote_lvl, binding_list *theta) {
-  // Unification succeeds without changing theta if trying to unify variable with itself
+  // Cases where unification succeeds without changing theta
+  // 1. If trying to unify variable with itself
   if (x->type == VARIABLE && y->type == VARIABLE
       && x->variable->id == y->variable->id) {
     return 1;
   }
-  // Unification succeeds without changing theta if trying to unify quasi-quoted variable with itself
+  // 2. If trying to unify quasi-quoted variable with itself
   else if (x->type == QUASIQUOTE && y->type == QUASIQUOTE
       && x->quasiquote->variable->id == y->quasiquote->variable->id) {
     return 1;
   }
+  // 3. If trying to unify variable with quasi-quoted variable of same ID (i.e. also with itself)
+  else if ((x->type == VARIABLE && y->type == QUASIQUOTE && x->variable->id == y->quasiquote->variable->id)
+      || (x->type == QUASIQUOTE && y->type == VARIABLE && x->quasiquote->variable->id == y->variable->id))
+    return 1;
   else if (x->type == VARIABLE) {
     return unify_var(x, y, x_parent, y_parent, x_quote_lvl, y_quote_lvl, theta);
   }

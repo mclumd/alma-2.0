@@ -621,9 +621,9 @@ static int quotes_differ(alma_quote *x, alma_quote *y, var_match_set *matches, i
         return 1;
       if (c_x->tag == FIF) {
         for (int i = 0; i < c_x->fif->premise_count; i++)
-          if (functions_differ(fif_access(c_x, i), fif_access(c_y, i), matches, 0))
+          if (functions_differ(fif_access(c_x, i), fif_access(c_y, i), matches, quote_level))
             return 1;
-        if (functions_differ(c_x->fif->conclusion, c_y->fif->conclusion, matches, 0))
+        if (functions_differ(c_x->fif->conclusion, c_y->fif->conclusion, matches, quote_level))
           return 1;
       }
       else {
