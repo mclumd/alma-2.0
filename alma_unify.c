@@ -288,125 +288,6 @@ static int occurs_check(binding_list *theta, alma_variable *var, alma_term *x) {
   return 0;
 }
 
-
-// Unification functions
-
-static int unify(alma_term *x, alma_term *y, void *x_parent, void *y_parent, int x_quote_lvl, int y_quote_lvl, binding_list *theta);
-static void add_binding_detailed(binding_list *theta, alma_variable *var, int var_quote_lvl, int var_qq_lvl, alma_term *term, int term_quote_lvl, void *parent, int copy_term);
-
-static int unify_var(alma_term *varterm, alma_term *x, void *var_parent, void *x_parent, int var_quote_lvl, int x_quote_lvl, binding_list *theta) {
-  alma_variable *var = varterm->variable;
-  binding *res = bindings_contain(theta, var);
-  // If var is a bound variable, unify what it's bound to with x
-  if (res != NULL) {
-    return unify(res->term, x, res->term_parent, x_parent, res->term_quote_lvl, x_quote_lvl, theta);
-  }
-  // If x is a bound variable, unify var with what x is bound to
-  else if (x->type == VARIABLE && (res = bindings_contain(theta, x->variable)) != NULL) {
-    return unify(varterm, res->term, var_parent, res->term_parent, var_quote_lvl, res->term_quote_lvl, theta);
-  }
-  // Occurs check to avoid infinite regress in bindings
-  else if (occurs_check(theta, var, x)) {
-    return 0;
-  }
-  // No recursive calls left, check conditions and potentially make binding
-  else {
-    // Cases to check for variables within quotes that don't escape
-    // TODO: note this for now assumes no quasi-quotation
-    if (var_quote_lvl > 0 && x_quote_lvl > 0 && x->type == VARIABLE) {
-      // Check for match of var and x being consistent with existing matching
-      int check = var_match_consistent(theta->quoted_var_matches, x_quote_lvl, x->variable, var);
-      if (var_quote_lvl != x_quote_lvl)
-        check = check && var_match_consistent(theta->quoted_var_matches, var_quote_lvl, x->variable, var);
-      if (!check) {
-        // Debug
-        printf("Var matching not consistent if matching %lld with %lld\n", var->id, x->variable->id);
-        return 0;
-      }
-
-      // Variables which are from the same (non-null) parent cannot be unified
-      if (var_parent == x_parent && var_parent != NULL) {
-        // Debug
-        printf("Same parent for quoted vars %lld and %lld; unification failure\n", var->id, x->variable->id);
-        return 0;
-      }
-    }
-
-    add_binding_detailed(theta, var, var_quote_lvl, 0, x, x_quote_lvl, x_parent, 1);
-    return 1;
-  }
-}
-
-static int unify_quotes(alma_quote *x, alma_quote *y, void *x_parent, void *y_parent, int x_quote_lvl, int y_quote_lvl, binding_list *theta);
-static int unify_quasiquote(alma_term *qqterm, alma_term *x, void *qq_parent, void *x_parent, int qq_quote_lvl, int x_quote_lvl, binding_list *theta);
-
-static int unify_quote_func(alma_function *x, alma_function *y, void *x_parent, void *y_parent, int x_quote_lvl, int y_quote_lvl, binding_list *theta) {
-  if (strcmp(x->name, y->name) == 0 && x->term_count == y->term_count) {
-    for (int i = 0; i < x->term_count; i++) {
-      alma_term *x_t = x->terms+i;
-      alma_term *y_t = y->terms+i;
-      if (x_t->type == QUASIQUOTE) {
-        if (!unify_quasiquote(x_t, y_t, x_parent, y_parent, x_quote_lvl, y_quote_lvl, theta))
-          return 0;
-      }
-      else if (y_t->type == QUASIQUOTE) {
-        if (!unify_quasiquote(y_t, x_t, y_parent, x_parent, y_quote_lvl, x_quote_lvl, theta))
-          return 0;
-      }
-      else if (x_t->type == y_t->type) {
-        if (x_t->type == VARIABLE) {
-          if (!unify_var(x_t, y_t, x_parent, y_parent, x_quote_lvl, y_quote_lvl, theta))
-            return 0;
-        }
-        else if (x_t->type == FUNCTION) {
-          if (!unify_quote_func(x_t->function, y_t->function, x_parent, y_parent, x_quote_lvl, y_quote_lvl, theta))
-            return 0;
-        }
-        else if (x_t->type == QUOTE) {
-          if (!unify_quotes(x_t->quote, y_t->quote, x_parent, y_parent, x_quote_lvl+1, y_quote_lvl+1, theta))
-            return 0;
-        }
-      }
-      else
-        return 0;
-    }
-    return 1;
-  }
-  return 0;
-}
-
-static int unify_quotes(alma_quote *x, alma_quote *y, void *x_parent, void *y_parent, int x_quote_lvl, int y_quote_lvl, binding_list *theta) {
-  if (x->type == y->type) {
-    if (x->type == SENTENCE) {
-      // TODO, find way to deal with raw sentence quote unification
-      // or otherwise, noted here as a gap
-    }
-    else {
-      clause *c_x = x->clause_quote;
-      clause *c_y = y->clause_quote;
-      if (c_x->tag != c_y->tag || c_x->pos_count != c_y->pos_count || c_x->neg_count != c_y->neg_count)
-        return 0;
-      if (c_x->tag == FIF && c_x->fif->premise_count == c_y->fif->premise_count) {
-        for (int i = 0; i < c_x->fif->premise_count; i++)
-          if (!unify_quote_func(fif_access(c_x, i), fif_access(c_y, i), x_parent, y_parent, x_quote_lvl, y_quote_lvl, theta))
-            return 0;
-        if (!unify_quote_func(c_x->fif->conclusion, c_y->fif->conclusion, x_parent, y_parent, x_quote_lvl, y_quote_lvl, theta))
-          return 0;
-      }
-      else {
-        for (int i = 0; i < c_x->pos_count; i++)
-          if (!unify_quote_func(c_x->pos_lits[i], c_y->pos_lits[i], x_parent, y_parent, x_quote_lvl, y_quote_lvl, theta))
-            return 0;
-        for (int i = 0; i < c_x->neg_count; i++)
-          if (!unify_quote_func(c_x->neg_lits[i], c_y->neg_lits[i], x_parent, y_parent, x_quote_lvl, y_quote_lvl, theta))
-            return 0;
-      }
-      return 1;
-    }
-  }
-  return 0;
-}
-
 // Non-escaping variables must occur in *effective* quotation level above must_exceed_lvl
 // Thus, checks for location of quantifiers inside
 // Non-escaping variables violating above condition have quantifiers outside of the arg term; in such cases return 1
@@ -439,6 +320,12 @@ static int var_insuff_quoted(alma_term *term, int must_exceed_lvl, int quote_lev
   return 0;
 }
 
+
+// Unification functions
+
+static int unify(alma_term *x, alma_term *y, void *x_parent, void *y_parent, int x_quote_lvl, int y_quote_lvl, binding_list *theta);
+static void add_binding_detailed(binding_list *theta, alma_variable *var, int var_quote_lvl, int var_qq_lvl, alma_term *term, int term_quote_lvl, void *parent, int copy_term);
+
 static int unify_quasiquote(alma_term *qqterm, alma_term *x, void *qq_parent, void *x_parent, int qq_quote_lvl, int x_quote_lvl, binding_list *theta) {
   alma_quasiquote *qq = qqterm->quasiquote;
 
@@ -460,9 +347,9 @@ static int unify_quasiquote(alma_term *qqterm, alma_term *x, void *qq_parent, vo
         return 0;
       }
       else {
-        int check = var_match_consistent(theta->quoted_var_matches, qq_quote_lvl, qq->variable, x->quasiquote->variable);
+        int check = var_match_consistent(theta->quoted_var_matches, qq_quote_lvl - qq->backtick_count, qq->variable, x->quasiquote->variable);
         if (qq_quote_lvl != x_quote_lvl)
-          check = check && var_match_consistent(theta->quoted_var_matches, x_quote_lvl, qq->variable, x->quasiquote->variable);
+          check = check && var_match_consistent(theta->quoted_var_matches, x_quote_lvl - x->quasiquote->backtick_count, qq->variable, x->quasiquote->variable);
         if (!check) {
           // Debug
           printf("Var matching not consistent if matching %lld with %lld\n", qq->variable->id, x->quasiquote->variable->id);
@@ -530,6 +417,97 @@ static int unify_quasiquote(alma_term *qqterm, alma_term *x, void *qq_parent, vo
   return 0;
 }
 
+// X cannot be quasi-quotation due to ordering of cases in unify()
+static int unify_var(alma_term *varterm, alma_term *x, void *var_parent, void *x_parent, int var_quote_lvl, int x_quote_lvl, binding_list *theta) {
+  alma_variable *var = varterm->variable;
+  binding *res = bindings_contain(theta, var);
+  // If the variable is quoted, can only unify with another variable
+  if (var_quote_lvl > 0 && x->type != VARIABLE)
+    return 0;
+  // If var is a bound variable, unify what it's bound to with x
+  if (res != NULL) {
+    return unify(res->term, x, res->term_parent, x_parent, res->term_quote_lvl, x_quote_lvl, theta);
+  }
+  // If x is a bound variable, unify var with what x is bound to
+  else if (x->type == VARIABLE && (res = bindings_contain(theta, x->variable)) != NULL) {
+    return unify(varterm, res->term, var_parent, res->term_parent, var_quote_lvl, res->term_quote_lvl, theta);
+  }
+  // Occurs check to avoid infinite regress in bindings
+  else if (occurs_check(theta, var, x)) {
+    return 0;
+  }
+  // No recursive calls left, check conditions and potentially make binding
+  else {
+    // Cases to check for variables within quotes that don't escape
+    if (var_quote_lvl > 0 && x_quote_lvl > 0 && x->type == VARIABLE) {
+
+      // Check for match of var and x being consistent with existing matching
+      int check = var_match_consistent(theta->quoted_var_matches, x_quote_lvl, x->variable, var);
+      if (var_quote_lvl != x_quote_lvl)
+        check = check && var_match_consistent(theta->quoted_var_matches, var_quote_lvl, x->variable, var);
+      if (!check) {
+        // Debug
+        printf("Var matching not consistent if matching %lld with %lld\n", var->id, x->variable->id);
+        return 0;
+      }
+
+      // Variables which are from the same (non-null) parent cannot be unified
+      if (var_parent == x_parent && var_parent != NULL) {
+        // Debug
+        printf("Same parent for quoted vars %lld and %lld; unification failure\n", var->id, x->variable->id);
+        return 0;
+      }
+    }
+
+    add_binding_detailed(theta, var, var_quote_lvl, 0, x, x_quote_lvl, x_parent, 1);
+    return 1;
+  }
+}
+
+static int unify_function(alma_function *x, alma_function *y, void *x_parent, void *y_parent, int x_quote_lvl, int y_quote_lvl, binding_list *theta) {
+  if (x->term_count == y->term_count && strcmp(x->name, y->name) == 0) {
+    for (int i = 0; i < x->term_count; i++) {
+      // Bindings build up over repeated calls
+      if (!unify(x->terms+i, y->terms+i, x_parent, y_parent, x_quote_lvl, y_quote_lvl, theta))
+        return 0;
+    }
+    return 1;
+  }
+  return 0;
+}
+
+static int unify_quotes(alma_quote *x, alma_quote *y, void *x_parent, void *y_parent, int x_quote_lvl, int y_quote_lvl, binding_list *theta) {
+  if (x->type == y->type) {
+    if (x->type == SENTENCE) {
+      // TODO, find way to deal with raw sentence quote unification
+      // or otherwise, noted here as a gap
+    }
+    else {
+      clause *c_x = x->clause_quote;
+      clause *c_y = y->clause_quote;
+      if (c_x->tag != c_y->tag || c_x->pos_count != c_y->pos_count || c_x->neg_count != c_y->neg_count)
+        return 0;
+      if (c_x->tag == FIF && c_x->fif->premise_count == c_y->fif->premise_count) {
+        for (int i = 0; i < c_x->fif->premise_count; i++)
+          if (!unify_function(fif_access(c_x, i), fif_access(c_y, i), x_parent, y_parent, x_quote_lvl, y_quote_lvl, theta))
+            return 0;
+        if (!unify_function(c_x->fif->conclusion, c_y->fif->conclusion, x_parent, y_parent, x_quote_lvl, y_quote_lvl, theta))
+          return 0;
+      }
+      else {
+        for (int i = 0; i < c_x->pos_count; i++)
+          if (!unify_function(c_x->pos_lits[i], c_y->pos_lits[i], x_parent, y_parent, x_quote_lvl, y_quote_lvl, theta))
+            return 0;
+        for (int i = 0; i < c_x->neg_count; i++)
+          if (!unify_function(c_x->neg_lits[i], c_y->neg_lits[i], x_parent, y_parent, x_quote_lvl, y_quote_lvl, theta))
+            return 0;
+      }
+      return 1;
+    }
+  }
+  return 0;
+}
+
 // Unification function based on algorithm in AIMA book
 // Modified for quotation and quasi-quootation
 static int unify(alma_term *x, alma_term *y, void *x_parent, void *y_parent, int x_quote_lvl, int y_quote_lvl, binding_list *theta) {
@@ -548,25 +526,20 @@ static int unify(alma_term *x, alma_term *y, void *x_parent, void *y_parent, int
   else if ((x->type == VARIABLE && y->type == QUASIQUOTE && x->variable->id == y->quasiquote->variable->id)
       || (x->type == QUASIQUOTE && y->type == VARIABLE && x->quasiquote->variable->id == y->variable->id))
     return 1;
-  else if (x->type == VARIABLE) {
-    return unify_var(x, y, x_parent, y_parent, x_quote_lvl, y_quote_lvl, theta);
-  }
-  else if (y->type == VARIABLE) {
-    return unify_var(y, x, y_parent, x_parent, x_quote_lvl, y_quote_lvl, theta);
-  }
   else if (x->type == QUASIQUOTE) {
     return unify_quasiquote(x, y, x_parent, y_parent, x_quote_lvl, y_quote_lvl, theta);
   }
   else if (y->type == QUASIQUOTE) {
     return unify_quasiquote(y, x, y_parent, x_parent, x_quote_lvl, y_quote_lvl, theta);
   }
-  else if (x->type == FUNCTION && y->type == FUNCTION && strcmp(x->function->name, y->function->name) == 0
-          && x->function->term_count == y->function->term_count) {
-    for (int i = 0; i < x->function->term_count; i++) {
-      if (!unify(x->function->terms+i, y->function->terms+i, x_parent, y_parent, x_quote_lvl, y_quote_lvl, theta))
-        return 0;
-    }
-    return 1;
+  else if (x->type == VARIABLE) {
+    return unify_var(x, y, x_parent, y_parent, x_quote_lvl, y_quote_lvl, theta);
+  }
+  else if (y->type == VARIABLE) {
+    return unify_var(y, x, y_parent, x_parent, x_quote_lvl, y_quote_lvl, theta);
+  }
+  else if (x->type == FUNCTION && y->type == FUNCTION) {
+    return unify_function(x->function, y->function, x_parent, y_parent, x_quote_lvl, y_quote_lvl, theta);
   }
   else if (x->type == QUOTE && y->type == QUOTE) {
     return unify_quotes(x->quote, y->quote, x_parent, y_parent, x_quote_lvl+1, y_quote_lvl+1, theta);
@@ -586,24 +559,16 @@ int term_unify(alma_term *x, alma_term *y, binding_list *theta) {
   return unify(x, y, x, y, 0, 0, theta);
 }
 
+// Non-static function called externally by alma
 // Bindings need to COPY variables/terms in formulas, not alias -- handle carefully
+// All bindings must be cleaned up by caller
 int pred_unify(alma_function *x, alma_function *y, binding_list *theta) {
-  if (x->term_count != y->term_count || strcmp(x->name, y->name) != 0) {
+  int ret = unify_function(x, y, x, y, 0, 0, theta);
+  if (ret)
+    printf("Unification success!\n");
+  else
     printf("Unification failure\n");
-    return 0;
-  }
-
-  for (int i = 0; i < x->term_count; i++) {
-    // Bindings build up over repeated calls
-    if (!unify(x->terms+i, y->terms+i, x, y, 0, 0, theta)) {
-      printf("Unification failure\n");
-      return 0;
-    }
-  }
-
-  // Unification suceeded; bindings must be cleaned up by caller
-  printf("Unification success!\n");
-  return 1;
+  return ret;
 }
 
 
