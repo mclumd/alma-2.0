@@ -203,22 +203,18 @@ void print_matches(kb *collection, var_match_set *v, kb_str *buf){
 
 void print_bindings(kb *collection, binding_list *theta, int print_all, kb_str *buf) {
   for (int i = 0; i < theta->num_bindings; i++) {
-    if (theta->list[i].var_quasi_quote_lvl > 0) {
-      char *backticks = malloc(theta->list[i].var_quasi_quote_lvl+1);
-      for (int j = 0; j < theta->list[i].var_quasi_quote_lvl; j++)
+    if (theta->list[i].quasi_quote_lvl > 0) {
+      char *backticks = malloc(theta->list[i].quasi_quote_lvl+1);
+      for (int j = 0; j < theta->list[i].quasi_quote_lvl; j++)
         backticks[j] = '`';
-      backticks[theta->list[i].var_quasi_quote_lvl] = '\0';
+      backticks[theta->list[i].quasi_quote_lvl] = '\0';
       tee_alt("%s", collection, buf, backticks);
     }
     tee_alt("%s%lld", collection, buf, theta->list[i].var->name, theta->list[i].var->id);
-    if (print_all) {
-      tee_alt(" (%d quote)", collection, buf, theta->list[i].var_quote_lvl);
-    }
     tee_alt(" / ", collection, buf);
     alma_term_print(collection, theta->list[i].term, buf);
     if (print_all) {
-      //tee_alt(" (%d quote, %p parent)", collection, buf, theta->list[i].term_quote_lvl, theta->list[i].term_parent);
-      tee_alt(" (%d quote)", collection, buf, theta->list[i].term_quote_lvl);
+      tee_alt(" (%d quote)", collection, buf, theta->list[i].quote_lvl);
     }
     if (i < theta->num_bindings-1) {
       if (print_all)
