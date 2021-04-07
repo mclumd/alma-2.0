@@ -121,9 +121,6 @@ static clause* fif_conclude(kb *collection, fif_task *task, binding_list *bindin
   alma_function *conc_func = malloc(sizeof(*conc_func));
   copy_alma_function(task->fif->fif->conclusion, conc_func);
 
-  // Debug
-  print_bindings(collection, bindings, 1, NULL);
-
   for (int k = 0; k < conc_func->term_count; k++)
     subst_term(bindings, conc_func->terms+k, 0);
 
@@ -216,6 +213,8 @@ static void fif_task_unify_loop(kb *collection, tommy_list *tasks, tommy_list *s
             // Debug
             print_unify(collection, next_func, next_task->fif->index, to_unify, jth->index, buf);
             if (pred_unify(next_func, to_unify, copy)) {
+              // Debug
+              print_bindings(collection, copy, 1, NULL);
               // If task is now completed, obtain resulting clause and insert to new_clauses
               if (next_task->premises_done + 1 == next_task->fif->fif->premise_count) {
                 if (fif_unified_distrusted(collection, next_task)) {
@@ -303,6 +302,8 @@ static void process_fif_task_mapping(kb *collection, fif_task_mapping *entry, to
               // Debug
               print_unify(collection, to_unify_func, unify_target->index, fif_access(f->fif, f->premises_done), f->fif->index, buf);
               if (pred_unify(fif_access(f->fif, f->premises_done), to_unify_func, f->bindings)) {
+                // Debug
+                print_bindings(collection, f->bindings, 1, NULL);
                 // If task is now completed, obtain resulting clause and insert to new_clauses
                 if (f->premises_done + 1 == f->fif->fif->premise_count) {
                   f->premises_done++;
