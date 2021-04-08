@@ -201,7 +201,7 @@ void print_matches(kb *collection, var_match_set *v, kb_str *buf){
   }
 }
 
-void print_bindings(kb *collection, binding_list *theta, int print_all, kb_str *buf) {
+void print_bindings(kb *collection, binding_list *theta, int print_all, int last_newline, kb_str *buf) {
   for (int i = 0; i < theta->num_bindings; i++) {
     if (theta->list[i].quasi_quote_lvl > 0) {
       char *backticks = malloc(theta->list[i].quasi_quote_lvl+1);
@@ -213,9 +213,8 @@ void print_bindings(kb *collection, binding_list *theta, int print_all, kb_str *
     tee_alt("%s%lld", collection, buf, theta->list[i].var->name, theta->list[i].var->id);
     tee_alt(" / ", collection, buf);
     alma_term_print(collection, theta->list[i].term, buf);
-    if (print_all) {
-      tee_alt(" (%d quote)", collection, buf, theta->list[i].quote_lvl);
-    }
+    tee_alt(" (%d quote)", collection, buf, theta->list[i].quote_lvl);
+
     if (i < theta->num_bindings-1) {
       if (print_all)
         tee_alt("\n", collection, buf);
@@ -227,8 +226,9 @@ void print_bindings(kb *collection, binding_list *theta, int print_all, kb_str *
     if (theta->num_bindings > 0)
       tee_alt("\n", collection, buf);
     print_matches(collection, theta->quoted_var_matches, buf);
-    tee_alt("\n", collection, buf);
   }
+  if (last_newline)
+    tee_alt("\n", collection, buf);
 }
 
 void tee_alt(char const *content, ...) {

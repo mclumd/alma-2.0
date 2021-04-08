@@ -1592,7 +1592,7 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
           }
         }
         // Debug
-        print_bindings(collection, theta, 1, buf);
+        print_bindings(collection, theta, 1, 1, buf);
         cleanup:
         cleanup_bindings(theta);
       }
