@@ -23,8 +23,8 @@ int release_matches(var_match_set *v, int retval);
 
 typedef struct binding {
   alma_variable *var;
-  int quote_lvl;
-  int quasi_quote_lvl;
+  int quote_level;
+  int quasi_quote_level;
   alma_term *term;
   // Parent literal/term pointer to track overall source of term in binding
   void *term_parent;
@@ -37,8 +37,8 @@ typedef struct binding_list {
 } binding_list;
 
 struct clause;
-void increment_quote_level(struct clause *c, int quote_lvl);
-void decrement_quote_level(struct clause *c, int quote_lvl);
+void increment_quote_level(struct clause *c, int quote_level);
+void decrement_quote_level(struct clause *c, int quote_level);
 void increment_clause_quote_level_paired(struct clause *c, struct clause *query, int quote_lvl);
 
 binding* bindings_contain(binding_list *theta, alma_variable *var);

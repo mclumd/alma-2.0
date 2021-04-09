@@ -203,17 +203,18 @@ void print_matches(kb *collection, var_match_set *v, kb_str *buf){
 
 void print_bindings(kb *collection, binding_list *theta, int print_all, int last_newline, kb_str *buf) {
   for (int i = 0; i < theta->num_bindings; i++) {
-    if (theta->list[i].quasi_quote_lvl > 0) {
-      char *backticks = malloc(theta->list[i].quasi_quote_lvl+1);
-      for (int j = 0; j < theta->list[i].quasi_quote_lvl; j++)
+    if (theta->list[i].quasi_quote_level > 0) {
+      char *backticks = malloc(theta->list[i].quasi_quote_level+1);
+      for (int j = 0; j < theta->list[i].quasi_quote_level; j++)
         backticks[j] = '`';
-      backticks[theta->list[i].quasi_quote_lvl] = '\0';
+      backticks[theta->list[i].quasi_quote_level] = '\0';
       tee_alt("%s", collection, buf, backticks);
+      free(backticks);
     }
     tee_alt("%s%lld", collection, buf, theta->list[i].var->name, theta->list[i].var->id);
     tee_alt(" / ", collection, buf);
     alma_term_print(collection, theta->list[i].term, buf);
-    tee_alt(" (%d quote)", collection, buf, theta->list[i].quote_lvl);
+    tee_alt(" (%d quote)", collection, buf, theta->list[i].quote_level);
 
     if (i < theta->num_bindings-1) {
       if (print_all)
