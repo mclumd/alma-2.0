@@ -114,47 +114,25 @@ static int fif_unified_distrusted(kb *collection, fif_task *task) {
 }
 
 // Called when each premise of a fif is satisfied
-static clause* fif_conclude(kb *collection, fif_task *task, binding_list *bindings) {
-  clause *conclusion = malloc(sizeof(*conclusion));
+static void fif_conclude(kb *collection, fif_task *task, binding_list *bindings, tommy_array *new_clauses) {
+  for (int i = 0; i < task->fif->fif->num_conclusions; i++) {
+    clause *conclusion = malloc(sizeof(*conclusion));
+    copy_clause_structure(task->fif->fif->conclusions[i], conclusion);
+    conclusion->parent_set_count = 1;
+    conclusion->parents = malloc(sizeof(*conclusion->parents));
+    conclusion->parents[0].count = task->num_unified + 1;
+    conclusion->parents[0].clauses = malloc(sizeof(*conclusion->parents[0].clauses) * conclusion->parents[0].count);
+    for (int j = 0; j < conclusion->parents[0].count-1; j++) {
+      conclusion->parents[0].clauses[j] = task->unified_clauses[j];
+    }
+    conclusion->parents[0].clauses[conclusion->parents[0].count-1] = task->fif;
 
-  // Using task's overall bindings, obtain proper conclusion predicate
-  alma_function *conc_func = malloc(sizeof(*conc_func));
-  copy_alma_function(task->fif->fif->conclusion, conc_func);
+    // Using task's overall bindings, obtain proper conclusion clause
+    subst_clause(bindings, conclusion, 0);
 
-  for (int k = 0; k < conc_func->term_count; k++)
-    subst_term(bindings, conc_func->terms+k, 0);
-
-  if (task->fif->fif->neg_conc) {
-    conclusion->pos_count = 0;
-    conclusion->pos_lits = NULL;
-    conclusion->neg_count = 1;
-    conclusion->neg_lits = malloc(sizeof(*conclusion->pos_lits));
-    conclusion->neg_lits[0] = conc_func;
+    set_variable_ids(conclusion, 1, 0, NULL, collection);
+    tommy_array_insert(new_clauses, conclusion);
   }
-  else {
-    conclusion->pos_count = 1;
-    conclusion->pos_lits = malloc(sizeof(*conclusion->pos_lits));
-    conclusion->pos_lits[0] = conc_func;
-    conclusion->neg_count = 0;
-    conclusion->neg_lits = NULL;
-  }
-
-  conclusion->parent_set_count = 1;
-  conclusion->parents = malloc(sizeof(*conclusion->parents));
-  conclusion->parents[0].count = task->num_unified + 1;
-  conclusion->parents[0].clauses = malloc(sizeof(*conclusion->parents[0].clauses) * conclusion->parents[0].count);
-  for (int i = 0; i < conclusion->parents[0].count-1; i++) {
-    conclusion->parents[0].clauses[i] = task->unified_clauses[i];
-  }
-  conclusion->parents[0].clauses[conclusion->parents[0].count-1] = task->fif;
-  conclusion->children_count = 0;
-  conclusion->children = NULL;
-  conclusion->tag = NONE;
-  conclusion->fif = NULL;
-
-  set_variable_ids(conclusion, 1, 0, NULL, collection);
-
-  return conclusion;
 }
 
 // Continues attempting to unify from tasks set
@@ -182,7 +160,7 @@ static void fif_task_unify_loop(kb *collection, tommy_list *tasks, tommy_list *s
         next_task->premises_done++;
         if (next_task->premises_done == next_task->fif->fif->premise_count) {
           if (!fif_unified_distrusted(collection, next_task))
-            tommy_array_insert(&collection->new_clauses, fif_conclude(collection, next_task, next_task->bindings));
+            fif_conclude(collection, next_task, next_task->bindings, &collection->new_clauses);
           free_fif_task(next_task);
         }
         // If incomplete modify current task for results to continue processing
@@ -234,7 +212,7 @@ static void fif_task_unify_loop(kb *collection, tommy_list *tasks, tommy_list *s
                   next_task->premises_done++;
                   next_task->unified_clauses = realloc(next_task->unified_clauses, sizeof(*next_task->unified_clauses)*next_task->num_unified);
                   next_task->unified_clauses[next_task->num_unified-1] = jth;
-                  tommy_array_insert(&collection->new_clauses, fif_conclude(collection, next_task, copy));
+                  fif_conclude(collection, next_task, copy, &collection->new_clauses);
                   cleanup_bindings(copy);
                   next_task->num_unified--;
                   next_task->premises_done--;
@@ -316,7 +294,7 @@ static void process_fif_task_mapping(kb *collection, fif_task_mapping *entry, to
                   f->num_unified++;
                   f->unified_clauses = realloc(f->unified_clauses, sizeof(*f->unified_clauses)*f->num_unified);
                   f->unified_clauses[f->num_unified-1] = unify_target;
-                  tommy_array_insert(&collection->new_clauses, fif_conclude(collection, f, f->bindings));
+                  fif_conclude(collection, f, f->bindings, &collection->new_clauses);
                   cleanup_bindings(f->bindings);
                   f->premises_done--;
                   f->num_unified--;
@@ -372,7 +350,7 @@ static void process_fif_task_mapping(kb *collection, fif_task_mapping *entry, to
             }
             else {
               f->premises_done++;
-              tommy_array_insert(&collection->new_clauses, fif_conclude(collection, f, f->bindings));
+              fif_conclude(collection, f, f->bindings, &collection->new_clauses);
               cleanup_bindings(f->bindings);
               f->bindings = copy;
               f->premises_done--;

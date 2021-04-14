@@ -79,6 +79,11 @@ static void adjust_clause_quote_level(clause *c, int quote_level, int new_level)
   for (int i = 0; i < c->neg_count; i++)
     for (int j = 0; j < c->neg_lits[i]->term_count; j++)
       adjust_quasiquote_level(c->neg_lits[i]->terms+j, quote_level, new_level);
+  if (c->tag == FIF) {
+    for (int i = 0; i < c->fif->num_conclusions; i++) {
+      adjust_clause_quote_level(c->fif->conclusions[i], quote_level, new_level);
+    }
+  }
 }
 
 void increment_quote_level(clause *c, int quote_level) {
@@ -194,6 +199,10 @@ void increment_clause_quote_level_paired(clause *c, clause *query, int quote_lev
       alma_term *query_term = (query == NULL) ? NULL : query->neg_lits[i]->terms+j;
       increment_quasiquote_level_paired(c->neg_lits[i]->terms+j, query_term, quote_level);
     }
+  if (c->tag == FIF) {
+    for (int i = 0; i < c->fif->num_conclusions; i++)
+      increment_clause_quote_level_paired(c->fif->conclusions[i], query, quote_level);
+  }
 }
 
 
@@ -246,6 +255,9 @@ void subst_clause(binding_list *theta, clause *c, int quote_level) {
     subst_func(theta, c->pos_lits[i], quote_level);
   for (int i = 0; i < c->neg_count; i++)
     subst_func(theta, c->neg_lits[i], quote_level);
+  if (c->tag == FIF)
+    for (int i = 0; i < c->fif->num_conclusions; i++)
+      subst_clause(theta, c->fif->conclusions[i], quote_level);
 }
 
 static void cascade_substitution(binding_list *theta) {
@@ -271,6 +283,15 @@ binding* bindings_contain(binding_list *theta, alma_variable *var) {
 
 static int occurs_check(binding_list *theta, alma_variable *var, alma_term *x);
 
+
+static int occurs_check_var(binding_list *theta, alma_variable *var, alma_variable *x) {
+  if (x->id == var->id)
+    return 1;
+  binding *res = bindings_contain(theta, x);
+  // If x is a bound variable, occurs-check what it's bound to
+  return res != NULL ? occurs_check(theta, var, res->term) : 0;
+}
+
 static int occurs_check_func(binding_list *theta, alma_variable *var, alma_function *func) {
   for (int i = 0; i < func->term_count; i++) {
     if (occurs_check(theta, var, func->terms + i))
@@ -279,12 +300,18 @@ static int occurs_check_func(binding_list *theta, alma_variable *var, alma_funct
   return 0;
 }
 
-static int occurs_check_var(binding_list *theta, alma_variable *var, alma_variable *x) {
-  if (x->id == var->id)
-    return 1;
-  binding *res = bindings_contain(theta, x);
-  // If x is a bound variable, occurs-check what it's bound to
-  return res != NULL ? occurs_check(theta, var, res->term) : 0;
+static int occurs_check_clause(binding_list *theta, alma_variable *var, clause *c) {
+  for (int i = 0; i < c->pos_count; i++)
+    if (occurs_check_func(theta, var, c->pos_lits[i]))
+      return 1;
+  for (int i = 0; i < c->neg_count; i++)
+    if (occurs_check_func(theta, var, c->neg_lits[i]))
+      return 1;
+  if (c->tag == FIF)
+    for (int i = 0; i < c->fif->num_conclusions; i++)
+      if (occurs_check_clause(theta, var, c->fif->conclusions[i]))
+        return 1;
+  return 0;
 }
 
 static int occurs_check(binding_list *theta, alma_variable *var, alma_term *x) {
@@ -298,17 +325,34 @@ static int occurs_check(binding_list *theta, alma_variable *var, alma_term *x) {
   // For a quote, occurs-check every literal recursively
   // Argument variable may appear at arbitrary depth in the quoted formula
   else if (x->type == QUOTE && x->quote->type == CLAUSE) {
-    clause *c = x->quote->clause_quote;
-    for (int i = 0; i < c->pos_count; i++)
-      if (occurs_check_func(theta, var, c->pos_lits[i]))
-        return 1;
-    for (int i = 0; i < c->neg_count; i++)
-      if (occurs_check_func(theta, var, c->neg_lits[i]))
-        return 1;
+    return occurs_check_clause(theta, var, x->quote->clause_quote);
   }
   else if (x->type == QUASIQUOTE) {
     return occurs_check_var(theta, var, x->quasiquote->variable);
   }
+  return 0;
+}
+
+static int var_insuff_quoted(alma_term *term, int must_exceed_level, int quote_level);
+
+static int func_insuff_quoted(alma_function *func, int must_exceed_level, int quote_level) {
+  for (int i = 0; i < func->term_count; i++)
+    if (var_insuff_quoted(func->terms+i, must_exceed_level, quote_level))
+      return 1;
+  return 0;
+}
+
+static int clause_var_insuff_quoted(clause *c, int must_exceed_level, int quote_level) {
+  for (int i = 0; i < c->pos_count; i++)
+    if (func_insuff_quoted(c->pos_lits[i], must_exceed_level, quote_level))
+      return 1;
+  for (int i = 0; i < c->neg_count; i++)
+    if (func_insuff_quoted(c->neg_lits[i], must_exceed_level, quote_level))
+      return 1;
+  if (c->tag == FIF)
+    for (int i = 0; i < c->fif->num_conclusions; i++)
+      if (clause_var_insuff_quoted(c->fif->conclusions[i], must_exceed_level, quote_level))
+        return 1;
   return 0;
 }
 
@@ -321,25 +365,13 @@ static int var_insuff_quoted(alma_term *term, int must_exceed_level, int quote_l
     return quote_level <= must_exceed_level;
   }
   else if (term->type == FUNCTION) {
-    for (int i = 0; i < term->function->term_count; i++)
-      if (var_insuff_quoted(term->function->terms+i, must_exceed_level, quote_level))
-        return 1;
-  }
-  else if (term->type == QUOTE) {
-    if (term->quote->type == CLAUSE) {
-      clause *c = term->quote->clause_quote;
-      for (int i = 0; i < c->pos_count; i++)
-        for (int j = 0; j < c->pos_lits[i]->term_count; j++)
-          if (var_insuff_quoted(c->pos_lits[i]->terms+j, must_exceed_level, quote_level+1))
-            return 1;
-      for (int i = 0; i < c->neg_count; i++)
-        for (int j = 0; j < c->neg_lits[i]->term_count; j++)
-          if (var_insuff_quoted(c->neg_lits[i]->terms+j, must_exceed_level, quote_level+1))
-            return 1;
-    }
+    return func_insuff_quoted(term->function, must_exceed_level, quote_level);
   }
   else if (term->type == QUASIQUOTE) {
     return term->quasiquote->backtick_count != quote_level && quote_level - term->quasiquote->backtick_count <= must_exceed_level;
+  }
+  else if (term->type == QUOTE && term->quote->type == CLAUSE) {
+    return clause_var_insuff_quoted(term->quote->clause_quote, must_exceed_level, quote_level+1);
   }
   return 0;
 }
@@ -450,16 +482,38 @@ static int unify_var(alma_term *varterm, alma_term *x, void *var_parent, void *x
 static int unify_function(alma_function *x, alma_function *y, void *x_parent, void *y_parent, int quote_level, binding_list *theta) {
   if (x->term_count != y->term_count || strcmp(x->name, y->name) != 0)
     return 0;
-
-  for (int i = 0; i < x->term_count; i++) {
-    // Bindings build up over repeated calls
+  for (int i = 0; i < x->term_count; i++)
     if (!unify(x->terms+i, y->terms+i, x_parent, y_parent, quote_level, theta))
       return 0;
+  return 1;
+}
+
+static int unify_clause(clause *x, clause *y, void *x_parent, void *y_parent, int quote_level, binding_list *theta) {
+  if (x->tag != y->tag || x->pos_count != y->pos_count || x->neg_count != y->neg_count)
+    return 0;
+
+  if (x->tag == FIF) {
+    if (x->fif->num_conclusions != y->fif->num_conclusions)
+      return 0;
+    for (int i = 0; i < x->fif->premise_count; i++)
+      if (!unify_function(fif_access(x, i), fif_access(y, i), x_parent, y_parent, quote_level, theta))
+        return 0;
+    for (int i = 0; i < x->fif->num_conclusions; i++)
+      if (!unify_clause(x->fif->conclusions[i], y->fif->conclusions[i], x_parent, y_parent, quote_level, theta))
+        return 0;
+  }
+  else {
+    for (int i = 0; i < x->pos_count; i++)
+      if (!unify_function(x->pos_lits[i], y->pos_lits[i], x_parent, y_parent, quote_level, theta))
+        return 0;
+    for (int i = 0; i < x->neg_count; i++)
+      if (!unify_function(x->neg_lits[i], y->neg_lits[i], x_parent, y_parent, quote_level, theta))
+        return 0;
   }
   return 1;
 }
 
-static int unify_quotes(alma_quote *x, alma_quote *y, void *x_parent, void *y_parent, int quote_level, binding_list *theta) {
+static int unify_quote(alma_quote *x, alma_quote *y, void *x_parent, void *y_parent, int quote_level, binding_list *theta) {
   if (x->type != y->type)
     return 0;
 
@@ -468,28 +522,8 @@ static int unify_quotes(alma_quote *x, alma_quote *y, void *x_parent, void *y_pa
     // or otherwise, noted here as a gap
     return 0;
   }
-  else {
-    clause *c_x = x->clause_quote;
-    clause *c_y = y->clause_quote;
-    if (c_x->tag != c_y->tag || c_x->pos_count != c_y->pos_count || c_x->neg_count != c_y->neg_count)
-      return 0;
-    if (c_x->tag == FIF && c_x->fif->premise_count == c_y->fif->premise_count) {
-      for (int i = 0; i < c_x->fif->premise_count; i++)
-        if (!unify_function(fif_access(c_x, i), fif_access(c_y, i), x_parent, y_parent, quote_level, theta))
-          return 0;
-      if (!unify_function(c_x->fif->conclusion, c_y->fif->conclusion, x_parent, y_parent, quote_level, theta))
-        return 0;
-    }
-    else {
-      for (int i = 0; i < c_x->pos_count; i++)
-        if (!unify_function(c_x->pos_lits[i], c_y->pos_lits[i], x_parent, y_parent, quote_level, theta))
-          return 0;
-      for (int i = 0; i < c_x->neg_count; i++)
-        if (!unify_function(c_x->neg_lits[i], c_y->neg_lits[i], x_parent, y_parent, quote_level, theta))
-          return 0;
-    }
-    return 1;
-  }
+  else
+    return unify_clause(x->clause_quote, y->clause_quote, x_parent, y_parent, quote_level, theta);
 }
 
 // Unification function based on algorithm in AIMA book
@@ -522,7 +556,7 @@ static int unify(alma_term *x, alma_term *y, void *x_parent, void *y_parent, int
     return unify_function(x->function, y->function, x_parent, y_parent, quote_level, theta);
   }
   else if (x->type == QUOTE && y->type == QUOTE) {
-    return unify_quotes(x->quote, y->quote, x_parent, y_parent, quote_level+1, theta);
+    return unify_quote(x->quote, y->quote, x_parent, y_parent, quote_level+1, theta);
   }
   else
     return 0;
@@ -532,7 +566,7 @@ static int unify(alma_term *x, alma_term *y, void *x_parent, void *y_parent, int
 // Functions used outside to initiate unification
 
 int quote_term_unify(alma_quote *x, alma_quote *y, binding_list *theta) {
-  return unify_quotes(x, y, x, y, 1, theta);
+  return unify_quote(x, y, x, y, 1, theta);
 }
 
 int term_unify(alma_term *x, alma_term *y, binding_list *theta) {

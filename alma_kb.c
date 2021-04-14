@@ -259,18 +259,18 @@ void set_variable_ids(clause *c, int id_from_name, int non_escaping_only, bindin
 
 static void init_ordering_rec(fif_info *info, alma_node *node, int *next, int *pos, int *neg) {
   if (node->type == FOL) {
-    // Neg lit case for NOT
+    // Pos lit case for NOT
     if (node->fol->op == NOT)
-      info->ordering[(*next)++] = (*neg)--;
-    // Case of node is OR
+      info->ordering[(*next)++] = (*pos)++;
+    // Case of node is AND
     else {
       init_ordering_rec(info, node->fol->arg1, next, pos, neg);
       init_ordering_rec(info, node->fol->arg2, next, pos, neg);
     }
   }
-  // Otherwise, pos lit
+  // Otherwise, neg lit
   else
-    info->ordering[(*next)++] = (*pos)++;
+    info->ordering[(*next)++] = (*neg)--;
 }
 
 // Given a node for a fif formula, record inorder traversal ofpositive and negative literals
@@ -333,7 +333,7 @@ static void make_fif_conclusions(alma_node *node, clause *c) {
     }
     else {
       c->fif->num_conclusions++;
-      c->fif->conclusions = realloc(*c->fif->conclusions, sizeof(*c->fif->conclusions) * c->fif->num_conclusions);
+      c->fif->conclusions = realloc(c->fif->conclusions, sizeof(*c->fif->conclusions) * c->fif->num_conclusions);
       clause *latest = malloc(sizeof(*latest));
       make_clause(node, latest);
       c->fif->conclusions[c->fif->num_conclusions-1] = latest;
@@ -350,14 +350,14 @@ void make_clause(alma_node *node, clause *c) {
   c->tag = NONE;
   c->fif = NULL;
 
-  if (node->fol->tag == FIF) {
+  if (node->type == FOL && node->fol->tag == FIF) {
     // Clause pos and neg lits initialize from fif premises
     make_clause_rec(node->fol->arg1, c, 1);
 
     // Initialize fif info except for conclusions
     c->tag = FIF;
     c->fif = malloc(sizeof(*c->fif));
-    c->fif->premise_count = c->pos_count + c->neg_count - 1;
+    c->fif->premise_count = c->pos_count + c->neg_count;
     c->fif->ordering = malloc(sizeof(*c->fif->ordering) * c->fif->premise_count);
     init_ordering(c->fif, node);
 

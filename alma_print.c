@@ -121,9 +121,16 @@ void clause_print(kb *collection, clause *c, kb_str *buf) {
       tee_alt(" ", collection, buf);
     }
     tee_alt("-f-> ", collection, buf);
-    if (c->fif->neg_conc)
-      tee_alt("~", collection, buf);
-    alma_function_print(collection, c->fif->conclusion, buf);
+
+    for (int i = 0; i < c->fif->num_conclusions; i++) {
+      if (c->fif->conclusions[i]->tag == FIF)
+        tee_alt("(", collection, buf);
+      clause_print(collection, c->fif->conclusions[i], buf);
+      if (c->fif->conclusions[i]->tag == FIF)
+        tee_alt(")", collection, buf);
+      if (i < c->fif->num_conclusions-1)
+        tee_alt(" /\\ ", collection, buf);
+    }
   }
   // Non-fif case
   else {
