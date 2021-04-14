@@ -8,32 +8,39 @@
 #include "alma_proc.h"
 #include "alma_print.h"
 
-static void make_clause_rec(alma_node *node, clause *c) {
+static void add_lit(int *count, alma_function ***lits, alma_function *new_lit) {
+  (*count)++;
+  *lits = realloc(*lits, sizeof(**lits) * *count);
+  (*lits)[*count-1] = new_lit;
+  quote_convert_func((*lits)[*count-1]);
+}
+
+static void make_clause_rec(alma_node *node, clause *c, int invert) {
   // Note: predicate null assignment necessary for freeing of nodes without losing predicates
   if (node != NULL) {
     if (node->type == FOL) {
       // Neg lit case for NOT
       if (node->fol->op == NOT) {
-        c->neg_count++;
-        c->neg_lits = realloc(c->neg_lits, sizeof(*c->neg_lits) * c->neg_count);
-        c->neg_lits[c->neg_count-1] = node->fol->arg1->predicate;
-        quote_convert_func(c->neg_lits[c->neg_count-1]);
+        if (invert)
+          add_lit(&c->pos_count, &c->pos_lits, node->fol->arg1->predicate);
+        else
+          add_lit(&c->neg_count, &c->neg_lits, node->fol->arg1->predicate);
         node->fol->arg1->predicate = NULL;
       }
-      // Case of node is OR
+      // Case if node is OR (or AND when processing FIF fragments)
       else {
-        make_clause_rec(node->fol->arg1, c);
-        make_clause_rec(node->fol->arg2, c);
+        make_clause_rec(node->fol->arg1, c, invert);
+        make_clause_rec(node->fol->arg2, c, invert);
       }
       if (c->tag == NONE)
         c->tag = node->fol->tag;
     }
     // Otherwise, only pos lit left
     else {
-      c->pos_count++;
-      c->pos_lits = realloc(c->pos_lits, sizeof(*c->pos_lits) * c->pos_count);
-      c->pos_lits[c->pos_count-1] = node->predicate;
-      quote_convert_func(c->pos_lits[c->pos_count-1]);
+      if (invert)
+        add_lit(&c->neg_count, &c->neg_lits, node->predicate);
+      else
+        add_lit(&c->pos_count, &c->pos_lits, node->predicate);
       node->predicate = NULL;
     }
   }
@@ -233,6 +240,11 @@ void set_variable_ids(clause *c, int id_from_name, int non_escaping_only, bindin
 
   set_variable_ids_rec(records, c, id_from_name, non_escaping_only, 0, collection);
 
+  // Process separate conclusion variables
+  if (c->tag == FIF) {
+
+  }
+
   // If bindings for a backsearch have been passed in, update variable names for them as well
   // Id_from_name always false in this case; omits that parameter
   if (bs_bindings)
@@ -296,38 +308,72 @@ int formulas_from_source(char *source, int file_src, int *formula_count, alma_no
     }
     free(errors);
 
-    // Convert ALMA FOL to CNF formulas
-    for (int i = 0; i < *formula_count; i++)
-      make_cnf(*formulas+i);
-    // printf("CNF equivalents:\n");
-    // for (int i = 0; i < *formula_count; i++)
-    //   alma_fol_print(*formulas+i);
-    // printf("\n");
+    // Convert ALMA FOL to CNF formulas, except for fif cases
+    for (int i = 0; i < *formula_count; i++) {
+      if ((*formulas)[i].type != FOL || (*formulas)[i].fol->tag != FIF)
+        make_cnf(*formulas+i);
+    }
+    //tee_alt("Standardized equivalents:\n", collection, buf);
+    /*for (int i = 0; i < *formula_count; i++) {
+      alma_fol_print(collection, *formulas+i, buf);
+      tee_alt("\n", collection, buf);
+    }*/
     return 1;
   }
   else
     return ret;
 }
 
-void make_clause(alma_node *node, clause *c) {
-  make_clause_rec(node, c);
 
-  // If clause is fif, initialize additional info
-  if (c->tag == FIF) {
+static void make_fif_conclusions(alma_node *node, clause *c) {
+  if (node != NULL) {
+    if (node->type == FOL && node->fol->op == AND) {
+      make_fif_conclusions(node->fol->arg1, c);
+      make_fif_conclusions(node->fol->arg2, c);
+    }
+    else {
+      c->fif->num_conclusions++;
+      c->fif->conclusions = realloc(*c->fif->conclusions, sizeof(*c->fif->conclusions) * c->fif->num_conclusions);
+      clause *latest = malloc(sizeof(*latest));
+      make_clause(node, latest);
+      c->fif->conclusions[c->fif->num_conclusions-1] = latest;
+    }
+  }
+}
+
+void make_clause(alma_node *node, clause *c) {
+  c->pos_count = c->neg_count = 0;
+  c->pos_lits = c->neg_lits = NULL;
+  c->parent_set_count = c->children_count = 0;
+  c->parents = NULL;
+  c->children = NULL;
+  c->tag = NONE;
+  c->fif = NULL;
+
+  if (node->fol->tag == FIF) {
+    // Clause pos and neg lits initialize from fif premises
+    make_clause_rec(node->fol->arg1, c, 1);
+
+    // Initialize fif info except for conclusions
+    c->tag = FIF;
     c->fif = malloc(sizeof(*c->fif));
     c->fif->premise_count = c->pos_count + c->neg_count - 1;
     c->fif->ordering = malloc(sizeof(*c->fif->ordering) * c->fif->premise_count);
     init_ordering(c->fif, node);
-    c->fif->neg_conc = node->fol->arg2->type == FOL ? 1 : 0;
-    // Conclusion will always be last lit
-    if (c->fif->neg_conc)
-      c->fif->conclusion = c->neg_lits[c->neg_count-1];
+
+    // Initialize fif conclusion structures
+    c->fif->num_conclusions = 0;
+    c->fif->conclusions = NULL;
+    make_fif_conclusions(node->fol->arg2, c);
+
+    if (c->fif->conclusions[0]->pos_count > 0)
+      c->fif->indexing_conc = c->fif->conclusions[0]->pos_lits[0];
     else
-      c->fif->conclusion = c->pos_lits[c->pos_count-1];
+      c->fif->indexing_conc = c->fif->conclusions[0]->neg_lits[0];
   }
-  // Non-fif clauses can be sorted by literal for ease of resolution
-  // Fif clauses must retain original literal order to not affect their evaluation
   else {
+    make_clause_rec(node, c, 0);
+    // Non-fif clauses can be sorted by literal for ease of resolution
     qsort(c->pos_lits, c->pos_count, sizeof(*c->pos_lits), function_compare);
     qsort(c->neg_lits, c->neg_count, sizeof(*c->neg_lits), function_compare);
   }
@@ -339,7 +385,7 @@ void flatten_node(kb *collection, alma_node *node, tommy_array *clauses, int pri
   //  printf("FLATTEN NODE FUNC: %p, %p, %p\n",(void *)node,(void *)clauses,(void *)buf);
   //  printf("buf ptr and size: %p, %d\n",(void *)buf->buffer,(int)buf->limit);
   //  printf("after BUF\n");
-  if (node->type == FOL && node->fol->op == AND) {
+  if (node->type == FOL && node->fol->tag != FIF && node->fol->op == AND) {
     if (node->fol->arg1->type == FOL)
       node->fol->arg1->fol->tag = node->fol->tag;
     flatten_node(collection, node->fol->arg1, clauses, print, buf);
@@ -350,13 +396,6 @@ void flatten_node(kb *collection, alma_node *node, tommy_array *clauses, int pri
   else {
     //    printf("HERE IN FLATTEN\n");
     clause *c = malloc(sizeof(*c));
-    c->pos_count = c->neg_count = 0;
-    c->pos_lits = c->neg_lits = NULL;
-    c->parent_set_count = c->children_count = 0;
-    c->parents = NULL;
-    c->children = NULL;
-    c->tag = NONE;
-    c->fif = NULL;
     //    printf("RIGHT BEFORE DIRTY BIT\n");
     c->dirty_bit = (char) 1;
     c->pyobject_bit = (char) 1;
@@ -424,8 +463,16 @@ void copy_clause_structure(clause *original, clause *copy) {
     copy->fif->premise_count = original->fif->premise_count;
     copy->fif->ordering = malloc(sizeof(*copy->fif->ordering)*copy->fif->premise_count);
     memcpy(copy->fif->ordering, original->fif->ordering, sizeof(*copy->fif->ordering)*copy->fif->premise_count);
-    copy->fif->conclusion = original->fif->neg_conc ? copy->neg_lits[copy->neg_count-1] : copy->pos_lits[copy->pos_count-1];
-    copy->fif->neg_conc = original->fif->neg_conc;
+    copy->fif->num_conclusions = original->fif->num_conclusions;
+    copy->fif->conclusions = malloc(sizeof(*copy->fif->conclusions) * copy->fif->num_conclusions);
+    for (int i = 0; i < copy->fif->num_conclusions; i++) {
+      copy->fif->conclusions[i] = malloc(sizeof(*copy->fif->conclusions[i]));
+      copy_clause_structure(original->fif->conclusions[i], copy->fif->conclusions[i]);
+    }
+    if (copy->fif->conclusions[0]->pos_count > 0)
+      copy->fif->indexing_conc = copy->fif->conclusions[0]->pos_lits[0];
+    else
+      copy->fif->indexing_conc = copy->fif->conclusions[0]->neg_lits[0];
   }
   else
     copy->fif = NULL;
@@ -498,7 +545,7 @@ char* name_with_arity(char *name, int arity) {
 //  currently, simply picks the first positive or negative literal
 void* clause_lookup(kb *collection, clause *c) {
   if (c->tag == FIF) {
-    char *name = c->fif->conclusion->name;
+    char *name = c->fif->indexing_conc->name;
     return tommy_hashlin_search(&collection->fif_map, fifm_compare, name, tommy_hash_u64(0, name, strlen(name)));
   }
   else {
@@ -607,35 +654,46 @@ static int variables_differ(alma_variable *x, alma_variable *y, var_match_set *m
 
 static int functions_differ(alma_function *x, alma_function *y, var_match_set *matches, int quote_level);
 
+static int clauses_differ_rec(clause *x, clause *y, var_match_set *matches, int quote_level) {
+  if (x->tag != y->tag || x->pos_count != y->pos_count || x->neg_count != y->neg_count)
+    return 1;
+
+  if (x->tag == FIF) {
+    if (x->fif->num_conclusions != y->fif->num_conclusions)
+      return 1;
+    for (int i = 0; i < x->fif->premise_count; i++)
+      if (functions_differ(fif_access(x, i), fif_access(y, i), matches, quote_level))
+        return 1;
+    for (int i = 0; i < x->fif->num_conclusions; i++)
+      if (clauses_differ_rec(x->fif->conclusions[i], y->fif->conclusions[i], matches, quote_level))
+        return 1;
+  }
+  else {
+    // TODO: account for case in which may have several literals with name
+    // Ignoring this case, sorted literal lists allows comparing ith literals of each clause
+    for (int i = 0; i < x->pos_count; i++)
+      if (functions_differ(x->pos_lits[i], y->pos_lits[i], matches, quote_level))
+        return 1;
+    // TODO: account for case in which may have several literals with name
+    // Ignoring this case, sorted literal lists allows comparing ith literals of each clause
+    for (int i = 0; i < x->neg_count; i++)
+      if (functions_differ(x->neg_lits[i], y->neg_lits[i], matches, quote_level))
+        return 1;
+  }
+
+  return 0;
+}
+
 // Returns 0 if quotation terms are equal while respecting x and y matchings based on matches arg; otherwise returns 1
 // Pairs of variables according to var_match_set arg corresponding to their level of quotation
 static int quotes_differ(alma_quote *x, alma_quote *y, var_match_set *matches, int quote_level) {
   if (x->type == y->type) {
     if (x->type == SENTENCE) {
       // TODO when handling case for quote of formula equivalent to more than one clause
+      return 1;
     }
-    else {
-      clause *c_x = x->clause_quote;
-      clause *c_y = y->clause_quote;
-      if (c_x->tag != c_y->tag || c_x->pos_count != c_y->pos_count || c_x->neg_count != c_y->neg_count)
-        return 1;
-      if (c_x->tag == FIF) {
-        for (int i = 0; i < c_x->fif->premise_count; i++)
-          if (functions_differ(fif_access(c_x, i), fif_access(c_y, i), matches, quote_level))
-            return 1;
-        if (functions_differ(c_x->fif->conclusion, c_y->fif->conclusion, matches, quote_level))
-          return 1;
-      }
-      else {
-        for (int i = 0; i < c_x->pos_count; i++)
-          if (functions_differ(c_x->pos_lits[i], c_y->pos_lits[i], matches, quote_level))
-            return 1;
-        for (int i = 0; i < c_x->neg_count; i++)
-          if (functions_differ(c_x->neg_lits[i], c_y->neg_lits[i], matches, quote_level))
-            return 1;
-      }
-    }
-    return 0;
+    else
+      return clauses_differ_rec(x->clause_quote, y->clause_quote, matches, quote_level);
   }
   return 1;
 }
@@ -667,35 +725,12 @@ static int functions_differ(alma_function *x, alma_function *y, var_match_set *m
 // based on each location where a variable maps to another
 // Thus a(X, X) and a(X, Y) are here considered different
 int clauses_differ(clause *x, clause *y) {
-  if (x->pos_count == y->pos_count && x->neg_count == y->neg_count) {
     var_match_set matches;
     var_match_init(&matches);
-    if (x->tag == FIF) {
-      for (int i = 0; i < x->fif->premise_count; i++) {
-        if (functions_differ(fif_access(x, i), fif_access(y, i), &matches, 0))
-          return release_matches(&matches, 1);
-      }
-      if (functions_differ(x->fif->conclusion, y->fif->conclusion, &matches, 0))
-        return release_matches(&matches, 1);
-    }
-    else {
-      for (int i = 0; i < x->pos_count; i++) {
-        // TODO: account for case in which may have several literals with name
-        // Ignoring this case, sorted literal lists allows comparing ith literals of each clause
-        if (functions_differ(x->pos_lits[i], y->pos_lits[i], &matches, 0))
-          return release_matches(&matches, 1);
-      }
-      for (int i = 0; i < x->neg_count; i++) {
-        // TODO: account for case in which may have several literals with name
-        // Ignoring this case, sorted literal lists allows comparing ith literals of each clause
-        if (functions_differ(x->neg_lits[i], y->neg_lits[i], &matches, 0))
-          return release_matches(&matches, 1);
-      }
-    }
+    if (clauses_differ_rec(x, y, &matches, 0))
+      return release_matches(&matches, 1);
     // All literals compared as equal; return 0
     return release_matches(&matches, 0);
-  }
-  return 1;
 }
 
 // Checks if x and y are ground literals that are identical
@@ -747,7 +782,7 @@ static void remove_dupe_literals(int *count, alma_function ***triple) {
 // Check_distrusted flag determines whether distrusted clauses are used for dupe comparison as well
 clause* duplicate_check(kb *collection, clause *c, int check_distrusted) {
   if (c->tag == FIF) {
-    char *name = c->fif->conclusion->name;
+    char *name = c->fif->indexing_conc->name;
     fif_mapping *result = tommy_hashlin_search(&collection->fif_map, fifm_compare, name, tommy_hash_u64(0, name, strlen(name)));
     if (result != NULL) {
       for (int i = 0; i < result->num_clauses; i++) {
@@ -804,7 +839,7 @@ void add_clause(kb *collection, clause *c) {
   tommy_hashlin_insert(&collection->index_map, &ientry->hash_node, ientry, tommy_hash_u64(0, &ientry->key, sizeof(ientry->key)));
 
   if (c->tag == FIF) {
-    char *name = c->fif->conclusion->name;
+    char *name = c->fif->indexing_conc->name;
     // Index into fif hashmap
     fif_mapping *result = tommy_hashlin_search(&collection->fif_map, fifm_compare, name, tommy_hash_u64(0, name, strlen(name)));
     if (result != NULL) {
@@ -890,7 +925,7 @@ static void remove_fif_tasks(kb *collection, clause *c) {
 void remove_clause(kb *collection, clause *c, kb_str *buf) {
   //  printf("ALMA: IN REMOVE CLAUSE\n");
   if (c->tag == FIF) {
-    char *name = c->fif->conclusion->name;
+    char *name = c->fif->indexing_conc->name;
     fif_mapping *fifm = tommy_hashlin_search(&collection->fif_map, fifm_compare, name, tommy_hash_u64(0, name, strlen(name)));
     if (fifm != NULL) {
       for (int i = 0; i < fifm->num_clauses; i++) {

@@ -251,7 +251,7 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time,
       && descendant_copy->type == QUOTE && descendant_copy->quote->type == CLAUSE) {
     // Debug
     tee_alt("Performing ancestor on \"", alma, NULL);
-    clause_print(alma, ancestor_copy->quote->clause_quote, NULL);
+    clause_print(alma, descendant_copy->quote->clause_quote, NULL);
     tee_alt("\"\n", alma, NULL);
 
     // Frontier of parents to expand

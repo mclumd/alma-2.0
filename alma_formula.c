@@ -121,6 +121,7 @@ static int alma_predicate_init(alma_node *node, int quote_level, mpc_ast_t *ast)
 
 
 // Contents should contain one of not/or/and/if
+// Fif/bif still match strstr
 static alma_operator op_from_contents(char *contents) {
   alma_operator result = NOT;
   if (strstr(contents, "or") != NULL)
@@ -158,24 +159,20 @@ static int alma_tree_init(alma_node *alma_tree, int quote_level, mpc_ast_t *ast)
       alma_tree->fol->arg1 = malloc(sizeof(*alma_tree->fol->arg1));
       int ret = alma_tree_init(alma_tree->fol->arg1, quote_level, ast->children[1]);
 
-      if (strstr(ast->tag, "fformula") != NULL) {
-        // Set arg2 for fformula conclusion
-        alma_tree->fol->arg2 = malloc(sizeof(*alma_tree->fol->arg2));
-        ret = alma_tree_init(alma_tree->fol->arg2, quote_level, ast->children[4]) && ret;
+      if (strstr(ast->tag, "fformula") != NULL)
         alma_tree->fol->tag = FIF;
+      else if (strstr(ast->tag, "bformula") != NULL)
+        alma_tree->fol->tag = BIF;
+
+      // Set arg2 if operation is binary or/and/if
+      if (alma_tree->fol->op != NOT) {
+        alma_tree->fol->arg2 = malloc(sizeof(*alma_tree->fol->arg2));
+        ret = alma_tree_init(alma_tree->fol->arg2, quote_level, ast->children[3]) && ret;
       }
       else {
-        // Set arg2 if operation is binary or/and/if
-        if (alma_tree->fol->op == NOT) {
-          alma_tree->fol->arg2 = NULL;
-        }
-        else {
-          alma_tree->fol->arg2 = malloc(sizeof(*alma_tree->fol->arg2));
-          ret = alma_tree_init(alma_tree->fol->arg2, quote_level, ast->children[3]) && ret;
-        }
-        if (strstr(ast->tag, "bformula") != NULL)
-          alma_tree->fol->tag = BIF;
+        alma_tree->fol->arg2 = NULL;
       }
+
       return ret;
     }
   }
