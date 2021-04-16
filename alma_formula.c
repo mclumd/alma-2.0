@@ -430,28 +430,31 @@ void quote_convert_func(alma_function *func) {
 
         alma_node *copy = malloc(sizeof(*copy));
         copy_alma_tree(quote->sentence, copy);
-        make_cnf(copy);
 
-        // If result has an AND at the top-level, several clauses result, so abort
-        if (copy->type == FOL && copy->fol->op == AND)
-          free_node(copy, 1);
-        // Otherwise, adjust quote to new type, and construct clause
-        else {
-          free_node(quote->sentence, 1);
-          quote->type = CLAUSE;
-
-          clause *c = malloc(sizeof(*c));
-          c->pos_count = c->neg_count = 0;
-          c->pos_lits = c->neg_lits = NULL;
-          c->parent_set_count = c->children_count = 0;
-          c->parents = NULL;
-          c->children = NULL;
-          c->tag = NONE;
-          c->fif = NULL;
-          make_clause(copy, c);
-          free_node(copy, 1);
-          quote->clause_quote = c;
+        if (copy->type != FOL || copy->fol->tag != FIF) {
+          make_cnf(copy);
+          // If result has an AND at the top-level, several clauses result, so abort
+          if (copy->type == FOL && copy->fol->op == AND) {
+            free_node(copy, 1);
+            return;
+          }
         }
+
+        // Otherwise, adjust quote to new type, and construct clause
+        free_node(quote->sentence, 1);
+        quote->type = CLAUSE;
+
+        clause *c = malloc(sizeof(*c));
+        c->pos_count = c->neg_count = 0;
+        c->pos_lits = c->neg_lits = NULL;
+        c->parent_set_count = c->children_count = 0;
+        c->parents = NULL;
+        c->children = NULL;
+        c->tag = NONE;
+        c->fif = NULL;
+        make_clause(copy, c);
+        free_node(copy, 1);
+        quote->clause_quote = c;
       }
     }
   }

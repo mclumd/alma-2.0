@@ -185,6 +185,10 @@ static void set_variable_ids_rec(record_tree *records, clause *c, int id_from_na
   for (int i = 0; i < c->neg_count; i++)
     for (int j = 0; j < c->neg_lits[i]->term_count; j++)
       set_variable_names(records, c->neg_lits[i]->terms+j, id_from_name, non_escaping_only, quote_level, collection);
+
+  if (c->tag == FIF)
+    for (int i = 0; i < c->fif->num_conclusions; i++)
+      set_variable_ids_rec(records, c->fif->conclusions[i], id_from_name, non_escaping_only, quote_level, collection);
 }
 
 
@@ -223,6 +227,10 @@ static void set_clause_from_records(record_tree *records, clause *c, int quote_l
   for (int i = 0; i < c->neg_count; i++)
     for (int j = 0; j < c->neg_lits[i]->term_count; j++)
       set_term_from_records(records, c->neg_lits[i]->terms+j, quote_level, collection);
+
+  if (c->tag == FIF)
+    for (int i = 0; i < c->fif->num_conclusions; i++)
+      set_clause_from_records(records, c->fif->conclusions[i], quote_level, collection);
 }
 
 // Given a clause, assign the ID fields of each variable
@@ -239,11 +247,6 @@ void set_variable_ids(clause *c, int id_from_name, int non_escaping_only, bindin
   init_record_tree(records, 0, NULL);
 
   set_variable_ids_rec(records, c, id_from_name, non_escaping_only, 0, collection);
-
-  // Process separate conclusion variables
-  if (c->tag == FIF) {
-
-  }
 
   // If bindings for a backsearch have been passed in, update variable names for them as well
   // Id_from_name always false in this case; omits that parameter
@@ -433,6 +436,9 @@ void free_clause(clause *c) {
 
   if (c->tag == FIF) {
     free(c->fif->ordering);
+    for (int i = 0; i < c->fif->num_conclusions; i++)
+      free_clause(c->fif->conclusions[i]);
+    free(c->fif->conclusions);
     free(c->fif);
   }
 
@@ -581,6 +587,17 @@ int mapping_num_clauses(void *mapping, if_tag tag) {
     return ((fif_mapping*)mapping)->num_clauses;
   else
     return ((predname_mapping*)mapping)->num_clauses;
+}
+
+// Determines of clauses have combatible tags and counts of arguments and conclusions
+// Performs additional checks for fif conclusions
+int counts_match(clause *x, clause *y) {
+  if (x->tag == y->tag && x->pos_count == y->pos_count && x->neg_count == y->neg_count) {
+    if (x->tag == FIF && x->fif->num_conclusions != y->fif->num_conclusions)
+      return 0;
+    return 1;
+  }
+  return 0;
 }
 
 // Inserts clause into the hashmap (with key based on lit), as well as the linked list
@@ -849,12 +866,12 @@ void add_clause(kb *collection, clause *c) {
     }
     else {
       fif_mapping *entry = malloc(sizeof(*entry));
-      entry->conclude_name = malloc(strlen(name)+1);
-      strcpy(entry->conclude_name, name);
+      entry->indexing_conc_name = malloc(strlen(name)+1);
+      strcpy(entry->indexing_conc_name, name);
       entry->num_clauses = 1;
       entry->clauses = malloc(sizeof(*entry->clauses));
       entry->clauses[0] = c;
-      tommy_hashlin_insert(&collection->fif_map, &entry->node, entry, tommy_hash_u64(0, entry->conclude_name, strlen(entry->conclude_name)));
+      tommy_hashlin_insert(&collection->fif_map, &entry->node, entry, tommy_hash_u64(0, entry->indexing_conc_name, strlen(entry->indexing_conc_name)));
     }
   }
   else {
@@ -1701,9 +1718,7 @@ static void handle_distrust(kb *collection, clause *distrust, kb_str *buf) {
       if_tag tag = lit->terms[0].quote->clause_quote->tag;
       for (int i = mapping_num_clauses(mapping, tag)-1; i >= 0; i--) {
         clause *ith = mapping_access(mapping, tag, i);
-        if (!ith->distrusted &&
-            ith->pos_count == lit->terms[0].quote->clause_quote->pos_count &&
-            ith->neg_count == lit->terms[0].quote->clause_quote->neg_count) {
+        if (!ith->distrusted && counts_match(ith, lit->terms[0].quote->clause_quote)) {
           q->clause_quote = ith;
           binding_list *theta = malloc(sizeof(*theta));
           init_bindings(theta);
@@ -1765,9 +1780,7 @@ void process_new_clauses(kb *collection, kb_str *buf) {
             if_tag tag = arg1->quote->clause_quote->tag;
             for (int j = mapping_num_clauses(mapping, tag)-1; j >= 0; j--) {
               clause *jth = mapping_access(mapping, tag, j);
-              if (jth->distrusted == atol(arg2->function->name) &&
-                  jth->pos_count == arg1->quote->clause_quote->pos_count &&
-                  jth->neg_count == arg1->quote->clause_quote->neg_count) {
+              if (jth->distrusted == atol(arg2->function->name) && counts_match(jth, arg1->quote->clause_quote)) {
                 q->clause_quote = jth;
                 binding_list *theta = malloc(sizeof(*theta));
                 init_bindings(theta);
@@ -1805,8 +1818,7 @@ void process_new_clauses(kb *collection, kb_str *buf) {
             if_tag tag = arg1->quote->clause_quote->tag;
             for (int j = mapping_num_clauses(mapping, tag)-1; j >= 0; j--) {
               clause *jth = mapping_access(mapping, tag, j);
-              if (!jth->distrusted && jth->pos_count == arg1->quote->clause_quote->pos_count &&
-                  jth->neg_count == arg1->quote->clause_quote->neg_count) {
+              if (!jth->distrusted && counts_match(jth, arg1->quote->clause_quote)) {
                 q->clause_quote = jth;
                 binding_list *theta = malloc(sizeof(*theta));
                 init_bindings(theta);

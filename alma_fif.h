@@ -15,7 +15,7 @@ typedef struct fif_info {
 
 // Used to map set of fif clauses
 typedef struct fif_mapping {
-  char *conclude_name; // Key for hashing
+  char *indexing_conc_name; // Key for hashing
   int num_clauses;
   clause **clauses;
   tommy_node node;

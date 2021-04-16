@@ -145,9 +145,7 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *alma, intr
     for (int i = mapping_num_clauses(mapping, tag)-1; i >= 0; i--) {
       clause *ith = mapping_access(mapping, tag, i);
       // Must be a non-distrusted result with pos / neg literal count matching query
-      if (!ith->distrusted
-          && ith->pos_count == search_term->quote->clause_quote->pos_count
-          && ith->neg_count == search_term->quote->clause_quote->neg_count) {
+      if (!ith->distrusted && counts_match(ith, search_term->quote->clause_quote)) {
         // Convert clause in question to quotation term
         if (non_specific) {
           q->clause_quote = malloc(sizeof(*q->clause_quote));
@@ -269,8 +267,7 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time,
       if_tag tag = descendant_copy->quote->clause_quote->tag;
       for (int i = mapping_num_clauses(mapping, tag)-1; i >= 0; i--) {
         clause *ith = mapping_access(mapping, tag, i);
-        if (ith->pos_count == descendant_copy->quote->clause_quote->pos_count &&
-            ith->neg_count == descendant_copy->quote->clause_quote->neg_count &&
+        if (counts_match(ith, descendant_copy->quote->clause_quote) &&
             (!ith->distrusted || ith->distrusted >= query_time) && ith->acquired <= query_time) {
           // Create copy as either empty list or copy of arg
           desc_bindings = malloc(sizeof(*desc_bindings));
@@ -316,13 +313,13 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time,
         binding_list *anc_bindings = malloc(sizeof(*anc_bindings));
         copy_bindings(anc_bindings, desc_bindings);
 
-        if (c->pos_count == ancestor_copy->quote->clause_quote->pos_count && c->neg_count == ancestor_copy->quote->clause_quote->neg_count) {
-          quote_holder->clause_quote = c;
-
+        if (counts_match(c, ancestor_copy->quote->clause_quote)) {
           // Debug
           tee_alt("Attempting to unify with \"", alma, NULL);
-          clause_print(alma, quote_holder->clause_quote, NULL);
+          clause_print(alma, c, NULL);
           tee_alt("\"\n", alma, NULL);
+
+          quote_holder->clause_quote = c;
 
           // Try unifying pair of quotes
           if (quote_term_unify(ancestor_copy->quote, quote_holder, anc_bindings)) {

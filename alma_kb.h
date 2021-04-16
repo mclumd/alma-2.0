@@ -117,6 +117,7 @@ void nodes_to_clauses(kb *collection, alma_node *trees, int num_trees, tommy_arr
 void* clause_lookup(kb *collection, clause *c);
 clause* mapping_access(void *mapping, if_tag tag, int index);
 int mapping_num_clauses(void *mapping, if_tag tag);
+int counts_match(clause *x, clause *y);
 
 struct backsearch_task;
 void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr, struct backsearch_task *bs, kb_str *buf);

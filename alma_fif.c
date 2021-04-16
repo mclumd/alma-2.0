@@ -436,7 +436,7 @@ void fif_to_front(tommy_array *clauses) {
 
 void free_fif_mapping(void *arg) {
   fif_mapping *entry = arg;
-  free(entry->conclude_name);
+  free(entry->indexing_conc_name);
   free(entry->clauses);
   // Note: clause entries ARE NOT FREED because they alias the clause objects freed in kb_halt
   free(entry);
@@ -585,9 +585,9 @@ void remove_fif_singleton_tasks(kb *collection, clause *c) {
 }
 
 // Compare function to be used by tommy_hashlin_search for fif_mapping
-// compares string arg to conclude_name of fif_mapping
+// compares string arg to indexing_conc_name of fif_mapping
 int fifm_compare(const void *arg, const void *obj) {
-  return strcmp((const char*)arg, ((const fif_mapping*)obj)->conclude_name);
+  return strcmp((const char*)arg, ((const fif_mapping*)obj)->indexing_conc_name);
 }
 
 // Compare function to be used by tommy_hashlin_search for fif_task_mapping
