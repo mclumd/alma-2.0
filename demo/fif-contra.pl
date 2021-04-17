@@ -1,4 +1,4 @@
-fif(and(b,d), conclusion(result)).
+fif(and(b,d), result).
 a.
 if(a,b).
 if(b,c).

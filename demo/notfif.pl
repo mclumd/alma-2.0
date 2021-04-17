@@ -1,3 +1,3 @@
-fif(and(not(a), not(b)), conclusion(c)).
+fif(and(not(a), not(b)), c).
 not(a).
 not(b).

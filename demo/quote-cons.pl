@@ -1,5 +1,5 @@
 fif(and(foo(X), quote_cons(X, Qx, bound(X))),
-conclusion(bar(Qx))).
+bar(Qx)).
 
 foo(baz(Y)).
 foo(baz(Y, quote(asdf(Z)))).

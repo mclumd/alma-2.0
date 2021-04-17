@@ -16,14 +16,14 @@ or(p(A,B,C), not(p(X,Y,Z))).
 or(p(A,B,C), not(p(A,Y,Z))).
 or(p(Aaa,Bbb,Ccc), not(p(Aaa,Yyy,Zzz))).
 
-fif(and(a,b), conclusion(c)).
-fif(and(a,b), conclusion(c)).
-fif(and(a,b), conclusion(c)).
-fif(and(a,b), conclusion(c)).
-fif(and(a,b), conclusion(c)).
-fif(and(a,b), conclusion(c)).
+fif(and(a,b), c).
+fif(and(a,b), c).
+fif(and(a,b), c).
+fif(and(a,b), c).
+fif(and(a,b), c).
+fif(and(a,b), c).
 
 if(and(a,b),c).
 
 
-fif(and(b,a),conclusion(c)).
+fif(and(b,a),c).

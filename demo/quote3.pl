@@ -1,7 +1,7 @@
 if(bel(Agent, quote(if(and(fire(A), wet(A)), smoke(A)))),
    foo(Agent)).
 fif(bel(Agent, quote(if(and(fire(A), wet(A)), smoke(A)))),
-   conclusion(foo(Agent))).
+   foo(Agent)).
 if(bel(Agent, quote(if(and(fire(A), wet(B)), smoke(B)))),
    foo(Agent)).
 
@@ -12,7 +12,7 @@ bel(agent_3, quote(if(and(fire(X), wet(X)), smoke(Y)))).
 if(bel2(Agent, quote(bel(alma, quote(if(and(fire(A), wet(A)), smoke(A)))))),
    foo(Agent)).
 fif(bel2(Agent, quote(bel(alma, quote(if(and(fire(A), wet(A)), smoke(A)))))),
-   conclusion(foo(Agent))).
+   foo(Agent)).
 if(bel2(Agent, quote(bel(alma, quote(if(and(fire(A), wet(B)), smoke(B)))))),
    foo(Agent)).
 

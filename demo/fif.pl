@@ -1,8 +1,8 @@
-fif(conc(P,Q), conclusion(simplefif)).
+fif(conc(P,Q), simplefif).
 fif(and(not(f(X,Z)),
     and(atomic, 
     and(not(nesting(stuff(Z))),
-    premise))), conclusion(conc(X, Z))).
+    premise))), conc(X, Z)).
 atomic.
 premise.
 not(f(word, otherword)).
