@@ -47,7 +47,7 @@ void subst_clause(binding_list *theta, struct clause *c, int quote_level);
 
 int quote_term_unify(alma_quote *x, alma_quote *y, binding_list *theta);
 int term_unify(alma_term *x, alma_term *y, binding_list *theta);
-int pred_unify(alma_function *x, alma_function *y, binding_list *theta);
+int pred_unify(alma_function *x, alma_function *y, binding_list *theta, int verbose);
 
 void init_bindings(binding_list *theta);
 void add_binding(binding_list *theta, alma_variable *var, alma_term *term, void *parent, int copy_term);

@@ -118,21 +118,22 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *alma, intr
   copy_alma_term(query, search_term);
   subst_term(bindings, search_term, 0);
 
-  // Debug
-  if (kind == POS_INT_SPEC)
-    tee_alt("Performing pos_int_spec on \"", alma, NULL);
-  else if (kind == POS_INT)
-    tee_alt("Performing pos_int on \"", alma, NULL);
-  else if (kind == POS_INT_GEN)
-    tee_alt("Performing pos_int_gen on \"", alma, NULL);
-  else if (kind == NEG_INT_SPEC)
-    tee_alt("Performing neg_int_spec on \"", alma, NULL);
-  else if (kind == NEG_INT)
-    tee_alt("Performing neg_int on \"", alma, NULL);
-  else if (kind == NEG_INT_GEN)
-    tee_alt("Performing neg_int_gen on \"", alma, NULL);
-  clause_print(alma, search_term->quote->clause_quote, NULL);
-  tee_alt("\"\n", alma, NULL);
+  if (alma->verbose) {
+    if (kind == POS_INT_SPEC)
+      tee_alt("Performing pos_int_spec on \"", alma, NULL);
+    else if (kind == POS_INT)
+      tee_alt("Performing pos_int on \"", alma, NULL);
+    else if (kind == POS_INT_GEN)
+      tee_alt("Performing pos_int_gen on \"", alma, NULL);
+    else if (kind == NEG_INT_SPEC)
+      tee_alt("Performing neg_int_spec on \"", alma, NULL);
+    else if (kind == NEG_INT)
+      tee_alt("Performing neg_int on \"", alma, NULL);
+    else if (kind == NEG_INT_GEN)
+      tee_alt("Performing neg_int_gen on \"", alma, NULL);
+    clause_print(alma, search_term->quote->clause_quote, NULL);
+    tee_alt("\"\n", alma, NULL);
+  }
 
   void *mapping = clause_lookup(alma, search_term->quote->clause_quote);
   if (mapping != NULL) {
@@ -151,10 +152,11 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *alma, intr
           q->clause_quote = malloc(sizeof(*q->clause_quote));
           // copy_and_quasiquote_clause may reject copying, for which would free and continue
           if (!copy_and_quasiquote_clause(ith, q->clause_quote, search_term->quote->clause_quote, kind)) {
-            // Debug
-            tee_alt("Structure failure of \"", alma, NULL);
-            clause_print(alma, ith, NULL);
-            tee_alt("\"\n", alma, NULL);
+            if (alma->verbose) {
+              tee_alt("Structure failure of \"", alma, NULL);
+              clause_print(alma, ith, NULL);
+              tee_alt("\"\n", alma, NULL);
+            }
 
             free(q->clause_quote);
             q->clause_quote = NULL;
@@ -169,10 +171,11 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *alma, intr
         binding_list *copy = malloc(sizeof(*copy));
         copy_bindings(copy, bindings);
 
-        // Debug
-        tee_alt("Attempting to unify with \"", alma, NULL);
-        clause_print(alma, q->clause_quote, NULL);
-        tee_alt("\"\n", alma, NULL);
+        if (alma->verbose) {
+          tee_alt("Attempting to unify with \"", alma, NULL);
+          clause_print(alma, q->clause_quote, NULL);
+          tee_alt("\"\n", alma, NULL);
+        }
 
         // Returning first match based at the moment
         if (quote_term_unify(search_term->quote, q, copy)) {
@@ -196,8 +199,8 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *alma, intr
             q->clause_quote = NULL;
           free_quote(q);
 
-          // Debug
-          tee_alt("\n", alma, NULL);
+          if (alma->verbose)
+            tee_alt("\n", alma, NULL);
 
           free_term(search_term);
           free(search_term);
@@ -212,8 +215,9 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *alma, intr
     }
     free_quote(q);
   }
-  // Debug
-  tee_alt("\n", alma, NULL);
+
+  if (alma->verbose)
+    tee_alt("\n", alma, NULL);
 
   free_term(search_term);
   free(search_term);
@@ -247,10 +251,12 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time,
   int has_ancestor = 0;
   if (ancestor_copy->type == QUOTE && ancestor_copy->quote->type == CLAUSE
       && descendant_copy->type == QUOTE && descendant_copy->quote->type == CLAUSE) {
-    // Debug
-    tee_alt("Performing ancestor on \"", alma, NULL);
-    clause_print(alma, descendant_copy->quote->clause_quote, NULL);
-    tee_alt("\"\n", alma, NULL);
+
+    if (alma->verbose) {
+      tee_alt("Performing ancestor on \"", alma, NULL);
+      clause_print(alma, descendant_copy->quote->clause_quote, NULL);
+      tee_alt("\"\n", alma, NULL);
+    }
 
     // Frontier of parents to expand
     tommy_array queue;
@@ -314,10 +320,11 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time,
         copy_bindings(anc_bindings, desc_bindings);
 
         if (counts_match(c, ancestor_copy->quote->clause_quote)) {
-          // Debug
-          tee_alt("Attempting to unify with \"", alma, NULL);
-          clause_print(alma, c, NULL);
-          tee_alt("\"\n", alma, NULL);
+          if (alma->verbose) {
+            tee_alt("Attempting to unify with \"", alma, NULL);
+            clause_print(alma, c, NULL);
+            tee_alt("\"\n", alma, NULL);
+          }
 
           quote_holder->clause_quote = c;
 
@@ -350,8 +357,9 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time,
   free_term(descendant_copy);
   free(descendant_copy);
 
-  // Debug
-  tee_alt("\n", alma, NULL);
+  if (alma->verbose)
+    tee_alt("\n", alma, NULL);
+
   return has_ancestor;
 }
 

@@ -1500,10 +1500,11 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
       if (!current_task->x->distrusted && !current_task->y->distrusted) {
         binding_list *theta = malloc(sizeof(*theta));
         init_bindings(theta);
-        // Debug
-        print_unify(collection, current_task->pos, current_task->x->index, current_task->neg, current_task->y->index, buf);
+        if (collection->verbose)
+          print_unify(collection, current_task->pos, current_task->x->index, current_task->neg, current_task->y->index, buf);
+
         // Given a res_task, attempt unification
-        if (pred_unify(current_task->pos, current_task->neg, theta)) {
+        if (pred_unify(current_task->pos, current_task->neg, theta, collection->verbose)) {
           // If successful, create clause for result of resolution and add to new_clauses
           clause *res_result = malloc(sizeof(*res_result));
           resolve(current_task, theta, res_result);
@@ -1643,8 +1644,9 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
             }
           }
         }
-        // Debug
-        print_bindings(collection, theta, 1, 1, buf);
+        if (collection->verbose)
+          print_bindings(collection, theta, 1, 1, buf);
+
         cleanup:
         cleanup_bindings(theta);
       }

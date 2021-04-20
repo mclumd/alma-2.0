@@ -220,11 +220,11 @@ void kb_print(kb *collection, kb_str *buf) {
   tommy_node *i = tommy_list_head(&collection->clauses);
   while (i) {
     index_mapping *data = i->data;
-    //if (data->value->dirty_bit) {
+    if (collection->verbose || data->value->dirty_bit) {
       tee_alt("%ld: ", collection, buf, data->key);
       clause_print(collection, data->value, buf);
       tee_alt("\n", collection, buf);
-    //}
+    }
     i = i->next;
   }
 
