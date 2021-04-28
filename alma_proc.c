@@ -255,6 +255,8 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time,
     if (alma->verbose) {
       tee_alt("Performing ancestor on \"", alma, NULL);
       clause_print(alma, descendant_copy->quote->clause_quote, NULL);
+      tee_alt("\" for ancestor \"", alma, NULL);
+      clause_print(alma, ancestor_copy->quote->clause_quote, NULL);
       tee_alt("\"\n", alma, NULL);
     }
 
@@ -273,8 +275,16 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time,
       if_tag tag = descendant_copy->quote->clause_quote->tag;
       for (int i = mapping_num_clauses(mapping, tag)-1; i >= 0; i--) {
         clause *ith = mapping_access(mapping, tag, i);
+
+        if (alma->verbose) {
+          tee_alt("Processing \"", alma, NULL);
+          clause_print(alma, ith, NULL);
+          tee_alt("\"\n", alma, NULL);
+        }
+
         if (counts_match(ith, descendant_copy->quote->clause_quote) &&
-            (!ith->distrusted || ith->distrusted >= query_time) && ith->acquired <= query_time) {
+            //ith->acquired <= query_time) {
+            (!ith->distrusted || ith->distrusted >= query_time) && ith->acquired <= query_time){
           // Create copy as either empty list or copy of arg
           desc_bindings = malloc(sizeof(*desc_bindings));
           copy_bindings(desc_bindings, bindings);
@@ -316,6 +326,12 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time,
       if (!present) {
         tommy_array_insert(&checked, c);
 
+        if (alma->verbose) {
+          tee_alt("Processing \"", alma, NULL);
+          clause_print(alma, c, NULL);
+          tee_alt("\"\n", alma, NULL);
+        }   
+
         binding_list *anc_bindings = malloc(sizeof(*anc_bindings));
         copy_bindings(anc_bindings, desc_bindings);
 
@@ -333,6 +349,8 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time,
             swap_bindings(anc_bindings, bindings);
             cleanup_bindings(anc_bindings);
             has_ancestor = 1;
+            if (alma->verbose)
+              tee_alt("Ancestor succeeded!\n", alma, NULL);
             break;
           }
         }
@@ -357,8 +375,8 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time,
   free_term(descendant_copy);
   free(descendant_copy);
 
-  if (alma->verbose)
-    tee_alt("\n", alma, NULL);
+  if (alma->verbose && !has_ancestor)
+    tee_alt("Ancestor failure\n\n", alma, NULL);
 
   return has_ancestor;
 }
