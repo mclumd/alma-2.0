@@ -22,7 +22,7 @@ static char* now(long t) {
   return str;
 }
 
-static char* walltime() {
+/*static char* walltime() {
   struct timeval tval;
   gettimeofday(&tval, NULL);
   int sec_len = snprintf(NULL, 0, "%ld", (long int)tval.tv_sec);
@@ -33,10 +33,10 @@ static char* walltime() {
   snprintf(str+8+sec_len+2, 6+1, "%06ld", (long int)tval.tv_usec);
   strcpy(str+8+sec_len+8, ").");
   return str;
-}
+}*/
 
 // Caller will need to free collection with kb_halt
-void kb_init(kb **collection, char *file, char *agent, char *trialnum, char *log_dir,  int verbose, kb_str *buf, int logon) {
+void kb_init(kb **collection, char **files, int file_count, char *agent, char *trialnum, char *log_dir,  int verbose, kb_str *buf, int logon) {
   // Allocate and initialize
   *collection = malloc(sizeof(**collection));
   kb *collec = *collection;
@@ -104,18 +104,20 @@ void kb_init(kb **collection, char *file, char *agent, char *trialnum, char *log
   }
 
   // Given a file argument, obtain other initial clauses from
-  if (file != NULL) {
-    alma_node *trees;
-    int num_trees;
+  if (files != NULL) {
+    for (int i = 0; i < file_count; i++) {
+      alma_node *trees;
+      int num_trees;
 
-    if (formulas_from_source(file, 1, &num_trees, &trees, collec, buf)) {
-      nodes_to_clauses(collec, trees, num_trees, &collec->new_clauses, 0, buf);
-      fif_to_front(&collec->new_clauses);
-    }
-    // If file cannot parse, cleanup and exit
-    else {
-      kb_halt(collec);
-      exit(0);
+      if (formulas_from_source(files[i], 1, &num_trees, &trees, collec, buf)) {
+        nodes_to_clauses(collec, trees, num_trees, &collec->new_clauses, 0, buf);
+        fif_to_front(&collec->new_clauses);
+      }
+      // If file cannot parse, cleanup and exit
+      else {
+        kb_halt(collec);
+        exit(0);
+      }
     }
   }
   if (agent != NULL) {
@@ -130,8 +132,8 @@ void kb_init(kb **collection, char *file, char *agent, char *trialnum, char *log
 
   collec->prev = now(collec->time);
   assert_formula(collec, collec->prev, 0, buf);
-  collec->wallprev = walltime();
-  assert_formula(collec, collec->wallprev, 0, buf);
+  //collec->wallprev = walltime();
+  //assert_formula(collec, collec->wallprev, 0, buf);
 
   // Insert starting clauses
   for (tommy_size_t i = 0; i < tommy_array_size(&collec->new_clauses); i++) {
@@ -189,14 +191,14 @@ void kb_step(kb *collection, kb_str *buf) {
   // New clock rules go last
   collection->now = now(collection->time);
   assert_formula(collection, collection->now, 0, buf);
-  collection->wallnow = walltime();
-  assert_formula(collection, collection->wallnow, 0, buf);
+  //collection->wallnow = walltime();
+  //assert_formula(collection, collection->wallnow, 0, buf);
   delete_formula(collection, collection->prev, 0, buf);
   free(collection->prev);
   collection->prev = collection->now;
-  delete_formula(collection, collection->wallprev, 0, buf);
-  free(collection->wallprev);
-  collection->wallprev = collection->wallnow;
+  //delete_formula(collection, collection->wallprev, 0, buf);
+  //free(collection->wallprev);
+  //collection->wallprev = collection->wallnow;
   process_new_clauses(collection, buf);
 
   tommy_node *i = tommy_list_head(&collection->backsearch_tasks);

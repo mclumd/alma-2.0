@@ -14,7 +14,7 @@ make
 ```
 
 required arguments:  
-  `-f file`   provides an input file for beginning ALMA KB
+  `-f file`   provides an input file for beginning ALMA KB; may be repeated for multiple input files
 
 optional arguments:  
   `-r`        runs ALMA automatically until halting when it first idles  
@@ -45,8 +45,9 @@ almaformula  : <sentence> '.'
 sentence     : <fformula> | <bformula> | <formula>
 formula      : \"and(\" <formula> ',' <formula> ')' | \"or(\" <formula> ','  <formula> ')'
              | \"if(\" <formula> ',' <formula> ')' | \"not(\" <formula> ')' | <literal>
-fformula     : \"fif(\" <conjform> ',' \"conclusion(\" <fformconc> ')' ')'
-fformconc    : \"not(\" <literal> ')' | <literal>  
+fformula     : \"fif(\" <conjform> ',' <fformconc> ')'
+fformconc    : \"not(\" <literal> ')' | <literal> \"and(\" <fformconc> ',' <fformconc> ')'
+             | <fformula> | \"not(\" <literal> ')' | <literal>
 bformula     : \"bif(\" <formula> ',' <formula> ')'
 conjform     : \"and(\" <conjform> ',' <conjform> ')' | \"not(\" <literal> ')' | <literal>
 literal      : <predname> '(' <listofterms> ')' | <predname>

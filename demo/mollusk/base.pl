@@ -28,13 +28,6 @@ and(reinstate(quote(not(rel(`Pred, `Obj))), T),
 and(fif(and(rel(Kind2, Ab_Obj), not(rel(Pred, Ab_Obj))), abnormal(Ab_Obj, Kind2, Pred)),
 fif(and(abnormal(Ab, Kind2, Pred), rel(Pred, Ab)), distrust(quote(abnormal(`Ab, `Kind2, `Pred))))))))).
 
-% Above needs matching one for distrust(abnormal(...))
-
-rel(cephalopod, steve).
-if(now(5), rel(nautilus, steve)).
-if(now(10), rel(naked_nautilus, steve)).
-%if(now(4), rel(cephalopod, sam)).
-
 % Contradiction response for when both contradictands are inferred, ancestors have is-a relationship, and more specific case is negative
 fif(and(contra(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
     and(ancestor(quote(fif(rel(`Kind1, Obj), rel(`Pred, Obj))), quote(rel(`Pred, `Obj)), T),
@@ -43,7 +36,8 @@ fif(and(contra(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
 and(update(quote(fif(rel(`Kind2, Obj), not(rel(`Pred, Obj)))), quote(fif(and(rel(`Kind2, Obj), neg_int(quote(abnormal(`Obj, ``Kind2, ``Pred)))), not(rel(`Pred, Obj))))),
 and(abnormal(Obj, Kind2, Pred),
 and(reinstate(quote(rel(`Pred, `Obj)), T),
-fif(and(rel(Kind2, Ab_Obj), rel(Pred, Ab_Obj)), abnormal(Ab_Obj, Kind2, Pred)))))).
+and(fif(and(rel(Kind2, Ab_Obj), rel(Pred, Ab_Obj)), abnormal(Ab_Obj, Kind2, Pred)),
+fif(and(abnormal(Ab, Kind2, Pred), not(rel(Pred, Ab))), distrust(quote(abnormal(`Ab, `Kind2, `Pred))))))))).
 
 
 % Contradiction response for when negative contradictand was observed, and positive isn't derived from default
@@ -53,7 +47,8 @@ fif(and(contra(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
 and(update(quote(fif(rel(`Kind, Obj), rel(`Pred, Obj))), quote(fif(and(rel(`Kind, Obj), neg_int(quote(abnormal(`Obj, ``Kind, ``Pred)))), rel(`Pred, Obj)))),
 and(abnormal(Obj, Kind, Pred),
 and(reinstate(quote(not(rel(`Pred, `Obj))), T),
-fif(and(rel(Kind, Ab_Obj), not(rel(Pred, Ab_Obj))), abnormal(Ab_Obj, Kind, Pred)))))).
+and(fif(and(rel(Kind, Ab_Obj), not(rel(Pred, Ab_Obj))), abnormal(Ab_Obj, Kind, Pred)),
+fif(and(abnormal(Ab, Kind, Pred), rel(Pred, Ab)), distrust(quote(abnormal(`Ab, `Kind, `Pred))))))))).
 
 % Contradiction response for when positive contradictand was observed, and negative isn't derived from default
 fif(and(contra(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
@@ -62,7 +57,8 @@ fif(and(contra(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
 and(update(quote(fif(rel(`Kind, Obj), not(rel(`Pred, Obj)))), quote(fif(and(rel(`Kind, Obj), neg_int(quote(abnormal(`Obj, ``Kind, ``Pred)))), not(rel(`Pred, Obj))))),
 and(abnormal(Obj, Kind, Pred),
 and(reinstate(quote(rel(`Pred, `Obj)), T),
-fif(and(rel(Kind, Ab_Obj), rel(Pred, Ab_Obj)), abnormal(Ab_Obj, Kind, Pred)))))).
+and(fif(and(rel(Kind, Ab_Obj), rel(Pred, Ab_Obj)), abnormal(Ab_Obj, Kind, Pred)),
+fif(and(abnormal(Ab, Kind, Pred), not(rel(Pred, Ab))), distrust(quote(abnormal(`Ab, `Kind, `Pred))))))))).
 
 
 % Contradiction response for distrusted abnormality: When Obj's abormality with respect to Pred is inferred from it being Pred, and a default rule for neg_int abnormality was a parent of Obj as ~Pred, reinstate abnormality
@@ -104,3 +100,4 @@ fif(and(distrusted(quote(abnormal(`Obj, `Kind, `Pred)), T),
     and(not(rel(Pred, Obj)),
     ancestor(quote(not(rel(`Pred, `Obj))), quote(abnormal(`Obj, `Kind, `Pred)), T))),
 reinstate(quote(abnormal(`Obj, `Kind, `Pred)), T)).
+

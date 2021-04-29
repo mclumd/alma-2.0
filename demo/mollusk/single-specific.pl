@@ -1,1 +1,1 @@
-rel(cephalopod, steve).
+rel(naked_nautilus, steve).

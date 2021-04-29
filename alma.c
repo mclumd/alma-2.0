@@ -20,14 +20,15 @@ extern char python_mode;
 int main(int argc, char **argv) {
   int run = 0;
   int verbose = 0;
-  char *file = NULL;
+  int file_count = 0;
+  char **files = NULL;
   char *agent = NULL;
 
   logs_on = (char) 1;
   python_mode = (char) 0;
 
   int c;
-  while ((c = getopt (argc, argv, "rxvf:a:")) != -1)
+  while ((c = getopt(argc, argv, "rxvf:a:")) != -1)
     switch (c) {
       case 'r':
         run = 1;
@@ -36,7 +37,9 @@ int main(int argc, char **argv) {
         verbose = 1;
         break;
       case 'f':
-        file = optarg;
+        file_count++;
+        files = realloc(files, sizeof(*files) * file_count);
+        files[file_count-1] = optarg;
         break;
       case 'x':
 	logs_on = (char) 0;
@@ -58,13 +61,13 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-  if (file == NULL) {
-    printf("Please run with an ALMA file argument using the \"-f\" option.\n");
+  if (files == NULL) {
+    printf("Please run with at least one ALMA file argument using the \"-f\" option.\n");
     return 0;
   }
 
   kb *alma_kb;
-  kb_init(&alma_kb, file, agent, NULL, NULL, verbose, NULL, logs_on);
+  kb_init(&alma_kb, files, file_count, agent, NULL, NULL, verbose, NULL, logs_on);
   kb_print(alma_kb, NULL);
 
 
