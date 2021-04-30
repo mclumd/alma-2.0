@@ -1552,7 +1552,6 @@ void process_var_num_res_tasks(kb *collection, res_task_heap *tasks, tommy_array
     peek_task = res_task_heap_item(tasks, 0);
   }
 
-
   for (int i =0; i < num_to_process; i++) {
       /* Do nothing if everything has been processed. */
       // TODO:  Better to modify num_to_process after resolving prioirty 0 tasks.

@@ -324,6 +324,9 @@ static PyObject *prb_to_resolutions(PyObject *self, PyObject *args) {
   return Py_None;
 }
 
+
+// Add the first element of the preresolution buffer to the resolution heap
+// IFF it has priority below the given threshold
 static PyObject *single_prb_to_resolutions(PyObject *self, PyObject *args) {
   long alma_kb;
   kb *collection;
@@ -799,6 +802,17 @@ PyMODINIT_FUNC PyInit_alma(void) {
   return PyModule_Create(&almamodule);
 }
 
+
+/* static PyObjct *alma_halt(PyObject *self, PyObject *args) { */
+/*   long alma_kb; */
+/*   kb *collection; */
+  
+/*   if (!PyArg_ParseTuple(args, "l", &alma_kb)) */
+/*     return NULL; */
+/*   collection = (kb *)alma_kb; */
+/*   kb_halt(collec); */
+
+/* } */
 
 // Placed at the end only because macros mess up formatting
 static PyObject * alma_init(PyObject *self, PyObject *args) {

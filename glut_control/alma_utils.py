@@ -15,9 +15,32 @@ def pr_heap_print(alma_inst, alma_heap_print_size=100):
         print("i={}:\t{}\tpri={}".format(i, fmla, pri))
         if i >  alma_heap_print_size:
             break
-        
+
+def heap_size(alma_inst):
+    rth = alma.res_task_buf(alma_inst)
+    hs = len(rth[1].split('\n')[:-1])
+    del rth
+    return hs
+
 def kb_print(alma_inst):
     kb = alma.kbprint(alma_inst)[0]
     print("kb: ")
     for s in kb.split('\n'):
         print(s)
+
+
+def alma_tree_to_str(tree):
+    if len(tree) == 0:
+        return ""
+    elif tree[0] == 'if':
+        return alma_tree_to_str(tree[1]) + " --> " + alma_tree_to_str(tree[2])
+    elif tree[0] == 'func':
+        return tree[1] + '(' + ''.join([alma_tree_to_str(term) for term in tree[2]   ]) + ')'
+    elif tree[0] == 'var':
+        return tree[1]
+
+def alma_collection_to_strings(collection):
+    return [ alma_tree_to_str(tree) for tree in collection]
+
+def actions_to_strings(acts):
+    return [ [alma_tree_to_str(t0), alma_tree_to_str(t1)] for [t0, t1] in acts  ]
