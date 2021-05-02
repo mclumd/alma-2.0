@@ -249,9 +249,8 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time,
   subst_term(bindings, descendant_copy, 0);
 
   int has_ancestor = 0;
-  if (ancestor_copy->type == QUOTE && ancestor_copy->quote->type == CLAUSE
-      && descendant_copy->type == QUOTE && descendant_copy->quote->type == CLAUSE) {
-
+  if (ancestor_copy->type == QUOTE && ancestor_copy->quote->type == CLAUSE &&
+      descendant_copy->type == QUOTE && descendant_copy->quote->type == CLAUSE) {
     if (alma->verbose) {
       tee_alt("Performing ancestor on \"", alma, NULL);
       clause_print(alma, descendant_copy->quote->clause_quote, NULL);
@@ -260,14 +259,7 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time,
       tee_alt("\"\n", alma, NULL);
     }
 
-    // Frontier of parents to expand
-    tommy_array queue;
-    tommy_array_init(&queue);
-
-    // Note: for now, will just use first unifying case for ancestor search
-    // If necessary, can make more general at later point, by branching for all possibilities
     void *mapping = clause_lookup(alma, descendant_copy->quote->clause_quote);
-    binding_list *desc_bindings = NULL;
     if (mapping != NULL) {
       alma_quote *q = malloc(sizeof(*q));
       q->type = CLAUSE;
@@ -282,101 +274,105 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time,
           tee_alt("\"\n", alma, NULL);
         }
 
-        if (counts_match(ith, descendant_copy->quote->clause_quote) &&
-            //ith->acquired <= query_time) {
-            (!ith->distrusted || ith->distrusted >= query_time) && ith->acquired <= query_time){
+        if (counts_match(ith, descendant_copy->quote->clause_quote) && ith->acquired <= query_time
+            && (!ith->distrusted || ith->distrusted >= query_time)){
           // Create copy as either empty list or copy of arg
-          desc_bindings = malloc(sizeof(*desc_bindings));
+          binding_list *desc_bindings = malloc(sizeof(*desc_bindings));
           copy_bindings(desc_bindings, bindings);
           q->clause_quote = ith;
 
           if (quote_term_unify(descendant_copy->quote, q, desc_bindings)) {
+            // Frontier of parents to expand
+            tommy_array queue;
+            tommy_array_init(&queue);
+            // Checked items to avoid cycles
+            tommy_array checked;
+            tommy_array_init(&checked);
+            alma_quote *quote_holder = malloc(sizeof(*quote_holder));
+            quote_holder->type = CLAUSE;
+
             // Parents as starting items for queue
             for (int j = 0; j < ith->parent_set_count; j++)
               for (int k = 0; k < ith->parents[j].count; k++)
                 tommy_array_insert(&queue, ith->parents[j].clauses[k]);
-            break;
+
+            // Process queue in breadth-first manner
+            for (int curr = 0; curr < tommy_array_size(&queue); curr++) {
+              clause *c = tommy_array_get(&queue, curr);
+
+              int present = 0;
+              for (int j = 0; j < tommy_array_size(&checked); j++) {
+                if (tommy_array_get(&checked, j) == c) {
+                  present = 1;
+                  break;
+                }
+              }
+
+              // Clause wasn't in the checked items
+              if (!present) {
+                tommy_array_insert(&checked, c);
+
+                binding_list *anc_bindings = malloc(sizeof(*anc_bindings));
+                copy_bindings(anc_bindings, desc_bindings);
+
+                if (counts_match(c, ancestor_copy->quote->clause_quote)) {
+                  if (alma->verbose) {
+                    tee_alt("Attempting to unify with \"", alma, NULL);
+                    clause_print(alma, c, NULL);
+                    tee_alt("\"\n", alma, NULL);
+                  }
+
+                  quote_holder->clause_quote = c;
+
+                  // Try unifying pair of quotes
+                  if (quote_term_unify(ancestor_copy->quote, quote_holder, anc_bindings)) {
+                    swap_bindings(anc_bindings, bindings);
+                    cleanup_bindings(anc_bindings);
+                    tommy_array_done(&queue);
+                    tommy_array_done(&checked);
+                    free(quote_holder);
+                    cleanup_bindings(desc_bindings);
+                    has_ancestor = 1;
+                    goto cleanup;
+                  }
+                }
+                else if (alma->verbose) {
+                  tee_alt("Processing \"", alma, NULL);
+                  clause_print(alma, c, NULL);
+                  tee_alt("\"\n", alma, NULL);
+                }
+                cleanup_bindings(anc_bindings);
+
+                // Queue parents for expansion
+                for (int j = 0; j < c->parent_set_count; j++)
+                  for (int k = 0; k < c->parents[j].count; k++)
+                    tommy_array_insert(&queue, c->parents[j].clauses[k]);
+              }
+            }
+
+            tommy_array_done(&queue);
+            tommy_array_done(&checked);
+            free(quote_holder);
           }
           cleanup_bindings(desc_bindings);
-          desc_bindings = NULL;
         }
       }
-
       free(q);
     }
-
-    // Checked items to avoid cycles
-    tommy_array checked;
-    tommy_array_init(&checked);
-
-    alma_quote *quote_holder = malloc(sizeof(*quote_holder));
-    quote_holder->type = CLAUSE;
-    // Continue processing queue in breadth-first manner
-    for (int curr = 0; curr < tommy_array_size(&queue); curr++) {
-      clause *c = tommy_array_get(&queue, curr);
-
-      int present = 0;
-      for (int i = 0; i < tommy_array_size(&checked); i++)
-        if (tommy_array_get(&checked, i) == c) {
-          present = 1;
-          break;
-        }
-
-      // Clause wasn't in the checked items
-      if (!present) {
-        tommy_array_insert(&checked, c);
-
-        if (alma->verbose) {
-          tee_alt("Processing \"", alma, NULL);
-          clause_print(alma, c, NULL);
-          tee_alt("\"\n", alma, NULL);
-        }   
-
-        binding_list *anc_bindings = malloc(sizeof(*anc_bindings));
-        copy_bindings(anc_bindings, desc_bindings);
-
-        if (counts_match(c, ancestor_copy->quote->clause_quote)) {
-          if (alma->verbose) {
-            tee_alt("Attempting to unify with \"", alma, NULL);
-            clause_print(alma, c, NULL);
-            tee_alt("\"\n", alma, NULL);
-          }
-
-          quote_holder->clause_quote = c;
-
-          // Try unifying pair of quotes
-          if (quote_term_unify(ancestor_copy->quote, quote_holder, anc_bindings)) {
-            swap_bindings(anc_bindings, bindings);
-            cleanup_bindings(anc_bindings);
-            has_ancestor = 1;
-            if (alma->verbose)
-              tee_alt("Ancestor succeeded!\n", alma, NULL);
-            break;
-          }
-        }
-        cleanup_bindings(anc_bindings);
-
-        // Queue parents for expansion
-        for (int i = 0; i < c->parent_set_count; i++)
-          for (int j = 0; j < c->parents[i].count; j++)
-            tommy_array_insert(&queue, c->parents[i].clauses[j]);
-      }
-    }
-
-    if (desc_bindings != NULL)
-      cleanup_bindings(desc_bindings);
-    free(quote_holder);
-    tommy_array_done(&queue);
-    tommy_array_done(&checked);
   }
 
+  cleanup:
   free_term(ancestor_copy);
   free(ancestor_copy);
   free_term(descendant_copy);
   free(descendant_copy);
 
-  if (alma->verbose && !has_ancestor)
-    tee_alt("Ancestor failure\n\n", alma, NULL);
+  if (alma->verbose) {
+    if (has_ancestor)
+      tee_alt("Ancestor succeeded!\n", alma, NULL);
+    else
+      tee_alt("Ancestor failure\n\n", alma, NULL);
+  }
 
   return has_ancestor;
 }
