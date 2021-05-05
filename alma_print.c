@@ -181,7 +181,7 @@ void clause_print(kb *collection, clause *c, kb_str *buf) {
     }
     tee_alt(")", collection, buf);
   }
-  c->dirty_bit = (char) 0;
+  c->dirty_bit = 0;
   //tee_alt(" (L%ld)", c->acquired);
 }
 

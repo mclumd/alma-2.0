@@ -49,7 +49,7 @@ alma_unify.o: alma_unify.c alma_unify.h alma_fif.h alma_formula.h alma_kb.h
 alma_print.o: alma_print.c alma_kb.h alma_formula.h alma_unify.h alma_fif.h alma_print.h
 	$(CC) $(CFLAGS) -c alma_print.c
 
-alma_proc.o: alma_proc.c alma_kb.h alma_formula.h alma_unify.h alma_proc.h tommy.h
+alma_proc.o: alma_proc.c alma_kb.h alma_formula.h alma_unify.h alma_print.h alma_fif.h alma_proc.h tommy.h
 	$(CC) $(CFLAGS) -c alma_proc.c
 
 alma_fif.o: alma_fif.c alma_kb.h alma_formula.h alma_unify.h alma_proc.h alma_fif.h tommy.h

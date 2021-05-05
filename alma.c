@@ -68,6 +68,7 @@ int main(int argc, char **argv) {
 
   kb *alma_kb;
   kb_init(&alma_kb, files, file_count, agent, NULL, NULL, verbose, NULL, logs_on);
+  free(files);
   kb_print(alma_kb, NULL);
 
 

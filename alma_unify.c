@@ -200,8 +200,10 @@ void increment_clause_quote_level_paired(clause *c, clause *query, int quote_lev
       increment_quasiquote_level_paired(c->neg_lits[i]->terms+j, query_term, quote_level);
     }
   if (c->tag == FIF) {
-    for (int i = 0; i < c->fif->num_conclusions; i++)
-      increment_clause_quote_level_paired(c->fif->conclusions[i], query, quote_level);
+    for (int i = 0; i < c->fif->num_conclusions; i++) {
+      clause *conc = (query == NULL) ? NULL : query->fif->conclusions[i];
+      increment_clause_quote_level_paired(c->fif->conclusions[i], conc, quote_level);
+    }
   }
 }
 
@@ -582,7 +584,7 @@ int pred_unify(alma_function *x, alma_function *y, binding_list *theta, int verb
     if (ret)
       printf("Unification success!\n");
     else
-      printf("Unification failure\n");  
+      printf("Unification failure\n");
   }
   return ret;
 }

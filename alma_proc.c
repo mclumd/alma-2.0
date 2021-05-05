@@ -3,6 +3,7 @@
 #include "alma_proc.h"
 #include "alma_print.h"
 #include "tommy.h"
+#include "alma_fif.h"
 
 typedef enum introspect_kind {POS_INT_SPEC, POS_INT, POS_INT_GEN, NEG_INT_SPEC, NEG_INT, NEG_INT_GEN, ACQUIRED} introspect_kind;
 
@@ -73,17 +74,34 @@ static int function_structure_match(alma_function *original, alma_function *quer
 }
 
 static int structure_match(clause *original, clause *query, introspect_kind kind, int quote_level) {
-  if (original->pos_count == query->pos_count && original->neg_count == query->neg_count) {
-    for (int i = 0; i < original->pos_count; i++) {
-      if (!function_structure_match(original->pos_lits[i], query->pos_lits[i], kind, quote_level))
-        return 0;
+  if (original->tag == query->tag) {
+    if (original->tag == FIF) {
+      if (original->fif->premise_count == query->fif->premise_count && original->fif->num_conclusions == query->fif->num_conclusions) {
+        for (int i = 0; i < original->fif->premise_count; i++) {
+          if (!function_structure_match(fif_access(original, i), fif_access(query, i), kind, quote_level))
+            return 0;
+        }
+
+        for (int i = 0; i < original->fif->num_conclusions; i++) {
+          if (!structure_match(original->fif->conclusions[i], query->fif->conclusions[i], kind, quote_level))
+            return 0;
+        }
+        return 1;
+      }
     }
-    for (int i = 0; i < original->neg_count; i++) {
-      if (!function_structure_match(original->neg_lits[i], query->neg_lits[i], kind, quote_level))
-        return 0;
+    else if (original->pos_count == query->pos_count && original->neg_count == query->neg_count) {
+      for (int i = 0; i < original->pos_count; i++) {
+        if (!function_structure_match(original->pos_lits[i], query->pos_lits[i], kind, quote_level))
+          return 0;
+      }
+      for (int i = 0; i < original->neg_count; i++) {
+        if (!function_structure_match(original->neg_lits[i], query->neg_lits[i], kind, quote_level))
+          return 0;
+      }
+      return 1;
     }
   }
-  return 1;
+  return 0;
 }
 
 // Duplicate original into copy as long as the structure of original matches query
@@ -142,9 +160,8 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *alma, intr
     q->clause_quote = NULL;
 
     int non_specific = (kind == POS_INT || kind == POS_INT_GEN || kind == NEG_INT || kind == NEG_INT_GEN);
-    if_tag tag = search_term->quote->clause_quote->tag;
-    for (int i = mapping_num_clauses(mapping, tag)-1; i >= 0; i--) {
-      clause *ith = mapping_access(mapping, tag, i);
+    for (int i = mapping_num_clauses(mapping, search_term->quote->clause_quote->tag)-1; i >= 0; i--) {
+      clause *ith = mapping_access(mapping, search_term->quote->clause_quote->tag, i);
       // Must be a non-distrusted result with pos / neg literal count matching query
       if (!ith->distrusted && counts_match(ith, search_term->quote->clause_quote)) {
         // Convert clause in question to quotation term
@@ -179,6 +196,9 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *alma, intr
 
         // Returning first match based at the moment
         if (quote_term_unify(search_term->quote, q, copy)) {
+          if (alma->verbose)
+            tee_alt("Unification succeeded\n", alma, NULL);
+
           if (kind != NEG_INT_SPEC && kind != NEG_INT && kind != NEG_INT_GEN)
             swap_bindings(bindings, copy);
           cleanup_bindings(copy);
@@ -261,12 +281,11 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time,
 
     void *mapping = clause_lookup(alma, descendant_copy->quote->clause_quote);
     if (mapping != NULL) {
-      alma_quote *q = malloc(sizeof(*q));
-      q->type = CLAUSE;
+      alma_quote *quote_holder = malloc(sizeof(*quote_holder));
+      quote_holder->type = CLAUSE;
 
-      if_tag tag = descendant_copy->quote->clause_quote->tag;
-      for (int i = mapping_num_clauses(mapping, tag)-1; i >= 0; i--) {
-        clause *ith = mapping_access(mapping, tag, i);
+      for (int i = mapping_num_clauses(mapping, descendant_copy->quote->clause_quote->tag)-1; i >= 0; i--) {
+        clause *ith = mapping_access(mapping, descendant_copy->quote->clause_quote->tag, i);
 
         if (alma->verbose) {
           tee_alt("Processing \"", alma, NULL);
@@ -279,17 +298,15 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time,
           // Create copy as either empty list or copy of arg
           binding_list *desc_bindings = malloc(sizeof(*desc_bindings));
           copy_bindings(desc_bindings, bindings);
-          q->clause_quote = ith;
+          quote_holder->clause_quote = ith;
 
-          if (quote_term_unify(descendant_copy->quote, q, desc_bindings)) {
+          if (quote_term_unify(descendant_copy->quote, quote_holder, desc_bindings)) {
             // Frontier of parents to expand
             tommy_array queue;
             tommy_array_init(&queue);
             // Checked items to avoid cycles
             tommy_array checked;
             tommy_array_init(&checked);
-            alma_quote *quote_holder = malloc(sizeof(*quote_holder));
-            quote_holder->type = CLAUSE;
 
             // Parents as starting items for queue
             for (int j = 0; j < ith->parent_set_count; j++)
@@ -321,7 +338,6 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time,
                     clause_print(alma, c, NULL);
                     tee_alt("\"\n", alma, NULL);
                   }
-
                   quote_holder->clause_quote = c;
 
                   // Try unifying pair of quotes
@@ -352,12 +368,11 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time,
 
             tommy_array_done(&queue);
             tommy_array_done(&checked);
-            free(quote_holder);
           }
           cleanup_bindings(desc_bindings);
         }
       }
-      free(q);
+      free(quote_holder);
     }
   }
 

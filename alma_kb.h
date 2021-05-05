@@ -32,7 +32,7 @@ typedef struct clause {
   long index; // Index of clause, used as key in index_map of KB
   long acquired; // Time asserted to KB
   long distrusted; // Distrust status; if nonzero the time it was distrusted
-  char dirty_bit;
+  int dirty_bit;
   char pyobject_bit;
 } clause;
 

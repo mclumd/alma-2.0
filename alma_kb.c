@@ -400,7 +400,7 @@ void flatten_node(kb *collection, alma_node *node, tommy_array *clauses, int pri
     //    printf("HERE IN FLATTEN\n");
     clause *c = malloc(sizeof(*c));
     //    printf("RIGHT BEFORE DIRTY BIT\n");
-    c->dirty_bit = (char) 1;
+    c->dirty_bit = 1;
     c->pyobject_bit = (char) 1;
     make_clause(node, c);
     set_variable_ids(c, 1, 0, NULL, collection);
@@ -1280,8 +1280,8 @@ int update_formula(kb *collection, char *string, kb_str *buf) {
       lits_temp = t_dupe->neg_lits;
       t_dupe->neg_lits = update->neg_lits;
       update->neg_lits = lits_temp;
-      t_dupe->dirty_bit = (char) 1;
-      t_dupe->pyobject_bit = (char) 1;
+      t_dupe->dirty_bit = 1;
+      t_dupe->pyobject_bit = 1;
 
       // Generate new tasks with updated clause
       res_tasks_from_clause(collection, t_dupe, 1);
@@ -1717,9 +1717,8 @@ static void handle_distrust(kb *collection, clause *distrust, kb_str *buf) {
       alma_quote *q = malloc(sizeof(*q));
       q->type = CLAUSE;
 
-      if_tag tag = lit->terms[0].quote->clause_quote->tag;
-      for (int i = mapping_num_clauses(mapping, tag)-1; i >= 0; i--) {
-        clause *ith = mapping_access(mapping, tag, i);
+      for (int i = mapping_num_clauses(mapping, lit->terms[0].quote->clause_quote->tag)-1; i >= 0; i--) {
+        clause *ith = mapping_access(mapping, lit->terms[0].quote->clause_quote->tag, i);
         if (!ith->distrusted && counts_match(ith, lit->terms[0].quote->clause_quote)) {
           q->clause_quote = ith;
           binding_list *theta = malloc(sizeof(*theta));
@@ -1756,7 +1755,7 @@ void process_new_clauses(kb *collection, kb_str *buf) {
     int reinstate = c->pos_count == 1 && c->neg_count == 0 && strcmp(c->pos_lits[0]->name, "reinstate") == 0 && c->pos_lits[0]->term_count == 2;
     int update = c->pos_count == 1 && c->neg_count == 0 && strcmp(c->pos_lits[0]->name, "update") == 0 && c->pos_lits[0]->term_count == 2;
     if (reinstate || (dupe = duplicate_check(collection, c, 0)) == NULL) {
-      //      c->dirty_bit = (char) 1;
+      //c->dirty_bit = 1;
       if (c->pos_count == 1 && c->neg_count == 0) {
         if (strcmp(c->pos_lits[0]->name, "true") == 0)
           handle_true(collection, c, buf);
@@ -1779,9 +1778,8 @@ void process_new_clauses(kb *collection, kb_str *buf) {
             alma_quote *q = malloc(sizeof(*q));
             q->type = CLAUSE;
 
-            if_tag tag = arg1->quote->clause_quote->tag;
-            for (int j = mapping_num_clauses(mapping, tag)-1; j >= 0; j--) {
-              clause *jth = mapping_access(mapping, tag, j);
+            for (int j = mapping_num_clauses(mapping, arg1->quote->clause_quote->tag)-1; j >= 0; j--) {
+              clause *jth = mapping_access(mapping, arg1->quote->clause_quote->tag, j);
               if (jth->distrusted == atol(arg2->function->name) && counts_match(jth, arg1->quote->clause_quote)) {
                 q->clause_quote = jth;
                 binding_list *theta = malloc(sizeof(*theta));
@@ -1817,9 +1815,8 @@ void process_new_clauses(kb *collection, kb_str *buf) {
             alma_quote *q = malloc(sizeof(*q));
             q->type = CLAUSE;
 
-            if_tag tag = arg1->quote->clause_quote->tag;
-            for (int j = mapping_num_clauses(mapping, tag)-1; j >= 0; j--) {
-              clause *jth = mapping_access(mapping, tag, j);
+            for (int j = mapping_num_clauses(mapping, arg1->quote->clause_quote->tag)-1; j >= 0; j--) {
+              clause *jth = mapping_access(mapping, arg1->quote->clause_quote->tag, j);
               if (!jth->distrusted && counts_match(jth, arg1->quote->clause_quote)) {
                 q->clause_quote = jth;
                 binding_list *theta = malloc(sizeof(*theta));
@@ -1889,8 +1886,10 @@ void process_new_clauses(kb *collection, kb_str *buf) {
         tee_alt(" merged into %ld\n", collection, buf, dupe->index);
       }
 
-      if (c->parents != NULL)
+      if (c->parents != NULL) {
         transfer_parent(collection, dupe, c, 1, buf);
+        dupe->dirty_bit = 1;
+      }
 
       free_clause(c);
       tommy_array_set(&collection->new_clauses, i, NULL);
