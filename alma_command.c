@@ -415,6 +415,25 @@ void kb_halt(kb *collection) {
     free(tommy_array_get(&collection->res_tasks, i));
   tommy_array_done(&collection->res_tasks);*/
 
+  /* We have the following associated with resolution:
+     res_task_heap res_tasks;
+     tommy_list pre_res_task_buffer;
+   */
+  res_task_heap_destroy(&collection->res_tasks);
+  tommy_node *curr_pt;
+  tommy_node *tmp_pt;
+  struct pre_res_task *PT;
+  curr_pt = tommy_list_head(&(collection->pre_res_task_buffer));
+  while(curr_pt) {
+    PT = (struct pre_res_task *) curr_pt->data;
+    free(PT);
+    tmp_pt = curr_pt->next;
+    free(curr_pt);
+    curr_pt = tmp_pt;
+  }
+      
+
+  
   tommy_hashlin_foreach(&collection->fif_tasks, free_fif_task_mapping);
   tommy_hashlin_done(&collection->fif_tasks);
 
