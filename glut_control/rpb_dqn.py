@@ -10,7 +10,7 @@ import pickle
 
 class rpb_dqn(res_prebuffer):
     def __init__(self, subjects=[], words=[], use_tf=False, debug=True, use_gnn=True, gnn_nodes=20,
-                 seed=0, gamma=0.99, epsilon=1.0, eps_min=0.1, eps_max=1.0, batch_size=16):
+                 seed=0, gamma=0.99, epsilon=1.0, eps_min=0.1, eps_max=1.0, batch_size=16, start_episode = 0 ):
         super().__init__(subjects, words, use_tf, debug, use_gnn, gnn_nodes)
         self.seed=seed
         self.gamma=gamma
@@ -24,6 +24,8 @@ class rpb_dqn(res_prebuffer):
         self.loss_fn = keras.losses.MeanSquaredError()
         self.optimizer = keras.optimizers.Adam(learning_rate=0.00025, clipnorm=1.0)
         #self.acc_fn = CategoricalAccuracy()
+        self.training_start = start_episode
+        self.training_current = start_episode
 
     def get_priorities(self, inputs, current_model=True, training=False, numpy=True):
         X = self.vectorize(inputs)
@@ -113,13 +115,13 @@ class rpb_dqn(res_prebuffer):
     def model_save(self, id_str):
         pkl_file = open("rpb_dqn_model_{}.pkl".format(id_str), "wb")
         pickle.dump((self.subjects, self.words, self.num_subjects, self.num_words, self.subjects_dict, self.words_dict, self.batch_size, self.use_tf,
-                     self.seed, self.gamma, self.epsilon, self.eps_min, self.eps_max, self.batch_size), pkl_file)
+                     self.seed, self.gamma, self.epsilon, self.eps_min, self.eps_max, self.batch_size, self.training_start, self.training_current), pkl_file)
         self.current_model.graph_net.save("rpb_dqn_current_model_{}".format(id_str))
         self.target_model.graph_net.save("rpb_dqn_target_model_{}".format(id_str))
 
     def model_load(self, id_str):
         pkl_file = open("rpb_dqn_model_{}.pkl".format(id_str), "rb")
-        (self.subjects, self.words, self.num_subjects, self.num_words, self.subjects_dict, self.words_dict,
-         self.batch_size, self.use_tf, self.seed, self.gamma, self.epsilon, self.eps_min, self.eps_max, self.batch_size) = pickle.load(pkl_file)
+        (self.subjects, self.words, self.num_subjects, self.num_words, self.subjects_dict, self.words_dict, self.batch_size,
+         self.use_tf, self.seed, self.gamma, self.epsilon, self.eps_min, self.eps_max, self.batch_size, self.training_start, self.training_current) = pickle.load(pkl_file)
         self.current_model.graph_net = keras.models.load_model("rpb_dqn_current_model_{}".format(id_str))
         self.target_model.graph_net = keras.models.load_model("rpb_dqn_target_model_{}".format(id_str))

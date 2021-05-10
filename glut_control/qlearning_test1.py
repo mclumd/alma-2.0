@@ -29,7 +29,7 @@ def res_task_lits(lit_str):
     L = lit_str.split('\n')[:-1]
     return [ x.split('\t') for x in L]
 
-def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000, train_interval=500, update_target_network_interval=2000, debug_level=0):
+def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000, train_interval=500, update_target_network_interval=2000, debug_level=0, pretrained_network = None):
     """
     Train Q-network on the initial qlearning task.   
 
@@ -53,10 +53,12 @@ def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000,
     # Initialization
     global alma_inst,res
     subjects = ['a', 'f', 'g']
-    network = rpb_dqn(subjects, [], use_gnn=use_gnn)
+    network = rpb_dqn(subjects, [], use_gnn=use_gnn)  if pretrained_network is None else pretrained_network
+
     replay_buffer = rl_dataset.experience_replay_buffer()
-    for episode in range(num_episodes):
+    for episode in range(network.start_episode, num_episodes):
         print("Starting episode ", episode)
+        rl.training_current = episode
         alma_inst,res = alma.init(1,'/home/justin/alma-2.0/glut_control/qlearning1.pl', '0', 1, 1000, [], [])
         rl_utils.collect_episode(network, replay_buffer, alma_inst, num_steps)
         if (episode % train_interval == 0) and (episode > 0):
@@ -69,45 +71,6 @@ def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000,
             alma_utils.prebuf_print(alma_inst)
             alma_utils.pr_heap_print(alma_inst)
             alma_utils.kb_print(alma_inst)
-
-        if False:   # Old stuff; keep for now
-            for idx in range(num_steps):
-                prb = alma.prebuf(alma_inst)
-                res_tasks = prb[0]
-                if debug_level > 1:
-                    print("idx={}\tnum(res_tasks)={}".format(idx, len(prb[0])), end=" ")
-
-                if len(res_tasks) > 0:
-                    #res_lits = prb[1]
-                    res_lits = res_task_lits(prb[2])
-                    res_task_input = [x[:2] for x in res_tasks]
-                    #network.train_batch(res_task_input, res_lits)
-                    # the conditional below is just for debugging.
-                    if idx % 500 == 0:   
-                        network.save_batch(res_task_input, res_lits)
-                    else:
-                        network.save_batch(res_task_input, res_lits)
-                    priorities = 1 - network.get_priorities(res_task_input)
-                    print("len(priorirites)={}".format(len(priorities)), end=" ")
-                    alma.set_priors_prb(alma_inst, priorities.flatten().tolist())
-                    alma.prb_to_res_task(alma_inst, 1.0)
-                #print()
-                #alma.add(alma_inst, "distanceAt(a, {}, {}).".format(idx, idx))
-                if idx > 0 and idx % train_interval == 0:
-                    print("Network has {} samples, {} of which are positive".format(len(network.ybuffer), network.ypos_count))
-                    if network.ypos_count > (network.batch_size  / 2):
-                        H = network.train_buffered_batch()
-                        acc, loss = H.history['accuracy'][0], H.history['loss'][0]
-                        print("accuracy: {} \t loss: {}".format(acc, loss))
-                        if acc > 0.999 and loss < 1e-5:
-                            print("Good model; ending early")
-                            network.model_save(model_name, numeric_bits)
-                            return
-                    else:
-                        print("Breaking...")
-                        break
-
-                alma.astep(alma_inst)
 
     network.model_save(model_name)
 
