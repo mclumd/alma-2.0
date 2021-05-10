@@ -52,7 +52,7 @@ def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000,
     """
 
     # Initialization
-    global alma_inst,res
+    global alma_inst,res, alma
     #network = rpb_dqn(num_steps ** 2, subjects, [], use_gnn=use_gnn)
     #network = rpb_dqn(num_steps *2, subjects, [], use_gnn=use_gnn, gnn_nodes=gnn_nodes)
     if "qlearning3.pl" in kb:
@@ -64,6 +64,8 @@ def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000,
     start_time = time.time()
     for episode in range(num_episodes):
         print("Starting episode ", episode)
+        #del alma
+        reload(alma)
         alma_inst,res = alma.init(1,kb, '0', 1, 1000, [], [])
         rl_utils.collect_episode(network, replay_buffer, alma_inst, num_steps)
         alma.halt(alma_inst)
@@ -80,7 +82,7 @@ def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000,
         if episode % 2500 == 0:
             res = test(network, kb, num_steps)
             print("-"*80)
-            print("Rewards at episode {}: {}".format(episode, res['rewards']))
+            print("Rewards at episode {} (epsilon=={}): {}".format(episode, network.epsilon, res['rewards']))
             network.model_save(model_name + "_ckpt" + str(episode))
             print("-"*80)
 

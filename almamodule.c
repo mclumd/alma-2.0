@@ -511,7 +511,6 @@ static PyObject *alma_get_pre_res_task_buffer( PyObject *self, PyObject *args) {
   buf.curr = buf.buffer;
   
 
-
   tommy_node *i = tommy_list_head(&collection->pre_res_task_buffer);
   while (i) {
     pre_res_task *data = i->data;
@@ -535,7 +534,6 @@ static PyObject *alma_get_pre_res_task_buffer( PyObject *self, PyObject *args) {
     i = i->next;
   }
   
-
   clauses_string = malloc(buf.size + 1);
   strcpy(clauses_string, buf.buffer);
   clauses_string[buf.size] = '\0';
@@ -872,8 +870,9 @@ static PyObject * alma_init(PyObject *self, PyObject *args) {
     }
  }
 
+    /*
     fprintf(stderr, "subj_list_len %ld\n", subj_list_len);
-    fprintf(stderr, "PyList_Size(subject_priority_list) %ld\n",  PyList_Size(subject_priority_list));
+    fprintf(stderr, "PyList_Size(subject_priority_list) %ld\n",  PyList_Size(subject_priority_list)); */
     assert(subj_list_len ==  PyList_Size(subject_priority_list));
     collection_priorities = malloc(sizeof(double)* subj_list_len);
     for (idx = 0; idx < subj_list_len; idx++) {
@@ -898,16 +897,24 @@ static PyObject * alma_init(PyObject *self, PyObject *args) {
   rip.subjects_file = NULL;
   rip.resolutions_file = NULL;
   rip.rl_priority_file = NULL;
-  if (subj_list_len > 0) {
-    rip.tracking_resolutions = 1;
-    rip.tracking_subjects = collection_subjects;
-    rip.tracking_priorities = collection_priorities;
-    rip.use_lists = 1;
-    rip.use_res_pre_buffer = 1;
-  } else {
-    fprintf(stderr, "Cannot track resolution priorites using files; disabling resolution tracking.\n");
-    rip.use_lists = 0;
-  }
+
+
+  rip.tracking_resolutions = 1;
+  rip.tracking_subjects = collection_subjects;
+  rip.tracking_priorities = collection_priorities;
+  rip.use_lists = 1;
+  rip.use_res_pre_buffer = 1;
+    /* Always use lists. */
+    /*  if (subj_list_len > 0) {
+	rip.tracking_resolutions = 1;
+	rip.tracking_subjects = collection_subjects;
+	rip.tracking_priorities = collection_priorities;
+	rip.use_lists = 1;
+	rip.use_res_pre_buffer = 1;
+	} else {
+	fprintf(stderr, "Cannot track resolution priorites using files; disabling resolution tracking.\n");
+	rip.use_lists = 0;
+	}*/
 
 
   

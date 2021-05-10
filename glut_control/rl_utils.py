@@ -5,6 +5,8 @@ import tensorflow as tf
 import alma
 from memory_profiler import profile
 import alma_utils
+import numpy as np
+
 
 class ql_batch:
     def __init__(self):
@@ -22,16 +24,24 @@ def collect_episode(network, replay_buffer, alma_inst, episode_length):
         #import objgraph
         #objgraph.show_most_common_types(limit=20)
         prebuf = alma.prebuf(alma_inst)
-        # TODO:  This is assuming that the first item is the minimal priority; this should be backed
-        # with an investigation and an assertion.
-        prb = prebuf[0]
+        full_actions = prebuf[0]
+        actions_no_priorities = [x[:2] for x in full_actions]
         state0 = alma.kb_to_pyobject(alma_inst)
+
         #res_task_input = [x[:2] for x in prb]
-        if len(prb) > 0:
-            action = prebuf[0][0][:2]
-            priorities = 1 - (network.get_priorities([action])*0.9)
-            alma.set_priors_prb(alma_inst, priorities.flatten().tolist())
+        if len(full_actions) > 0:
+            if np.random.uniform() < network.epsilon:
+                priorities =  np.random.uniform(size=len(full_actions))
+                min_idx = np.argmin(priorities)
+            else:
+                priorities = 1 - (network.get_priorities(actions_no_priorities)*0.9).flatten()
+                min_idx = np.argmin(priorities)
+
+            action = full_actions[min_idx][:2]
+            network.epsilon_decay()
+            alma.set_priors_prb(alma_inst, priorities.tolist())
             alma.single_prb_to_res_task(alma_inst, 1.0)   # Note the 1.0 is a threshold, not a priority
+            #priorities = 1 - (network.get_priorities([action])*0.9).flatten()
             alma.astep(alma_inst)
             kb = alma.kbprint(alma_inst)[0]
             reward = network.reward_fn(kb) / network.max_reward

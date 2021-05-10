@@ -25,6 +25,9 @@ class rpb_dqn(res_prebuffer):
         self.epsilon=epsilon
         self.eps_min = eps_min=0.1
         self.eps_max=eps_max
+        self.epsilon_interval = eps_max - eps_min
+        self.epsilon_greedy_frames = 300000
+
         self.batch_size = batch_size
         self.current_model = self.model
         self.target_model =  gnn_model_zero(self.max_gnn_nodes,self.graph_rep.feature_len)
@@ -36,6 +39,12 @@ class rpb_dqn(res_prebuffer):
         self.log_dir = "logs/fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         self.tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=self.log_dir, histogram_freq=1)
         self.reward_fn = reward_fn
+
+    def epsilon_decay(self):
+        self.epsilon -= (self.epsilon_interval / self.epsilon_greedy_frames)
+        if self.epsilon < self.eps_min:
+            self.epsilon = self.eps_min:
+
 
     def get_priorities(self, inputs, current_model=True, training=False, numpy=True):
         X = self.vectorize(inputs)
@@ -173,6 +182,6 @@ def get_rewards_test1(kb):
 def get_rewards_test3(kb):
     sum=0
     for s in kb.split('\n'):
-        if ("right(a)" in s) or ("right(a)" in s):
+        if "(a)" in s:
             sum += s.count("right")
     return sum        
