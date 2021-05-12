@@ -1752,9 +1752,7 @@ void process_new_clauses(kb *collection, kb_str *buf) {
   for (tommy_size_t i = 0; i < tommy_array_size(&collection->new_clauses); i++) {
     clause *c = tommy_array_get(&collection->new_clauses, i);
     clause *dupe;
-    int reinstate = c->pos_count == 1 && c->neg_count == 0 && strcmp(c->pos_lits[0]->name, "reinstate") == 0 && c->pos_lits[0]->term_count == 2;
-    int update = c->pos_count == 1 && c->neg_count == 0 && strcmp(c->pos_lits[0]->name, "update") == 0 && c->pos_lits[0]->term_count == 2;
-    if (reinstate || (dupe = duplicate_check(collection, c, 0)) == NULL) {
+    if ((dupe = duplicate_check(collection, c, 0)) == NULL) {
       //c->dirty_bit = 1;
       if (c->pos_count == 1 && c->neg_count == 0) {
         if (strcmp(c->pos_lits[0]->name, "true") == 0)
@@ -1767,7 +1765,7 @@ void process_new_clauses(kb *collection, kb_str *buf) {
       // Special semantic operator: reinstate
       // Must be a singleton positive literal with binary args
       // Reinstatement succeeds if given a quote matching distrusted formula(s) and matching timestep for when distrusted
-      if (reinstate) {
+      if (c->pos_count == 1 && c->neg_count == 0 && strcmp(c->pos_lits[0]->name, "reinstate") == 0 && c->tag == NONE && c->pos_lits[0]->term_count == 2) {
         alma_term *arg1 = c->pos_lits[0]->terms+0;
         alma_term *arg2 = c->pos_lits[0]->terms+1;
 
@@ -1804,7 +1802,7 @@ void process_new_clauses(kb *collection, kb_str *buf) {
       // Special semantic operator: update
       // Must be a singleton positive literal with binary args
       // Updating succeeds if given a quote matching KB formula(s) and a quote to update to
-      else if (update) {
+      else if (c->pos_count == 1 && c->neg_count == 0 && strcmp(c->pos_lits[0]->name, "update") == 0 && c->tag == NONE && c->pos_lits[0]->term_count == 2) {
         alma_term *arg1 = c->pos_lits[0]->terms+0;
         alma_term *arg2 = c->pos_lits[0]->terms+1;
 

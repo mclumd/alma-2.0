@@ -19,9 +19,11 @@ fif(obs(X), true(X)).
 % Contradiction response for when both contradictands are inferred, ancestors have is-a relationship, and more specific case is negative
 % Abnormality case is thus when object *does not* have Pred apply to it; and likewise distrust abnormality when the predicate *does* apply
 fif(and(contra(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
+    and(rel(Kind1, Obj),
     and(ancestor(quote(fif(rel(`Kind1, Obj), not(rel(`Pred, Obj)))), quote(not(rel(`Pred, `Obj))), T),
+    and(rel(Kind2, Obj),
     and(ancestor(quote(fif(rel(`Kind2, Obj), rel(`Pred, Obj))), quote(rel(`Pred, `Obj)), T),
-    rel(is_a, Kind1, Kind2)))),
+    rel(is_a, Kind1, Kind2)))))),
 and(update(quote(fif(rel(`Kind2, Obj), rel(`Pred, Obj))), quote(fif(and(rel(`Kind2, Obj), neg_int(quote(abnormal(`Obj, ``Kind2, ``Pred)))), rel(`Pred, Obj)))),
 and(abnormal(Obj, Kind2, Pred),
 and(reinstate(quote(not(rel(`Pred, `Obj))), T),
@@ -30,9 +32,11 @@ fif(and(abnormal(Ab, Kind2, Pred), rel(Pred, Ab)), distrust(quote(abnormal(`Ab, 
 
 % Contradiction response for when both contradictands are inferred, ancestors have is-a relationship, and more specific case is negative
 fif(and(contra(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
+    and(rel(Kind1, Obj),
     and(ancestor(quote(fif(rel(`Kind1, Obj), rel(`Pred, Obj))), quote(rel(`Pred, `Obj)), T),
+    and(rel(Kind2, Obj),
     and(ancestor(quote(fif(rel(`Kind2, Obj), not(rel(`Pred, Obj)))), quote(not(rel(`Pred, `Obj))), T),
-    rel(is_a, Kind1, Kind2)))),
+    rel(is_a, Kind1, Kind2)))))),
 and(update(quote(fif(rel(`Kind2, Obj), not(rel(`Pred, Obj)))), quote(fif(and(rel(`Kind2, Obj), neg_int(quote(abnormal(`Obj, ``Kind2, ``Pred)))), not(rel(`Pred, Obj))))),
 and(abnormal(Obj, Kind2, Pred),
 and(reinstate(quote(rel(`Pred, `Obj)), T),
@@ -43,7 +47,8 @@ fif(and(abnormal(Ab, Kind2, Pred), not(rel(Pred, Ab))), distrust(quote(abnormal(
 % Contradiction response for when negative contradictand was observed, and positive isn't derived from default
 fif(and(contra(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
     and(obs(quote(not(rel(`Pred, `Obj)))),
-    ancestor(quote(fif(rel(`Kind, Obj), rel(`Pred, Obj))), quote(rel(`Pred, `Obj)), T))),
+    and(rel(Kind, Obj),
+    ancestor(quote(fif(rel(`Kind, Obj), rel(`Pred, Obj))), quote(rel(`Pred, `Obj)), T)))),
 and(update(quote(fif(rel(`Kind, Obj), rel(`Pred, Obj))), quote(fif(and(rel(`Kind, Obj), neg_int(quote(abnormal(`Obj, ``Kind, ``Pred)))), rel(`Pred, Obj)))),
 and(abnormal(Obj, Kind, Pred),
 and(reinstate(quote(not(rel(`Pred, `Obj))), T),
@@ -53,7 +58,8 @@ fif(and(abnormal(Ab, Kind, Pred), rel(Pred, Ab)), distrust(quote(abnormal(`Ab, `
 % Contradiction response for when positive contradictand was observed, and negative isn't derived from default
 fif(and(contra(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
     and(obs(quote(rel(`Pred, `Obj))),
-    ancestor(quote(fif(rel(`Kind, Obj), not(rel(`Pred, Obj)))), quote(not(rel(`Pred, `Obj))), T))),
+    and(rel(Kind, Obj),
+    ancestor(quote(fif(rel(`Kind, Obj), not(rel(`Pred, Obj)))), quote(not(rel(`Pred, `Obj))), T)))),
 and(update(quote(fif(rel(`Kind, Obj), not(rel(`Pred, Obj)))), quote(fif(and(rel(`Kind, Obj), neg_int(quote(abnormal(`Obj, ``Kind, ``Pred)))), not(rel(`Pred, Obj))))),
 and(abnormal(Obj, Kind, Pred),
 and(reinstate(quote(rel(`Pred, `Obj)), T),
@@ -69,6 +75,7 @@ fif(and(contra(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
     and(neg_int_spec(quote(distrusted(quote(abnormal(``Obj, ``Kind_spec, ``Pred)), `T))),
     pos_int(quote(fif(and(rel(`Kind_spec, Obj), neg_int(quote(abnormal(`Obj, ``Kind_spec, ``Pred)))), not(rel(`Pred, Obj)))))))))),
 reinstate(quote(not(rel(`Pred, `Obj))), T)).
+
 fif(and(contra(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
     and(distrusted(quote(abnormal(`Obj, `Kind, `Pred)), T),
     and(rel(is_a, Kind_spec, Kind),
@@ -85,6 +92,7 @@ fif(and(contra(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
     and(neg_int_spec(quote(distrusted(quote(abnormal(``Obj, ``Kind_spec, ``Pred)), `T))),
     pos_int(quote(fif(rel(`Kind_spec, Obj), not(rel(`Pred, Obj)))))))))),
 reinstate(quote(not(rel(`Pred, `Obj))), T)).
+
 fif(and(contra(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
     and(distrusted(quote(abnormal(`Obj, `Kind, `Pred)), T),
     and(rel(is_a, Kind_spec, Kind),
