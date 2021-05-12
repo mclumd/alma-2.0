@@ -1,7 +1,6 @@
 CC = gcc
 #CFLAGS = -std=c11 -pedantic-errors -Wall -Werror -Wshadow -Wpedantic -g
 CFLAGS = -std=gnu11 -pedantic-errors -Wall -Wshadow -Wpedantic -g -mno-avx2 -mtune=generic -mno-avx2 -fPIC -O0
-
 TOMMY = tommyds/tommyds/
 
 all: alma.x shared static python

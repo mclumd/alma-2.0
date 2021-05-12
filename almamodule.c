@@ -884,19 +884,13 @@ static PyObject * alma_init(PyObject *self, PyObject *args) {
   rip.subjects_file = NULL;
   rip.resolutions_file = NULL;
   rip.rl_priority_file = NULL;
-  if (subj_list_len > 0) {
-    rip.tracking_resolutions = 1;
-    rip.tracking_subjects = collection_subjects;
-    rip.tracking_priorities = collection_priorities;
-    rip.use_lists = 1;
-    rip.use_res_pre_buffer = 1;
-  } else {
-    fprintf(stderr, "Cannot track resolution priorites using files; disabling resolution tracking.\n");
-    rip.use_lists = 0;
-  }
 
+  rip.tracking_resolutions = 1;
+  rip.tracking_subjects = collection_subjects;
+  rip.tracking_priorities = collection_priorities;
+  rip.use_lists = 1;
+  rip.use_res_pre_buffer = 1;
 
-  
   kb_init(&alma_kb,file,agent,verbose, differential_priorities, res_heap_size, rip,  &buf, 0);
 
   ret_val = malloc(buf.size + 1);
