@@ -343,9 +343,13 @@ STATIC int NAME(_clausal_delete)(struct heap_name *heap, clause *c) {
 }
 
 STATIC void NAME(_destroy)(struct heap_name *heap) {
-  for (int i = 0; i < heap->count; i++) free(NAME(_item)(heap, i));
-  tommy_array_done(&heap->data);
-  free(heap);
+   for (int i = 0; i < heap->count; i++) {
+     free(res_task_heap_item(heap, i));
+   }
+   
+   if (heap->count > 0) {
+     tommy_array_done(&heap->data);
+   }
 }
 #endif /* !defined(HEADER) */
 
