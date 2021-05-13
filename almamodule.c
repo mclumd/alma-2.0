@@ -1,5 +1,6 @@
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
+#include <stdlib.h>
 //#include <arrayobject.h>
 #include "alma_command.h"
 #include "alma_kb.h"
@@ -16,6 +17,8 @@
 
 extern char python_mode;
 extern char logs_on;
+
+int *memtest_array;
 
 static PyObject *alma_term_to_pyobject(kb *collection, alma_term *term);
 static PyObject *alma_function_to_pyobject(kb *collection, alma_function *func);
@@ -261,6 +264,30 @@ static PyObject *alma_set_priorities(PyObject *self, PyObject *args) {
       collection->subject_priorities[idx] =  PyFloat_AsDouble(list_item);
       }
   }
+  return Py_None;
+}
+
+tommy_list dummy_list;
+static PyObject *alma_memtest_alloc(PyObject *self, PyObject *args) {
+
+  tommy_list_init(&dummy_list);
+
+  struct object {
+    int value;
+    // other fields
+    tommy_node node;
+  };
+  for(int i=0; i < 10000000; i++) {
+    //fprintf(stderr, "%d ", i);
+    struct object* obj = malloc(sizeof(struct object)); // creates the object
+    obj->value = 0; // initializes the object
+    tommy_list_insert_tail(&dummy_list, &obj->node, obj); // inserts the object
+  }
+  return Py_None;
+}
+
+static PyObject *alma_memtest_free(PyObject *self, PyObject *args) {
+  tommy_list_foreach(&dummy_list, free);
   return Py_None;
 }
 
@@ -781,6 +808,8 @@ static PyMethodDef AlmaMethods[] = {
   {"obs", alma_obs, METH_VARARGS,"Observe something in an alma kb."},
   {"bs", alma_bs, METH_VARARGS,"Backsearch an alma kb."},
   {"set_priorities", alma_set_priorities, METH_VARARGS, "Set subjects and priorities."},
+  {"memtest_alloc", alma_memtest_alloc, METH_VARARGS, "For debugging:  allocates memory."},
+  {"memtest_free", alma_memtest_free, METH_VARARGS, "For debugging:  allocates memory."},
   {NULL, NULL, 0, NULL}
 };
 

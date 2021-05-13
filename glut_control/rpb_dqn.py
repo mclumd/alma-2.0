@@ -1,47 +1,78 @@
 import rl_utils
-from resolution_prebuffer import res_prebuffer, gnn_model
+from resolution_prebuffer import res_prebuffer, gnn_model, gnn_model_zero
 import numpy as np
 from rl_dataset import simple_graph_dataset
 from spektral.data import DisjointLoader
 from tensorflow import keras
 import tensorflow as tf
 import pickle
+import datetime
+import os
 
-
+model_prefix = "no_index/models"
 class rpb_dqn(res_prebuffer):
-    def __init__(self, subjects=[], words=[], use_tf=False, debug=True, use_gnn=True, gnn_nodes=20,
-                 seed=0, gamma=0.99, epsilon=1.0, eps_min=0.1, eps_max=1.0, batch_size=16):
+    def __init__(self, max_reward, reward_fn, subjects=[], words=[],
+                 use_tf=False, debug=True, use_gnn=True, gnn_nodes=20,
+                 seed=0, gamma=0.99, epsilon=1.0, eps_min=0.1,
+                 eps_max=1.0, batch_size=16, starting_episode=0):
+        """
+        Params:
+          max_reward:  maximum reward for an episode; used to scale rewards for Q-function
+
+        """
         super().__init__(subjects, words, use_tf, debug, use_gnn, gnn_nodes)
         self.seed=seed
         self.gamma=gamma
         self.epsilon=epsilon
         self.eps_min = eps_min=0.1
         self.eps_max=eps_max
+        self.epsilon_interval = eps_max - eps_min
+        self.epsilon_greedy_frames = 300000
+
         self.batch_size = batch_size
         self.current_model = self.model
-        self.target_model = gnn_model()
+        self.target_model =  gnn_model_zero(self.max_gnn_nodes,self.graph_rep.feature_len)
         #self.loss_fn = keras.losses.Huber()
-        self.loss_fn = keras.losses.MeanSquaredError()
+        self.bellman_loss = keras.losses.MeanSquaredError()
         self.optimizer = keras.optimizers.Adam(learning_rate=0.00025, clipnorm=1.0)
+        self.max_reward = max_reward
         #self.acc_fn = CategoricalAccuracy()
+        self.log_dir = "logs/fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        self.tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=self.log_dir, histogram_freq=1)
+        self.reward_fn = reward_fn
+        self.starting_episode = starting_episode
+        self.current_episode = starting_episode
 
+    def epsilon_decay(self):
+        self.epsilon -= (self.epsilon_interval / self.epsilon_greedy_frames)
+        if self.epsilon < self.eps_min:
+            self.epsilon = self.eps_min
+
+    def reset_start(self):
+        self.starting_episode = self.current_episode + 1
+        self.current_episode = self.starting_episode
     def get_priorities(self, inputs, current_model=True, training=False, numpy=True):
         X = self.vectorize(inputs)
         model = self.current_model if current_model else self.target_model
-        dataset = simple_graph_dataset(X)
-        loader = DisjointLoader(dataset, batch_size = self.batch_size)
-        preds = []
-        num_epochs = len(X) // self.batch_size
-        if len(X) % self.batch_size != 0:
-            num_epochs += 1    # Extra batch for remainder
-        for i in range(num_epochs):
-            b = loader.__next__()
-            # b is now a triple:  b[0] is a batch of X, b[1] is a batch of A (as a SparseTensor),
-            # b[2] is is some kind of index array
-            batch_preds = model.graph_net(b, training=training)
-            preds.append(batch_preds)
+        if self.use_gnn and False:   # TODO:   bring back for spektral GNN
+            preds = []
+            dataset = simple_graph_dataset(X)
+            loader = DisjointLoader(dataset, batch_size = self.batch_size)
+
+            num_epochs = len(X) // self.batch_size
+            if len(X) % self.batch_size != 0:
+                num_epochs += 1    # Extra batch for remainder
+            for i in range(num_epochs):
+                b = loader.__next__()
+                # b is now a triple:  b[0] is a batch of X, b[1] is a batch of A (as a SparseTensor),
+                # b[2] is is some kind of index array
+                batch_preds = model.predict(b, training=training)
+                preds.append(batch_preds)
+        else:
+            preds = model.predict(X)
         if numpy:
-            result = np.concatenate([p.numpy() for p in preds]).reshape(-1)
+            #result = np.concatenate([p.numpy() for p in preds]).reshape(-1)   #TODO:  needed for spektral GNN
+            result  = preds
         else:
             result = tf.concat(axis=0, values = preds)
         return result
@@ -50,33 +81,46 @@ class rpb_dqn(res_prebuffer):
     def fit(self, batch, verbose=True):
         X = self.vectorize(batch.actions)
         batch_size = len(X)
-        #dataset = simple_graph_dataset(X,np.zeros(len(X)))
-        dataset = simple_graph_dataset(X)
-        with tf.GradientTape() as tape:
-            loader = DisjointLoader(dataset, batch_size = batch_size)
-            preds = []
-            total_loss = 0
-            total_acc = 0
-            b = loader.__next__()
-            #inputs = (b[0], b[1], b[3])
-            inputs = b
-            future_rewards = self.target_model.graph_net(inputs, training=False)
-            updated_q_values = np.array(batch.rewards).reshape(-1) + self.gamma * future_rewards
-            q_values = self.current_model.graph_net(inputs, training=True)
-            #updated_q_values = q_values + 1
-            loss = self.loss_fn(updated_q_values, q_values)
+        future_rewards = self.target_model.predict(X)
+        updated_q_values = np.array(batch.rewards).reshape(-1,1) + self.gamma * future_rewards
+        return self.current_model.fit(X, updated_q_values, batch_size, callbacks=[self.tensorboard_callback])
+        
+        
 
-            # Backpropagation
-            grads = tape.gradient(loss, self.current_model.graph_net.trainable_variables)
-            self.optimizer.apply_gradients(zip(grads, self.current_model.graph_net.trainable_variables))
-        return history_struct({'accuracy': [np.nan],
-                               'loss': [(loss / batch_size)]})
+        # with tf.GradientTape() as tape:
+        #     q_values = self.current_model.predict(X)
+        #     loss = self.bellman_loss(updated_q_values, q_values)
+        #     grads = tape.gradient(loss, self.current_model.model.trainable_variables)
+        #     self.optimizer.apply_gradients(zip(grads, self.current_model.model.trainable_variables))
+        
+
+        if False:   #TODO:  spektral GNN
+            dataset = simple_graph_dataset(X)
+            with tf.GradientTape() as tape:
+                loader = DisjointLoader(dataset, batch_size = batch_size)
+                preds = []
+                total_loss = 0
+                total_acc = 0
+                b = loader.__next__()
+                #inputs = (b[0], b[1], b[3])
+                inputs = b
+                future_rewards = self.target_model.graph_net(inputs, training=False)
+                updated_q_values = np.array(batch.rewards).reshape(-1) + self.gamma * future_rewards
+                q_values = self.current_model.graph_net(inputs, training=True)
+                #updated_q_values = q_values + 1
+                loss = self.loss_fn(updated_q_values, q_values)
+
+                # Backpropagation
+                grads = tape.gradient(loss, self.current_model.graph_net.trainable_variables)
+                self.optimizer.apply_gradients(zip(grads, self.current_model.graph_net.trainable_variables))
+            return history_struct({'accuracy': [np.nan], 'loss': [(loss / batch_size)]})
 
     def train_on_given_batch(self, inputs, target):
         """
         Note:  we explore using the target model (i.e. generate priorities) but train the current model. 
         TODO:  not working; use fit instead.
         """
+        assert(False)   # This shouldn't be used right now
         #future_rewards = network.target_model.predict(batch.actions)
         future_rewards = self.get_priorities(batch.actions, current_model=False, numpy=False)  # Use target_model
 
@@ -111,15 +155,40 @@ class rpb_dqn(res_prebuffer):
 
     
     def model_save(self, id_str):
-        pkl_file = open("rpb_dqn_model_{}.pkl".format(id_str), "wb")
-        pickle.dump((self.subjects, self.words, self.num_subjects, self.num_words, self.subjects_dict, self.words_dict, self.batch_size, self.use_tf,
-                     self.seed, self.gamma, self.epsilon, self.eps_min, self.eps_max, self.batch_size), pkl_file)
-        self.current_model.graph_net.save("rpb_dqn_current_model_{}".format(id_str))
-        self.target_model.graph_net.save("rpb_dqn_target_model_{}".format(id_str))
+        pkl_file = open(  os.path.join(model_prefix, "rpb_dqn_model_{}.pkl".format(id_str)), "wb")
+        pickle.dump((self.subjects, self.words, self.num_subjects, self.num_words,
+                     self.subjects_dict, self.words_dict, self.batch_size, self.use_tf,
+                     self.seed, self.gamma, self.epsilon, self.eps_min, self.eps_max,
+                     self.batch_size, self.max_gnn_nodes, self.max_reward,
+                     self.starting_episode, self.current_episode), pkl_file)
+        self.current_model.model.save(os.path.join(model_prefix, "rpb_dqn_current_model_{}".format(id_str)))
+        self.target_model.model.save(os.path.join(model_prefix, "rpb_dqn_target_model_{}".format(id_str)))
 
     def model_load(self, id_str):
-        pkl_file = open("rpb_dqn_model_{}.pkl".format(id_str), "rb")
+        from vectorization import graph_representation
+        pkl_file = open(os.path.join(model_prefix, "rpb_dqn_model_{}.pkl".format(id_str)), "rb")
         (self.subjects, self.words, self.num_subjects, self.num_words, self.subjects_dict, self.words_dict,
-         self.batch_size, self.use_tf, self.seed, self.gamma, self.epsilon, self.eps_min, self.eps_max, self.batch_size) = pickle.load(pkl_file)
-        self.current_model.graph_net = keras.models.load_model("rpb_dqn_current_model_{}".format(id_str))
-        self.target_model.graph_net = keras.models.load_model("rpb_dqn_target_model_{}".format(id_str))
+         self.batch_size, self.use_tf, self.seed, self.gamma, self.epsilon, self.eps_min, self.eps_max,
+         self.batch_size, self.max_gnn_nodes, self.max_reward,
+         self.starting_episode, self.current_episode) = pickle.load(pkl_file)
+        self.graph_rep = graph_representation(self.subjects, self.max_gnn_nodes)
+        self.current_model.model = keras.models.load_model(os.path.join(model_prefix, "rpb_dqn_current_model_{}".format(id_str)))
+        self.target_model.model = keras.models.load_model(os.path.join(model_prefix, "rpb_dqn_target_model_{}".format(id_str)))
+
+
+# Assign a reward to the current state of the KB        
+def get_rewards_test1(kb):
+    sum=0
+    for s in kb.split('\n'):
+        if ("f(a)" in s) or ("g(a)" in s):
+            sum += s.count("f")
+    return sum
+
+
+
+def get_rewards_test3(kb):
+    sum=0
+    for s in kb.split('\n'):
+        if "(a)" in s:
+            sum += s.count("right")
+    return sum        
