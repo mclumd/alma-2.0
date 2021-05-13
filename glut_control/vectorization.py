@@ -3,6 +3,7 @@ import alma_functions as aw
 import numpy as np
 import queue
 import unif.unifier as un
+import re
 
 
 
@@ -175,6 +176,33 @@ def vectorize_bow1(inputs, subjects_dict):
         x = np.zeros( (2, num_subjects + 1))
         for idx, inp in enumerate([inp0, inp1]):
             for subj in aw.alma_constants([inp], True):
+                try:   # distanceAt(a, 5, 17)   -- my distance to a is 5 at time 17
+                    x[idx, subjects_dict[subj]] = 1
+                except KeyError:
+                    # There are now two cases; a genuinely unknown term or something that represents a numerical value.
+                    num_parse = re.match("(\d+)/(\d+)", subj)
+                    if num_parse is None:
+                        x[idx, 0] = 1   # position 0 is a catchall
+                    else:
+                        num, pos = num_parse.groups()
+                        position = subjects_dict["numerical"+pos]
+                        x[idx, position] = float(num)
+        X.append(x.flatten())
+    #print('Vectorized inputs: ', X)
+    #return np.array(X)
+    return np.array(X, dtype=np.float32)
+
+# Similar to the above, but we don't assume that numerical values are explicitly encoded.
+def vectorize_bow2(inputs, subjects_dict):
+    num_subjects = len(subjects_dict)
+    X = []
+    for inp0, inp1 in inputs:
+        #print("inp0: {} \t inp1: {}\n".format(inp0, inp1))
+        #print("inp0 constants:", aw.alma_constants([inp0]))
+        #print("inp1 constants:", aw.alma_constants([inp1]))
+        x = np.zeros( (2, num_subjects + 1))
+        for idx, inp in enumerate([inp0, inp1]):
+            for subj in aw.alma_constants([inp], True):
                 try:
                     x[idx, subjects_dict[subj]] = 1
                 except KeyError:
@@ -183,6 +211,7 @@ def vectorize_bow1(inputs, subjects_dict):
     #print('Vectorized inputs: ', X)
     #return np.array(X)
     return np.array(X, dtype=np.float32)
+
 
 # More complex bag of words.   Now, rather than a 1 hot encoding we encode subjects as follows:
 # We now want subjects to come in without place identifiers.
@@ -196,7 +225,7 @@ def vectorize_bow1(inputs, subjects_dict):
 # So perhaps this is a better way to go; it would probably allow us to use libraries more easily.   
 
 
-def vectorize_bow2(inputs):
+def vectorize_bow3(inputs):
     X = []
     for inp0, inp1 in inputs:
         #print("inp0: {} \t inp1: {}\n".format(inp0, inp1))
