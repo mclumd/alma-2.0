@@ -38,7 +38,6 @@ def collect_episode(network, replay_buffer, alma_inst, episode_length):
                 min_idx = np.argmin(priorities)
 
             action = full_actions[min_idx][:2]
-            network.epsilon_decay()
             alma.set_priors_prb(alma_inst, priorities.tolist())
             alma.single_prb_to_res_task(alma_inst, 1.0)   # Note the 1.0 is a threshold, not a priority
             #priorities = 1 - (network.get_priorities([action])*0.9).flatten()
@@ -47,6 +46,8 @@ def collect_episode(network, replay_buffer, alma_inst, episode_length):
             reward = network.reward_fn(kb) / network.max_reward
             state1 = alma.kb_to_pyobject(alma_inst)
             replay_buffer.append(state0, action, reward, state1)
+
+
 
 
 

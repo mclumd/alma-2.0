@@ -27,7 +27,7 @@ class rpb_dqn(res_prebuffer):
         self.eps_min = eps_min=0.1
         self.eps_max=eps_max
         self.epsilon_interval = eps_max - eps_min
-        self.epsilon_greedy_frames = 300000
+        self.epsilon_greedy_episodes = 300000
 
         self.batch_size = batch_size
         self.current_model = self.model
@@ -44,7 +44,7 @@ class rpb_dqn(res_prebuffer):
         self.current_episode = starting_episode
 
     def epsilon_decay(self):
-        self.epsilon -= (self.epsilon_interval / self.epsilon_greedy_frames)
+        self.epsilon -= (self.epsilon_interval / self.epsilon_greedy_episodes)
         if self.epsilon < self.eps_min:
             self.epsilon = self.eps_min
 

@@ -94,6 +94,7 @@ def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000,
             alma_utils.pr_heap_print(alma_inst)
             alma_utils.kb_print(alma_inst)
 
+        network.epsilon_decay()
 
     network.model_save(model_name)
     return network
@@ -125,6 +126,7 @@ def main():
     parser.add_argument("--kb", default='/home/justin/alma-2.0/glut_control/qlearning2.pl', action='store')
 
     args = parser.parse_args()
+    print("Running with arguments ", args)
 
     if args.cpu_only:
         # TODO:  This may need to be done before any tensorflow imports
