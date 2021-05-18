@@ -332,7 +332,8 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time,
                 binding_list *anc_bindings = malloc(sizeof(*anc_bindings));
                 copy_bindings(anc_bindings, desc_bindings);
 
-                if (counts_match(c, ancestor_copy->quote->clause_quote)) {
+                if (counts_match(c, ancestor_copy->quote->clause_quote)
+                    && (!c->distrusted || c->distrusted >= query_time)) {
                   if (alma->verbose) {
                     tee_alt("Attempting to unify with \"", alma, NULL);
                     clause_print(alma, c, NULL);
