@@ -43,9 +43,10 @@ def collect_episode(network, replay_buffer, alma_inst, episode_length):
             #priorities = 1 - (network.get_priorities([action])*0.9).flatten()
             alma.astep(alma_inst)
             kb = alma.kbprint(alma_inst)[0]
-            reward = network.reward_fn(kb) / network.max_reward
+            reward = (network.reward_fn(kb) / network.max_reward) if i < (episode_length - 1) else -1  # -1 for the last episode
             state1 = alma.kb_to_pyobject(alma_inst)
             replay_buffer.append(state0, action, reward, state1)
+
 
 
 
