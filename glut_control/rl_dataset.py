@@ -1,4 +1,4 @@
-from spektral.data import Dataset, Graph
+#from spektral.data import Dataset, Graph
 from sklearn.utils import shuffle
 import numpy as np
 import os
@@ -6,21 +6,21 @@ import os
 """
 
 """
-class simple_graph_dataset(Dataset):
-    def __init__(self, ax_list, y=None, **kwargs):
-        if y==None:
-            self.graph_list = [Graph(x, a) for a, x in ax_list]
-        else:
-            self.graph_list = [Graph(x, a,np.array([y]) ) for (a, x),y in zip(ax_list, y)]
-        #self.path = "/tmp/sgd"
-        super().__init__(**kwargs)
-
-    def download(self):
-        if not os.path.exists(self.path):
-            os.mkdir(self.path)
-        
-    def read(self):
-        return self.graph_list
+# class simple_graph_dataset(Dataset):
+#     def __init__(self, ax_list, y=None, **kwargs):
+#         if y==None:
+#             self.graph_list = [Graph(x, a) for a, x in ax_list]
+#         else:
+#             self.graph_list = [Graph(x, a,np.array([y]) ) for (a, x),y in zip(ax_list, y)]
+#         #self.path = "/tmp/sgd"
+#         super().__init__(**kwargs)
+#
+#     def download(self):
+#         if not os.path.exists(self.path):
+#             os.mkdir(self.path)
+#
+#     def read(self):
+#         return self.graph_list
 
 """
 Create a dataset and run it through a GeneralGNN.  Surprisingly difficult!
@@ -49,24 +49,24 @@ def test_with_gen():
 """
 Eventually, this should be a good way to do the experience replay.
 """
-class potential_inference_data(Dataset):
-    def __init__(self, saved_inputs, Xbuffer, ybuffer, **kwargs):
-        self.nodes=100
-        self.feats=20
-        self.saved_inputs = saved_inputs
-        self.Xbuffer = Xbuffer
-        self.ybuffer = ybuffer 
-        super().__init__(**kwargs)
-
-    def download(self):
-        os.mkdir(self.path)
-
-    def read(self):
-        return []
-
-
-    def add(self, input, reward):
-        pass
+# class potential_inference_data(Dataset):
+#     def __init__(self, saved_inputs, Xbuffer, ybuffer, **kwargs):
+#         self.nodes=100
+#         self.feats=20
+#         self.saved_inputs = saved_inputs
+#         self.Xbuffer = Xbuffer
+#         self.ybuffer = ybuffer
+#         super().__init__(**kwargs)
+#
+#     def download(self):
+#         os.mkdir(self.path)
+#
+#     def read(self):
+#         return []
+#
+#
+#     def add(self, input, reward):
+#         pass
     
         
 class replay_batch:

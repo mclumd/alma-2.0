@@ -14,15 +14,15 @@ from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.losses import BinaryCrossentropy
 from tensorflow.keras.metrics import BinaryAccuracy
 from tensorflow.keras.layers import Dense, Dropout
-from spektral.layers import GCNConv, GlobalSumPool
-from spektral.data.graph import Graph
-from spektral.data import DisjointLoader
+#from spektral.layers import GCNConv, GlobalSumPool
+#from spektral.data.graph import Graph
+#from spektral.data import DisjointLoader
 
-import spektral
-import spektral.models
+#import spektral
+#import spektral.models
 
 import numpy as np
-from rl_dataset import potential_inference_data, simple_graph_dataset
+#from rl_dataset import potential_inference_data, simple_graph_dataset
 import sys
 import pickle
 import alma_functions as aw
@@ -118,7 +118,7 @@ class gnn_model(Model):
                                'tacc': [(total_tacc / num_epochs)]
                                })
 
-
+#take graph rep from res_prebuff graph_representation and push through neural net
 class gnn_model_zero():
     def __init__(self, max_nodes=20, num_features=20):
         #gnn_model.__init__(self, max_nodes)

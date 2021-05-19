@@ -3,7 +3,7 @@ Functions for Q-learning.
 """
 import tensorflow as tf
 import alma
-from memory_profiler import profile
+#from memory_profiler import profile
 import alma_utils
 import numpy as np
 
