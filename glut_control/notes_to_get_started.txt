@@ -1,0 +1,10 @@
+1.  checkout the branch:  git checkout bobby
+2.  goal 1:  trace through the code in gnn_starter.py (can use gnn_starter.sh); try to
+    understand what's going on.
+3.  goal 2:  any work with GNNs in the code is currently done with
+    gnn_model_zero from resolution_prebuffer.py
+
+    This is pseudo_gnn class that, e.g., doesn't do any message
+    passing.  Can we get this to work with a GNN from the library?
+    The first test of this will be to repliace the supervised learning
+    task in gnn_starter.py
