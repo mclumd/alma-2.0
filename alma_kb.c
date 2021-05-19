@@ -385,9 +385,6 @@ void make_clause(alma_node *node, clause *c) {
 // Flattens a single alma node and adds its contents to collection
 // Recursively calls when an AND is found to separate conjunctions
 void flatten_node(kb *collection, alma_node *node, tommy_array *clauses, int print, kb_str *buf) {
-  //  printf("FLATTEN NODE FUNC: %p, %p, %p\n",(void *)node,(void *)clauses,(void *)buf);
-  //  printf("buf ptr and size: %p, %d\n",(void *)buf->buffer,(int)buf->limit);
-  //  printf("after BUF\n");
   if (node->type == FOL && node->fol->tag != FIF && node->fol->op == AND) {
     if (node->fol->arg1->type == FOL)
       node->fol->arg1->fol->tag = node->fol->tag;
@@ -397,23 +394,16 @@ void flatten_node(kb *collection, alma_node *node, tommy_array *clauses, int pri
     flatten_node(collection, node->fol->arg2, clauses, print, buf);
   }
   else {
-    //    printf("HERE IN FLATTEN\n");
     clause *c = malloc(sizeof(*c));
-    //    printf("RIGHT BEFORE DIRTY BIT\n");
     c->dirty_bit = 1;
     c->pyobject_bit = (char) 1;
     make_clause(node, c);
     set_variable_ids(c, 1, 0, NULL, collection);
 
-    //    printf("ABOUT TO PRINT\n");
     if (print) {
-      //      printf("STARTING PRINTING\n");
       tee_alt("-a: ", collection, buf);
-      //      printf("PRINT MID 1\n");
       clause_print(collection, c, buf);
-      //      printf("PRINT MID 2\n");
       tee_alt(" added\n", collection, buf);
-      //      printf("DONE PRINTING\n");
     }
     tommy_array_insert(clauses, c);
   }
@@ -529,6 +519,16 @@ static int im_compare(const void *arg, const void *obj) {
 // Compares string arg to predname of predname_mapping
 int pm_compare(const void *arg, const void *obj) {
   return strcmp((const char*)arg, ((const predname_mapping*)obj)->predname);
+}
+
+// Returns true if clause is not distrusted, retired, or handled
+int flags_negative(clause *c) {
+  return c->distrusted == 0 && c->retired == 0 && c->handled == 0;
+}
+
+// Returns true if clause has become distrusted/retired/handled at or after
+int flag_active_at_least(clause *c, long time) {
+  return c->distrusted >= time || c->retired >= time || c->handled >= time;
 }
 
 // Given "name" and integer arity, returns "name/arity"
@@ -833,7 +833,7 @@ clause* duplicate_check(kb *collection, clause *c, int check_distrusted) {
     if (result != NULL) {
       for (int i = 0; i < result->num_clauses; i++) {
         // A clause distrusted this timestep is still checked against
-        if ((check_distrusted || !result->clauses[i]->distrusted || result->clauses[i]->distrusted == collection->time) &&
+        if ((check_distrusted || flags_negative(result->clauses[i]) || flag_active_at_least(result->clauses[i], collection->time)) &&
             c->tag == result->clauses[i]->tag && !clauses_differ(c, result->clauses[i]))
           return result->clauses[i];
       }
@@ -849,6 +849,8 @@ void add_clause(kb *collection, clause *c) {
   c->index = ientry->key = collection->next_index++;
   c->acquired = collection->time;
   c->distrusted = 0;
+  c->retired = 0;
+  c->handled = 0;
   c->dirty_bit = (char) 1;
   c->pyobject_bit = (char) 1;
   ientry->value = c;
@@ -940,7 +942,6 @@ static void remove_fif_tasks(kb *collection, clause *c) {
 // Given a clause already existing in KB, remove from data structures
 // Note that fif removal, or removal of a singleton clause used in a fif rule, may be very expensive
 void remove_clause(kb *collection, clause *c, kb_str *buf) {
-  //  printf("ALMA: IN REMOVE CLAUSE\n");
   if (c->tag == FIF) {
     char *name = c->fif->indexing_conc->name;
     fif_mapping *fifm = tommy_hashlin_search(&collection->fif_map, fifm_compare, name, tommy_hash_u64(0, name, strlen(name)));
@@ -984,32 +985,18 @@ void remove_clause(kb *collection, clause *c, kb_str *buf) {
   tommy_hashlin_remove_existing(&collection->index_map, &result->hash_node);
   free(result);
 
-  //  printf("ALMA: MID WAY THROUGH REMOVE CLAUSE: CHILDREN COUNT %d\n",c->children_count);
-
   // Remove clause from the parents list of each of its children
   for (int i = 0; i < c->children_count; i++) {
     clause *child = c->children[i];
     if (child != NULL) {
       int new_count = child->parent_set_count;
-      //      printf("ALMA: CHILD POS LITS POINTER: %p\n",(void *)child->pos_lits);
-      //      for (int z = 0; z < child->pos_count; z++) {
-      //      	tee_alt("IN ALMA REMOVE_CLAUSE: CHILD POS LITS NAME AND POINTER: %s : %p\n",buf,child->pos_lits[z]->name,(void *)child);
-      //      }
-      //      tee_alt("IN ALMA REMOVE_CLAUSE: PARENT SET COUNT %d\n",buf,child->parent_set_count);
+
       //  If a parent set has a clause matching, remove match
       for (int j = 0; j < child->parent_set_count; j++) {
-	//	tee_alt("IN ALMA REMOVE_CLAUSE: NUM PARENT CLAUSES %d\n",buf,child->parents[j].count);
         for (int k = 0; k < child->parents[j].count; k++) {
-	  //	  tee_alt("IN ALMA REMOVE_CLAUSE: LOOP IN REMOVE CLAUSE: (i,j,k) => (%d,%d,%d)\n",buf,i,j,k);
-	  //	  tee_alt("IN ALMA REMOVE_CLAUSE: PARENT SET CLAUSE POINTER %p\n",buf,(void *)child->parents[j].clauses);
-	  //	  if (!child->parents[j].clauses) {
-	  //	    return 0;
-	  //	  }
           if (child->parents[j].clauses[k] == c) {
             // If last parent in set, deallocate
-	    //	    printf("ALMA: REMOVE CLAUSE: BEFORE PARENT COUNT\n");
             if (child->parents[j].count == 1) {
-	      //	      tee_alt("IN ALMA: REMOVE CLAUSE: PARENT COUNT IS ONE\n",buf);
               new_count--;
               child->parents[j].count = 0;
               free(child->parents[j].clauses);
@@ -1017,7 +1004,6 @@ void remove_clause(kb *collection, clause *c, kb_str *buf) {
             }
             // Otherwise, reallocate without parent
             else {
-	      //	      tee_alt("IN ALMA: REMOVE CLAUSE: PARENT COUNT IS %d\n",buf, child->parents[j].count);
               child->parents[j].count--;
               child->parents[j].clauses[k] = child->parents[j].clauses[child->parents[j].count];
               child->parents[j].clauses = realloc(child->parents[j].clauses, sizeof(*child->parents[j].clauses)*child->parents[j].count);
@@ -1044,7 +1030,6 @@ void remove_clause(kb *collection, clause *c, kb_str *buf) {
             }
             break;
           }
-	  //	  printf("ALMA: REMOVE CLAUSE: END OF THIS LOOP\n");
         }
       }
 
@@ -1062,10 +1047,6 @@ void remove_clause(kb *collection, clause *c, kb_str *buf) {
             child->parents[loc].clauses = NULL;
           }
         }
-	//	printf("REALLOCING PARENTS 1\n");
-	//	for (int z = 0; z < child->pos_count; z++) {
-	//	  printf("ALMA: CHILD POS LITS NAME: %s\n",child->pos_lits[z]->name);
-	//	}
         child->parents = realloc(child->parents, sizeof(*child->parents)*new_count);
       }
       if (new_count == 0 && child->parents != NULL) {
@@ -1082,8 +1063,6 @@ void remove_clause(kb *collection, clause *c, kb_str *buf) {
       remove_child(c->parents[i].clauses[j], c);
 
   free_clause(c);
-  //  return 1;
-  //  printf("ALMA: LEAVING REMOVE CLAUSE\n");
 }
 
 void make_single_task(kb *collection, clause *c, alma_function *c_lit, clause *other, tommy_array *tasks, int use_bif, int pos) {
@@ -1118,7 +1097,7 @@ void make_res_tasks(kb *collection, clause *c, int count, alma_function **c_lits
     // New tasks are from Cartesian product of result's clauses with clauses' ith
     if (result != NULL)
       for (int j = 0; j < result->num_clauses; j++)
-        if (!result->clauses[j]->distrusted)
+        if (flags_negative(result->clauses[j]))
           make_single_task(collection, c, c_lits[i], result->clauses[j], tasks, use_bif, pos);
 
     free(name);
@@ -1144,8 +1123,6 @@ clause* assert_formula(kb *collection, char *string, int print, kb_str *buf) {
   alma_node *formulas;
   int formula_count;
   if (formulas_from_source(string, 0, &formula_count, &formulas, collection, buf)) {
-    //    printf("HEREEEE; %s\n",string);
-    //    printf("BUF: %p\n",(void *)buf);
     tommy_array temp;
     tommy_array_init(&temp);
     nodes_to_clauses(collection, formulas, formula_count, &temp, print, buf);
@@ -1171,14 +1148,10 @@ int delete_formula(kb *collection, char *string, int print, kb_str *buf) {
     }
     free(formulas);
 
-    //    tee_alt("ALMA IN DELETE FORMULA: clause size %d\n",buf,tommy_array_size(&clauses));
     // Process and remove each clause
     for (tommy_size_t i = 0; i < tommy_array_size(&clauses); i++) {
       clause *curr = tommy_array_get(&clauses, i);
       clause *c = duplicate_check(collection, curr, 1);
-
-      //      tee_alt("ALMA IN DELETE FORMULA LOOP: CLAUSE POINTER %p\n",buf,(void *)c);
-
       if (c != NULL) {
         if (print) {
           tee_alt("-a: ", collection, buf);
@@ -1337,13 +1310,6 @@ static void resolve(res_task *t, binding_list *mgu, clause *result) {
   subst_clause(mgu, result, 0);
 }
 
-char* long_to_str(long x) {
-  int length = snprintf(NULL, 0, "%ld", x);
-  char *str = malloc(length+1);
-  snprintf(str, length+1, "%ld", x);
-  return str;
-}
-
 static void add_child(clause *parent, clause *child) {
   parent->children_count++;
   parent->children = realloc(parent->children, sizeof(*parent->children) * parent->children_count);
@@ -1370,11 +1336,6 @@ void transfer_parent(kb *collection, clause *target, clause *source, int add_chi
   // Copy parents of source to target
   // As a new clause target has only one parent set
   if (!repeat_parents) {
-    //    printf("REALLOCING PARENTS 2\n");
-    //    for (int z = 0; z < target->pos_count; z++) {
-    //      printf("ALMA: TARGET POS LITS NAME: %s\n",target->pos_lits[z]->name);
-    //    }
-
     target->parents = realloc(target->parents, sizeof(*target->parents) * (target->parent_set_count + 1));
     int last = target->parent_set_count;
     target->parents[last].count = source->parents[0].count;
@@ -1399,6 +1360,26 @@ void transfer_parent(kb *collection, clause *target, clause *source, int add_chi
   }
 }
 
+
+// Places clause into term as clause_quote type of quote, with copy of structure
+static void quote_from_clause(alma_term *t, clause *c) {
+  t->type = QUOTE;
+  t->quote = malloc(sizeof(*t->quote));
+  t->quote->type = CLAUSE;
+  t->quote->clause_quote = malloc(sizeof(*t->quote->clause_quote));
+  copy_clause_structure(c, t->quote->clause_quote);
+}
+
+void func_from_long(alma_term *t, long l) {
+  t->type = FUNCTION;
+  t->function = malloc(sizeof(*t->function));
+  int length = snprintf(NULL, 0, "%ld", l);
+  t->function->name = malloc(length+1);
+  snprintf(t->function->name, length+1, "%ld", l);
+  t->function->term_count = 0;
+  t->function->terms = NULL;
+}
+
 static int derivations_distrusted(clause *c) {
   for (int i = 0; i < c->parent_set_count; i++) {
     int parent_distrusted = 0;
@@ -1414,6 +1395,29 @@ static int derivations_distrusted(clause *c) {
   return 1;
 }
 
+// Creates a meta-formula literal with binary arguments of quotation term for c and the time
+static clause* make_meta_literal(kb *collection, char *predname, clause *c, long time) {
+  clause *res = malloc(sizeof(*res));
+  res->pos_count = 1;
+  res->neg_count = 0;
+  res->pos_lits = malloc(sizeof(*res->pos_lits));
+  res->pos_lits[0] = malloc(sizeof(*res->pos_lits[0]));
+  res->pos_lits[0]->name = malloc(strlen(predname)+1);
+  strcpy(res->pos_lits[0]->name, predname);
+  res->pos_lits[0]->term_count = 2;
+  res->pos_lits[0]->terms = malloc(sizeof(*res->pos_lits[0]->terms) * 2);
+  quote_from_clause(res->pos_lits[0]->terms+0, c);
+  func_from_long(res->pos_lits[0]->terms+1, collection->time);
+  res->neg_lits = NULL;
+  res->children_count = 0;
+  res->parents = NULL;
+  res->children = NULL;
+  res->tag = NONE;
+  res->fif = NULL;
+  set_variable_ids(res, 1, 0, NULL, collection);
+  return res;
+}
+
 static void distrust_recursive(kb *collection, clause *c, clause *contra, kb_str *buf) {
   // Formula becomes distrusted at current time
   c->distrusted = collection->time;
@@ -1422,32 +1426,7 @@ static void distrust_recursive(kb *collection, clause *c, clause *contra, kb_str
     remove_fif_tasks(collection, c);
 
   // Assert atomic distrusted() formula
-  clause *d = malloc(sizeof(*d));
-  d->pos_count = 1;
-  d->neg_count = 0;
-  d->pos_lits = malloc(sizeof(*d->pos_lits));
-  d->pos_lits[0] = malloc(sizeof(*d->pos_lits[0]));
-  d->pos_lits[0]->name = malloc(strlen("distrusted")+1);
-  strcpy(d->pos_lits[0]->name, "distrusted");
-  d->pos_lits[0]->term_count = 2;
-  d->pos_lits[0]->terms = malloc(sizeof(*d->pos_lits[0]->terms) * 2);
-  d->pos_lits[0]->terms[0].type = QUOTE;
-  d->pos_lits[0]->terms[0].quote = malloc(sizeof(*d->pos_lits[0]->terms[0].quote));
-  d->pos_lits[0]->terms[0].quote->type = CLAUSE;
-  d->pos_lits[0]->terms[0].quote->clause_quote = malloc(sizeof(*d->pos_lits[0]->terms[0].quote->clause_quote));
-  copy_clause_structure(c, d->pos_lits[0]->terms[0].quote->clause_quote);
-  d->pos_lits[0]->terms[1].type = FUNCTION;
-  d->pos_lits[0]->terms[1].function = malloc(sizeof(*d->pos_lits[0]->terms[1].function));
-  d->pos_lits[0]->terms[1].function->name = long_to_str(collection->time);
-  d->pos_lits[0]->terms[1].function->term_count = 0;
-  d->pos_lits[0]->terms[1].function->terms = NULL;
-  d->neg_lits = 0;
-  d->children_count = 0;
-  d->parents = NULL;
-  d->children = NULL;
-  d->tag = NONE;
-  d->fif = NULL;
-  set_variable_ids(d, 1, 0, NULL, collection);
+  clause *d = make_meta_literal(collection, "distrusted", c, collection->time);
   tommy_array_insert(&collection->new_clauses, d);
 
   // Parent argument provided will be set for distrusted formula
@@ -1497,7 +1476,7 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
     res_task *current_task = tommy_array_get(tasks, i);
     if (current_task != NULL) {
       // Does not do resolution with a distrusted clause
-      if (!current_task->x->distrusted && !current_task->y->distrusted) {
+      if (flags_negative(current_task->x) && flags_negative(current_task->y)) {
         binding_list *theta = malloc(sizeof(*theta));
         init_bindings(theta);
         if (collection->verbose)
@@ -1609,26 +1588,14 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
               contra->neg_count = 0;
               contra->pos_lits = malloc(sizeof(*contra->pos_lits));
               contra->pos_lits[0] = malloc(sizeof(*contra->pos_lits[0]));
-              contra->pos_lits[0]->name = malloc(strlen("contra")+1);
-              strcpy(contra->pos_lits[0]->name, "contra");
+              contra->pos_lits[0]->name = malloc(strlen("contra_event")+1);
+              strcpy(contra->pos_lits[0]->name, "contra_event");
               contra->pos_lits[0]->term_count = 3;
               contra->pos_lits[0]->terms = malloc(sizeof(*contra->pos_lits[0]->terms) * 3);
-              contra->pos_lits[0]->terms[0].type = QUOTE;
-              contra->pos_lits[0]->terms[0].quote = malloc(sizeof(*contra->pos_lits[0]->terms[0].quote));
-              contra->pos_lits[0]->terms[0].quote->type = CLAUSE;
-              contra->pos_lits[0]->terms[0].quote->clause_quote = malloc(sizeof(*contra->pos_lits[0]->terms[0].quote->clause_quote));
-              copy_clause_structure(current_task->x, contra->pos_lits[0]->terms[0].quote->clause_quote);
-              contra->pos_lits[0]->terms[1].type = QUOTE;
-              contra->pos_lits[0]->terms[1].quote = malloc(sizeof(*contra->pos_lits[0]->terms[0].quote));
-              contra->pos_lits[0]->terms[1].quote->type = CLAUSE;
-              contra->pos_lits[0]->terms[1].quote->clause_quote = malloc(sizeof(*contra->pos_lits[0]->terms[1].quote->clause_quote));
-              copy_clause_structure(current_task->y, contra->pos_lits[0]->terms[1].quote->clause_quote);
-              contra->pos_lits[0]->terms[2].type = FUNCTION;
-              contra->pos_lits[0]->terms[2].function = malloc(sizeof(*contra->pos_lits[0]->terms[2].function));
-              contra->pos_lits[0]->terms[2].function->name = long_to_str(collection->time);
-              contra->pos_lits[0]->terms[2].function->term_count = 0;
-              contra->pos_lits[0]->terms[2].function->terms = NULL;
-              contra->neg_lits = 0;
+              quote_from_clause(contra->pos_lits[0]->terms+0, current_task->x);
+              quote_from_clause(contra->pos_lits[0]->terms+1, current_task->y);
+              func_from_long(contra->pos_lits[0]->terms+2, collection->time);
+              contra->neg_lits = NULL;
               contra->parent_set_count = contra->children_count = 0;
               contra->parents = NULL;
               contra->children = NULL;
@@ -1636,6 +1603,13 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
               contra->fif = NULL;
               set_variable_ids(contra, 1, 0, NULL, collection);
               tommy_array_insert(&collection->new_clauses, contra);
+
+              clause *contradicting = malloc(sizeof(*contradicting));
+              copy_clause_structure(contra, contradicting);
+              contradicting->pos_lits[0]->name = realloc(contradicting->pos_lits[0]->name, strlen("contradicting")+1);
+              strcpy(contradicting->pos_lits[0]->name, "contradicting");
+              set_variable_ids(contradicting, 1, 0, NULL, collection);
+              tommy_array_insert(&collection->new_clauses, contradicting);
 
               tommy_array_insert(&collection->distrusted, current_task->x);
               tommy_array_insert(&collection->distrust_parents, contra);
@@ -1719,7 +1693,7 @@ static void handle_distrust(kb *collection, clause *distrust, kb_str *buf) {
 
       for (int i = mapping_num_clauses(mapping, lit->terms[0].quote->clause_quote->tag)-1; i >= 0; i--) {
         clause *ith = mapping_access(mapping, lit->terms[0].quote->clause_quote->tag, i);
-        if (!ith->distrusted && counts_match(ith, lit->terms[0].quote->clause_quote)) {
+        if (flags_negative(ith) && counts_match(ith, lit->terms[0].quote->clause_quote)) {
           q->clause_quote = ith;
           binding_list *theta = malloc(sizeof(*theta));
           init_bindings(theta);
@@ -1791,6 +1765,37 @@ void process_new_clauses(kb *collection, kb_str *buf) {
                   subst_clause(theta, reinstatement, 0);
                   set_variable_ids(reinstatement, 1, 0, NULL, collection);
                   tommy_array_insert(&collection->new_clauses, reinstatement);
+
+                  if (reinstatement->pos_count + reinstatement->neg_count == 1 && reinstatement->fif == NULL) {
+                    // Look for contradicting() instances with reinstate target as a contradictand, to be handled()
+                    char *name = name_with_arity("contradicting", 3);
+                    predname_mapping *result = tommy_hashlin_search(&collection->pos_map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
+                    if (result != NULL) {
+                      // Select argument to match reinstated literal
+                      int contra_arg = (reinstatement->neg_count == 1);
+
+                      for (int k = 0; k < result->num_clauses; k++) {
+                        clause *con = result->clauses[k];
+                        if (con->pos_count == 1 && con->neg_count == 0 && con->fif == NULL && flags_negative(con) &&
+                            con->pos_lits[0]->term_count == 3 && con->pos_lits[0]->terms[contra_arg].type == QUOTE) {
+
+                          binding_list *contra_theta = malloc(sizeof(*contra_theta));
+                          init_bindings(contra_theta);
+
+                          // Contradicting() formula found with argument matching reinstate arg; mark this contradiction as handled
+                          if (quote_term_unify(con->pos_lits[0]->terms[contra_arg].quote, q, contra_theta)) {
+                            con->handled = collection->time;
+                            clause *handled = make_meta_literal(collection, "handled", con, collection->time);
+                            tommy_array_insert(&collection->new_clauses, handled);
+                          }
+                          cleanup_bindings(contra_theta);
+                        }
+                      }
+                    }
+                    free(name);
+
+                    // Look for distrusted() instances with reinstate target, to be retired (??)
+                  }
                 }
                 cleanup_bindings(theta);
               }

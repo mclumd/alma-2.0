@@ -342,13 +342,7 @@ void kb_observe(kb *collection, char *string, kb_str *buf) {
         alma_function *lit = (c->pos_count == 1) ? c->pos_lits[0] : c->neg_lits[0];
         lit->term_count++;
         lit->terms = realloc(lit->terms, sizeof(*lit->terms)*lit->term_count);
-        alma_term time_term;
-        time_term.type = FUNCTION;
-        time_term.function = malloc(sizeof(*time_term.function));
-        time_term.function->name = long_to_str(collection->time+1);
-        time_term.function->term_count = 0;
-        time_term.function->terms = NULL;
-        lit->terms[lit->term_count-1] = time_term;
+        func_from_long(lit->terms+(lit->term_count-1), collection->time+1);
         tommy_array_insert(&collection->new_clauses, c);
         tee_alt("-a: ", collection, buf);
         clause_print(collection, c, buf);

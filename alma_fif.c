@@ -45,7 +45,7 @@ void fif_task_map_init(kb *collection, clause *c, int init_to_unify) {
           predname_mapping *pm_result = tommy_hashlin_search(map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
           if (pm_result != NULL) {
             for (int j = 0; j < pm_result->num_clauses; j++) {
-              if (!pm_result->clauses[j]->distrusted && pm_result->clauses[j]->pos_count + pm_result->clauses[j]->neg_count == 1) {
+              if (flags_negative(pm_result->clauses[j]) && pm_result->clauses[j]->pos_count + pm_result->clauses[j]->neg_count == 1) {
                 task->num_to_unify++;
                 task->to_unify = realloc(task->to_unify, sizeof(*task->to_unify) * task->num_to_unify);
                 task->to_unify[task->num_to_unify-1] = pm_result->clauses[j];
@@ -88,7 +88,7 @@ void fif_tasks_from_clause(kb *collection, clause *c) {
         fif_task *data = curr->data;
 
         // Only modify add entry to to_unify if next for fif isn't a procedure predicate
-        if (!data->fif->distrusted && !data->proc_next) {
+        if (flags_negative(data->fif) && !data->proc_next) {
           int sign_match = (pos && data->fif->fif->ordering[data->num_unified] < 0) || (!pos && data->fif->fif->ordering[data->num_unified] >= 0);
           if (sign_match) {
             data->num_to_unify++;
@@ -104,10 +104,10 @@ void fif_tasks_from_clause(kb *collection, clause *c) {
   }
 }
 
-// Returns 1 if any of of task's unified_clauses is distrusted
-static int fif_unified_distrusted(kb *collection, fif_task *task) {
+// Returns 1 if any of of task's unified_clauses is flagged as distrusted/retired/handled
+static int fif_unified_flagged(kb *collection, fif_task *task) {
   for (int i = 0; i < task->num_unified; i++) {
-    if (task->unified_clauses[i]->distrusted)
+    if (!flags_negative(task->unified_clauses[i]))
       return 1;
   }
   return 0;
@@ -161,7 +161,7 @@ static void fif_task_unify_loop(kb *collection, tommy_list *tasks, tommy_list *s
 
         next_task->premises_done++;
         if (next_task->premises_done == next_task->fif->fif->premise_count) {
-          if (!fif_unified_distrusted(collection, next_task))
+          if (!fif_unified_flagged(collection, next_task))
             fif_conclude(collection, next_task, next_task->bindings, &collection->new_clauses);
           free_fif_task(next_task);
         }
@@ -189,7 +189,7 @@ static void fif_task_unify_loop(kb *collection, tommy_list *tasks, tommy_list *s
       if (m != NULL) {
         for (int j = 0; j < m->num_clauses; j++) {
           clause *jth = m->clauses[j];
-          if (!jth->distrusted && jth->pos_count + jth->neg_count == 1) {
+          if (flags_negative(jth) && jth->pos_count + jth->neg_count == 1) {
             alma_function *to_unify = search_pos ? jth->pos_lits[0] : jth->neg_lits[0];
 
             binding_list *copy = malloc(sizeof(*copy));
@@ -205,8 +205,8 @@ static void fif_task_unify_loop(kb *collection, tommy_list *tasks, tommy_list *s
 
               // If task is now completed, obtain resulting clause and insert to new_clauses
               if (next_task->premises_done + 1 == next_task->fif->fif->premise_count) {
-                if (fif_unified_distrusted(collection, next_task)) {
-                  // If any unified clauses became distrusted, delete task
+                if (fif_unified_flagged(collection, next_task)) {
+                  // If any unified clauses became flagged, delete task
                   free_fif_task(next_task);
                   task_erased = 1;
                   break;
@@ -275,8 +275,8 @@ static void process_fif_task_mapping(kb *collection, fif_task_mapping *entry, to
       copy_bindings(copy, f->bindings);
 
       if (f->to_unify != NULL) {
-        if (fif_unified_distrusted(collection, f)) {
-          // If any unified clauses became distrusted, delete task
+        if (fif_unified_flagged(collection, f)) {
+          // If any unified clauses became flagged, delete task
           tommy_list_remove_existing(&entry->tasks, &f->node);
           free_fif_task(f);
         }
@@ -284,8 +284,8 @@ static void process_fif_task_mapping(kb *collection, fif_task_mapping *entry, to
           for (int i = 0; i < f->num_to_unify; i++) {
             clause *unify_target = f->to_unify[i];
 
-            // Clause to unify must not have become distrusted since it was connected to the fif task
-            if (!unify_target->distrusted) {
+            // Clause to unify must not have become flagged since it was connected to the fif task
+            if (flags_negative(unify_target)) {
               alma_function *to_unify_func = (unify_target->pos_count > 0) ? unify_target->pos_lits[0] : unify_target->neg_lits[0];
 
               if (collection->verbose)
@@ -351,8 +351,8 @@ static void process_fif_task_mapping(kb *collection, fif_task_mapping *entry, to
 
           // If task is now completed, obtain resulting clause and insert to new_clauses
           if (f->premises_done + 1 == f->fif->fif->premise_count) {
-            if (fif_unified_distrusted(collection, f)) {
-              // If any unified clauses became distrusted, delete task
+            if (fif_unified_flagged(collection, f)) {
+              // If any unified clauses became flagged, delete task
               tommy_list_remove_existing(&entry->tasks, &f->node);
               free_fif_task(f);
               cleanup_bindings(copy);

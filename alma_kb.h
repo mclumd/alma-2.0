@@ -32,6 +32,8 @@ typedef struct clause {
   long index; // Index of clause, used as key in index_map of KB
   long acquired; // Time asserted to KB
   long distrusted; // Distrust status; if nonzero the time it was distrusted
+  long retired; // Retired status; if nonzero the time it was retired
+  long handled; // Handled status; if nonzero the time that it was handled
   int dirty_bit;
   char pyobject_bit;
 } clause;
@@ -132,7 +134,9 @@ void transfer_parent(kb *collection, clause *target, clause *source, int add_chi
 
 void free_predname_mapping(void *arg);
 int pm_compare(const void *arg, const void *obj);
-char* long_to_str(long x);
+int flags_negative(clause *c);
+int flag_active_at_least(clause *c, long time);
+void func_from_long(alma_term *t, long l);
 char* name_with_arity(char *name, int arity);
 
 #endif

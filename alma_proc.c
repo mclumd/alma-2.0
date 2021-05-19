@@ -120,7 +120,7 @@ static int copy_and_quasiquote_clause(clause *original, clause *copy, clause *qu
 
 // Procedure functions and minor helpers
 
-// For now, introspect fails on distrusted formulas
+// For now, introspect fails on flagged formulas
 // It seems intuitive to reject them, since introspection is based on current knowledge
 static int introspect(alma_function *arg, binding_list *bindings, kb *alma, introspect_kind kind) {
   alma_term *query = arg->terms+0;
@@ -162,8 +162,8 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *alma, intr
     int non_specific = (kind == POS_INT || kind == POS_INT_GEN || kind == NEG_INT || kind == NEG_INT_GEN);
     for (int i = mapping_num_clauses(mapping, search_term->quote->clause_quote->tag)-1; i >= 0; i--) {
       clause *ith = mapping_access(mapping, search_term->quote->clause_quote->tag, i);
-      // Must be a non-distrusted result with pos / neg literal count matching query
-      if (!ith->distrusted && counts_match(ith, search_term->quote->clause_quote)) {
+      // Must be a non-flagged result with pos / neg literal count matching query
+      if (flags_negative(ith) && counts_match(ith, search_term->quote->clause_quote)) {
         // Convert clause in question to quotation term
         if (non_specific) {
           q->clause_quote = malloc(sizeof(*q->clause_quote));
@@ -206,11 +206,7 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *alma, intr
           if (kind == ACQUIRED) {
             // If they unify, create term out of acquired answer
             alma_term *time_term = malloc(sizeof(*time_term));
-            time_term->type = FUNCTION;
-            time_term->function = malloc(sizeof(*time_term->function));
-            time_term->function->name = long_to_str(ith->acquired);
-            time_term->function->term_count = 0;
-            time_term->function->terms = NULL;
+            func_from_long(time_term, ith->acquired);
             add_binding(bindings, arg->terms[1].variable, time_term, arg, 0);
           }
 
@@ -294,7 +290,7 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time,
         }
 
         if (counts_match(ith, descendant_copy->quote->clause_quote) && ith->acquired <= query_time
-            && (!ith->distrusted || ith->distrusted >= query_time)){
+            && (flags_negative(ith) || flag_active_at_least(ith, query_time))) {
           // Create copy as either empty list or copy of arg
           binding_list *desc_bindings = malloc(sizeof(*desc_bindings));
           copy_bindings(desc_bindings, bindings);
@@ -333,7 +329,7 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time,
                 copy_bindings(anc_bindings, desc_bindings);
 
                 if (counts_match(c, ancestor_copy->quote->clause_quote)
-                    && (!c->distrusted || c->distrusted >= query_time)) {
+                    && (flags_negative(c) || flag_active_at_least(c, query_time))) {
                   if (alma->verbose) {
                     tee_alt("Attempting to unify with \"", alma, NULL);
                     clause_print(alma, c, NULL);
