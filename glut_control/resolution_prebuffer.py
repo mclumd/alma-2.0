@@ -27,14 +27,14 @@ import sys
 import pickle
 import alma_functions as aw
 from sklearn.utils import shuffle
-from vectorization import graph_representation, unifies, vectorize_bow1
+from vectorization import graph_representation, unifies, vectorize_bow1, vectorize_bow2
 
-def forward_model(use_tf = False, subjects=[]):
+def forward_model(use_tf = False, num_subjects=0):
     # TODO:  fix use_tf code to return everything if this ever gets used.
     if use_tf:
         import tensorflow as tf
         model  = tf.keras.models.Sequential([
-            tf.keras.Input(shape=( (  2*(len(subjects)+1),)) ),    # One input for each term
+            tf.keras.Input(shape=( (  2*num_subjects,)) ),    # One input for each term
             tf.keras.layers.Dense(32, activation='relu'),
             tf.keras.layers.Dropout(0.2),
             tf.keras.layers.Dense(1),
@@ -49,10 +49,11 @@ def forward_model(use_tf = False, subjects=[]):
         print("Model summary:", self.model.summary())
     else:
         model = keras.models.Sequential()
-        model.add(keras.Input(shape=( (  2*(len(subjects)+1),)) ))    # One input for each term
+        model.add(keras.Input(shape=( (  2*num_subjects,)) ))    # One input for each term
         model.add(keras.layers.Dense(8, activation='tanh'))
         model.add(keras.layers.Dense(8, activation='tanh'))
         model.add(keras.layers.Dense(1, activation='sigmoid'))
+        model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy', 'binary_crossentropy'])
     return model
 
 class history_struct:
@@ -83,10 +84,12 @@ class gnn_model(Model):
             predictions = self.graph_net(inputs, training=True)
             loss = self.loss_fn(target, predictions) + sum(self.graph_net.losses)
             acc = self.acc_fn(target, predictions)
-
+            preds_01 = np.array([ 0.0 if p <= 0.5 else 1 for p in predictions])
+            #tacc = np.square(preds_01 - target.T).mean()
+            tacc = (1 - abs(preds_01 - target.T)).mean()
             gradients = tape.gradient(loss, self.graph_net.trainable_variables)
             self.optimizer.apply_gradients(zip(gradients, self.graph_net.trainable_variables))
-        return loss, acc
+        return loss, acc, tacc
 
     def fit(self, X, y, batch_size=16, verbose=True):
         dataset = simple_graph_dataset(X,y)
@@ -95,6 +98,7 @@ class gnn_model(Model):
         #results = []
         total_loss = 0
         total_acc = 0
+        total_tacc = 0
         num_epochs = len(X) // batch_size
         if len(X) % batch_size != 0:
             num_epochs += 1    # Extra batch for remainder
@@ -103,20 +107,81 @@ class gnn_model(Model):
             #b[0] looks like features, b[1] looks like graph, b[2] is targets, b[3] is some kind of large index array
             inputs = (b[0], b[1], b[3])
             target = b[2]
-            loss, acc = self.train_on_batch(inputs, target )
+            loss, acc, tacc = self.train_on_batch(inputs, target )
             total_loss += loss
             total_acc += acc
+            total_tacc += tacc
             #results.append((loss, acc))
             #preds.append(batch_preds.numpy())
         return history_struct({'accuracy': [(total_acc / num_epochs)],
-                               'loss': [(total_loss / num_epochs)]})
-        
+                               'loss': [(total_loss / num_epochs)],
+                               'tacc': [(total_tacc / num_epochs)]
+                               })
+
+
+class gnn_model_zero():
+    def __init__(self, max_nodes=20, num_features=20):
+        #gnn_model.__init__(self, max_nodes)
+        input_size = (2*max_nodes)**2 + (2*max_nodes*num_features)
+        self.input_size = input_size
+        self.max_nodes = max_nodes
+        self.num_features = num_features
+        # Function API version; don't use this for now
+        # input = keras.Input(shape=(input_size,))
+        # x1 = keras.layers.Dense(8, activation='tanh')(input)
+        # x2 = keras.layers.Dense(8, activation='tanh')(x1)
+        # out = keras.layers.Dense(1, activation='sigmoid')(x2)
+        # self.graph_net = out
+
+        self.model = keras.models.Sequential()
+        self.model.add(keras.Input(shape=( (  input_size,)) ))    # One input for each term
+        self.model.add(keras.layers.Dense(8, activation='tanh'))
+        self.model.add(keras.layers.Dense(8, activation='tanh'))
+        self.model.add(keras.layers.Dense(1, activation='sigmoid'))
+        self.model.compile(loss='mse', optimizer='adam', metrics=['accuracy', 'mse'])
+
+        self.optimizer = Adam(learning_rate=0.00025, clipnorm=1.0)
+        self.loss_fn = keras.losses.Huber()
+        self.acc_fn = BinaryAccuracy()
+
+    
+    def flatten_input(self, X):
+        """
+        Inputs come in as pairs X[0], X[1] representing the graph and node features, respectively.
+        X[0] is (2*max_nodes)x(2*max_nodes)
+        X[1] is ((2*max_nodes)x(num_features)
+
+        """
+        return np.hstack([X[0], X[1]]).flatten()
+    
+    def fit(self, X, y, batch_size, verbose=True, callbacks=[]):
+        X = np.array([self.flatten_input(Xi) for Xi in X])   # TODO:  Make this more efficient
+        y = np.array(y)
+        num_epochs = len(X) // batch_size
+        if len(X) % batch_size != 0:
+            num_epochs += 1    # Extra batch for remainder
+        for i in range(num_epochs):
+            Xbatch = X[i*batch_size:(i+1)*batch_size]
+            ybatch = y[i*batch_size:(i+1)*batch_size]
+            #loss, acc, tacc = self.model.fit(Xbatch, ybatch)
+            H = self.model.fit(Xbatch, ybatch, callbacks=callbacks)
+        return H
+
+    def predict(self, X):
+        X = np.array([self.flatten_input(Xi) for Xi in X])
+        preds = self.model.predict(X)
+        return preds
+    
+    def save(self, id_str):
+        self.model.save("rl_model_{}".format(id_str))
+
+    def load(self, id_str):
+        self.model.load_model("rl_model_{}".format(id_str))
+
 
 class res_prebuffer:
-    def __init__(self, subjects, words, use_tf=False, debug=True, use_gnn=False, gnn_nodes = 2000):
+    def __init__(self, subjects, words, use_tf=False, debug=True, use_gnn=False, gnn_nodes = 2000, bow_algorithm='bow1'):
         self.use_tf = use_tf
-        self.model = forward_model(use_tf, subjects) if not use_gnn else gnn_model()
-        self.model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy', 'binary_crossentropy'])
 
         self.subjects = subjects
         self.words = words
@@ -125,10 +190,16 @@ class res_prebuffer:
         self.subjects_dict = {}
         for idx, subj in enumerate(self.subjects):
             self.subjects_dict[subj] = idx+1
+        if bow_algorithm == 'bow2':
+            self.subjects_dict["numerical0"] = self.num_subjects+1
+            self.subjects_dict["numerical1"] = self.num_subjects+2
+            self.subjects_dict["numerical2"] = self.num_subjects+3
+
+
         self.words_dict = {}
         for idx, word in enumerate(self.words):
             self.words_dict[word] = idx+1
-        self.batch_size = 16
+        self.batch_size = 32
         self.debug=debug
         if self.debug:
             self.saved_prbs = []
@@ -141,14 +212,15 @@ class res_prebuffer:
         print("Subjects dictionary:", self.subjects_dict)
 
         self.use_gnn = use_gnn
-        self.vectorize_alg = 'gnn1' if use_gnn else 'bow1'
+        self.max_gnn_nodes = gnn_nodes
+        self.vectorize_alg = 'gnn1' if use_gnn else bow_algorithm
         if use_gnn:
             #self.graph_buffer = potential_inference_data()
             self.graph_buffer = None
-            self.max_gnn_nodes = gnn_nodes
             self.graph_rep = graph_representation(self.subjects_dict, self.max_gnn_nodes)
-    
 
+        self.model = forward_model(use_tf, len(self.subjects_dict)+1) if not use_gnn else gnn_model_zero(self.max_gnn_nodes,self.graph_rep.feature_len)
+    
 
 
 
@@ -182,12 +254,14 @@ class res_prebuffer:
     def vectorize(self, inputs):
         if self.vectorize_alg == 'bow1':
             return vectorize_bow1(inputs, self.subjects_dict)
+        elif self.vectorize_alg == 'bow2':
+            return vectorize_bow2(inputs, self.subjects_dict)
         elif self.vectorize_alg == 'gnn1':
             res = []
             for inp0, inp1 in inputs:
                 #print(inp0, inp1)
                 res.append(self.graph_rep.inputs_to_graphs(inp0, inp1))
-            print('done')
+            #print('done')
             #test = np.array(res)
             return res
             #  after debugging use this
@@ -258,7 +332,7 @@ class res_prebuffer:
             #print("Total samples: {} \t Xbuf_len: {}  \t ybuf_len: {}\t\t\t pos: {} \t neg: {}\n".format(total_samples, len(self.Xbuffer), len(self.ybuffer), total_pos, total_samples - total_pos))
             x, y = self.Xbuffer.pop(), self.ybuffer.pop()
             if self.debug:
-               self.saved_prbs.pop(), self.saved_inputs.pop()
+                dbg_prb, dbg_input = self.saved_prbs.pop(), self.saved_inputs.pop()
             total_neg = total_samples - total_pos
             needed_pos = num_pos - total_pos
             needed_neg  = num_neg - total_neg
@@ -279,6 +353,12 @@ class res_prebuffer:
                     yres.append(y)
                     total_samples += 1
                     total_pos += 1
+                if self.debug:
+                    pass
+                    #print("Positive sample: \t {} -- {}\n".format(dbg_prb[0], dbg_prb[1]))
+
+        if self.debug:
+            print("-"*80)
         if self.use_gnn:
             return Xres, yres
         else:
@@ -303,6 +383,23 @@ class res_prebuffer:
         else:
             # TODO:  make sure this continues training rather than reinitializing
             return self.model.fit(X, y, batch_size=self.batch_size, verbose=True)
+
+    def test_buffered_batch(self, sample_ratio=0.5):
+        X, y0 = self.get_training_batch(self.batch_size, int(self.batch_size*sample_ratio))
+        if self.use_tf:
+            y = tf.reshape(y0, (-1, 1))
+        else:
+            y = y0
+
+        preds = self.get_priorities(X, True)
+        preds_01 = np.array([ 0.0 if p < 0.5 else 1 for p in preds])
+        #accuracy = np.count_nonzero(preds_01 != y) / len(preds)
+        accuracy = self.model.acc_fn(y, preds)
+        tacc = (1 - abs(preds_01 - y)).mean()
+        loss = np.square(preds - y).mean()
+        return history_struct({'accuracy': [accuracy],
+                               'loss': [loss],
+                               'tacc':  [tacc]})
 
     #@tf.function
     def train_batch(self, inputs, prb_strings):
@@ -342,9 +439,9 @@ class res_prebuffer:
             else:
                 self.model.fit(X, y, batch_size=self.batch_size)
 
-    def get_priorities(self, inputs):
-        X = self.vectorize(inputs)
-        if self.use_gnn:
+    def get_priorities(self, inputs, already_vectorized=False):
+        X = inputs if already_vectorized else self.vectorize(inputs)
+        if self.use_gnn and False:   # TODO:  remove False; check for gnn_zero
             #Xgraph = [ Graph(x,a) for a,x in X]
             # Want inputs to be a pair X, A where
             # X is (num_batches, num_nodes, num_features) and
@@ -373,16 +470,17 @@ class res_prebuffer:
                 preds.append(batch_preds.numpy())
             result = np.concatenate(preds).reshape(-1)
             return result
-
         else:
             preds = self.model.predict(X)
         return preds
 
     def model_save(self, id_str, numeric_bits):
         pkl_file = open("rl_model_{}.pkl".format(id_str), "wb")
-        pickle.dump((self.subjects, self.words, self.num_subjects, self.num_words, self.subjects_dict, self.words_dict, self.batch_size, self.use_tf, numeric_bits, self.use_gnn, self.max_gnn_nodes), pkl_file)
-        if self.use_gnn:
+        pickle.dump((self.subjects, self.words, self.num_subjects, self.num_words, self.subjects_dict, self.words_dict, self.batch_size, self.use_tf, numeric_bits, self.use_gnn, self.max_gnn_nodes, self.vectorize_alg), pkl_file)
+        if self.use_gnn and False:
             self.model.graph_net.save("rl_model_{}".format(id_str))
+            print("GNN trainable weights:")
+            print(self.model.graph_net.trainable_weights)
         else:
             self.model.save("rl_model_{}".format(id_str))
 
@@ -392,8 +490,9 @@ class res_prebuffer:
             # raise NotImplementedError
             # TODO:  test the following code
             pkl_file = open("rl_model_{}.pkl".format(id_str), "rb")
-            (self.subjects, self.words, self.num_subjects, self.num_words, self.subjects_dict, self.words_dict, self.batch_size, self.use_tf, numeric_bits, self.use_gnn, self.max_gnn_nodes) = pickle.load(pkl_file)
-            self.model.graph_net = keras.models.load_model("rl_model_{}".format(id_str))
+            (self.subjects, self.words, self.num_subjects, self.num_words, self.subjects_dict, self.words_dict, self.batch_size, self.use_tf, numeric_bits, self.use_gnn, self.max_gnn_nodes,self.vectorize_alg ) = pickle.load(pkl_file)
+            #self.model.graph_net = keras.models.load_model("rl_model_{}".format(id_str))   #TODO:  Handle both types of gnn
+            self.model.load(id_str)
         else:
             self.model = keras.models.load_model("rl_model_{}".format(id_str))
 
@@ -404,8 +503,8 @@ class res_prebuffer:
 
 def rpf_load(id_str, debug=False):
     pkl_file = open("rl_model_{}.pkl".format(id_str), "rb")
-    subjects, words, num_subjects, num_words, subjects_dict, words_dict, batch_size, use_tf, num_bits, use_gnn, gnn_nodes = pickle.load(pkl_file)
-    rpf = res_prebuffer(subjects, words, use_tf, debug, use_gnn, gnn_nodes)
+    subjects, words, num_subjects, num_words, subjects_dict, words_dict, batch_size, use_tf, num_bits, use_gnn, gnn_nodes, vectorize_alg = pickle.load(pkl_file)
+    rpf = res_prebuffer(subjects, words, use_tf, debug, use_gnn, gnn_nodes, vectorize_alg)
     rpf.num_subjects = num_subjects
     rpf.num_words = num_words
     rpf.subjects_dict = subjects_dict

@@ -13,6 +13,7 @@ import subprocess
 import seaborn as sb
 import math
 import pandas as pd
+import argparse
 
 
 """ 
@@ -190,30 +191,31 @@ def train_models():
 #analyze("test2_results.pkl")
 
 
-def test_subprocess(condition, prb_threshold):
-    exp_steps = 50
+def test_subprocess(condition, prb_threshold, exp_steps, reasoning_steps,    model_name = "january_preglut50-6"):
+    #exp_steps = 50
     #reasoning_steps = 3000
-    reasoning_steps = 500
+    #reasoning_steps = 500
     num_bits = 6
-    model_name = "january_preglut50-6"
+
 
     if condition:
-        cmd = subprocess.run("python ./test1.py {} {} {} 0 0 {} {} --retrain {}".format(condition, exp_steps, reasoning_steps, num_bits, prb_threshold, model_name), shell=True, stdout=subprocess.PIPE)
-        #cmd = subprocess.run(
-        #    "python ./test3.py  {} {} {} 0 0  --prb_threshold {} --use_network --reload {}".format(exp_steps, reasoning_steps,  prb_threshold, model_name), shell=True,
-        #    stdout=subprocess.PIPE)
+        #cmd = subprocess.run("python ./test1.py  {} {} {} 0 0 {} {} --retrain {}".format(condition, exp_steps, reasoning_steps, num_bits, prb_threshold, model_name), shell=True, stdout=subprocess.PIPE)
+        print("Running python ./test3.py --prb_threshold {} --heap_print_size 1000 --use_network --gnn --reload {} {} {} {} ".format(prb_threshold, model_name, exp_steps, reasoning_steps,  reasoning_steps))
+        cmd = subprocess.run(
+           "python ./test3.py --prb_threshold {} --heap_print_size 1000 --use_network --gnn --reload {} {} {} {} ".format(prb_threshold, model_name, exp_steps, reasoning_steps,  reasoning_steps), shell=True,
+           stdout=subprocess.PIPE)
     else:
-        cmd = subprocess.run("python ./test1.py {} {} {} 0 0 {} {} --retrain {}".format(condition, exp_steps, reasoning_steps, num_bits, prb_threshold, model_name), shell=True, stdout=subprocess.PIPE)
-        #cmd = subprocess.run(
-        #    "python ./test3.py {} {} {} 0 0 {} {} --reload {}".format(exp_steps, reasoning_steps, reasoning_steps, num_bits,
-        #    prb_threshold, model_name), shell=True,
-        #    stdout=subprocess.PIPE)
+        #cmd = subprocess.run("python ./test1.py {} {} {} 0 0 {} {} --retrain {}".format(condition, exp_steps, reasoning_steps, num_bits, prb_threshold, model_name), shell=True, stdout=subprocess.PIPE)
+        print("Running python ./test3.py --prb_threshold {}  {} {} {} ".format(prb_threshold, exp_steps, reasoning_steps, reasoning_steps))
+        cmd = subprocess.run(
+           "python ./test3.py --prb_threshold {} --heap_print_size 1000 {} {} {} ".format(prb_threshold, exp_steps, reasoning_steps, reasoning_steps), shell=True,
+           stdout=subprocess.PIPE)
     print("cmd=", cmd)
 
     stdout = cmd.stdout.decode('UTF-8')
 
-    heap_sizes = np.zeros(3000) - 1
-    dbb_vals = np.zeros(3000) - 1
+    heap_sizes = np.zeros(reasoning_steps) - 1
+    dbb_vals = np.zeros(reasoning_steps) - 1
     for outline in stdout.split('\n'):
         if str("Final result is ") in str(outline):
             tr_str = str(outline[16:])
@@ -223,7 +225,7 @@ def test_subprocess(condition, prb_threshold):
             i, s = outline.split(':')
             i = int(i.split(' ')[-1])
             s = int(s)
-            print("Found {}; processed as s={}, i={}".format(outline, s, i))
+            #print("Found {}; processed as s={}, i={}".format(outline, s, i))
             heap_sizes[i] = s
         if str("DBB") in str(outline):
             i, s = outline.split(':')
@@ -237,30 +239,30 @@ def test_subprocess(condition, prb_threshold):
 
      
 
-def collect_data():
-    _, _, heap_sizes, dbb_vals = test_subprocess(False, 1.0)
-    file1 = open('jpg_data_False_1.0.pkl', 'wb')
+def collect_data(exp_steps, reasoning_steps, model_name):
+    _, _, heap_sizes, dbb_vals = test_subprocess(False, 1.0, exp_steps, reasoning_steps, model_name)
+    file1 = open('{}_data_False_1.0.pkl'.format(model_name), 'wb')
     pickle.dump( (heap_sizes, dbb_vals), file1)
 
-    _, _, heap_sizes, dbb_vals = test_subprocess(True, 1.0)
-    file2 = open('jpg_data_True_1.0.pkl', 'wb')
+    _, _, heap_sizes, dbb_vals = test_subprocess(True, 1.0, exp_steps, reasoning_steps, model_name)
+    file2 = open('{}_data_True_1.0.pkl'.format(model_name), 'wb')
     pickle.dump( (heap_sizes, dbb_vals), file2)
 
-    _, _, heap_sizes, dbb_vals = test_subprocess(False, 0.25)
-    file3 = open('jpg_data_False_0.25.pkl', 'wb')
+    _, _, heap_sizes, dbb_vals = test_subprocess(False, 0.25, exp_steps, reasoning_steps, model_name)
+    file3 = open('{}_data_False_0.25.pkl'.format(model_name), 'wb')
     pickle.dump( (heap_sizes, dbb_vals), file3)
 
-    _, _, heap_sizes, dbb_vals = test_subprocess(True, 0.25)
-    file4 = open('jpg_data_True_0.25.pkl', 'wb')
+    _, _, heap_sizes, dbb_vals = test_subprocess(True, 0.25, exp_steps, reasoning_steps, model_name)
+    file4 = open('{}_data_True_0.25.pkl'.format(model_name), 'wb')
     pickle.dump( (heap_sizes, dbb_vals), file4)
 
-def produce_graphs():
+def produce_graphs(model_name):
     df = {}
     for condition in [False, True]:
         for threshold in [1.0, 0.25]:
             plt.clf()
             f, ax = plt.subplots(1,1)
-            fname = "jpg_data_{}_{}.pkl".format(condition, threshold)
+            fname = "{}_data_{}_{}.pkl".format(model_name, condition, threshold)
             print("Using fname {}".format(fname))
             H, D = pickle.load(open(fname, "rb"))
             plt.xlabel("Reasoning steps")
@@ -272,7 +274,7 @@ def produce_graphs():
             ax.plot(list(range(len(H))), H, color='red')
             #sb.distplot(list(range(len(H))), H, color='red')
             ax.legend()
-            plt.savefig("hw_img_h_{}_{}.png".format(condition, threshold), bbox_inches='tight')
+            plt.savefig("{}_img_h_{}_{}.png".format(model_name, condition, threshold), bbox_inches='tight')
 
 
             plt.clf()
@@ -283,8 +285,7 @@ def produce_graphs():
             ax.set_ylim(top=100)
             ax.plot(D)
             ax.legend()
-            plt.savefig("jpg_img_d_{}_{}.png".format(condition, threshold), bbox_inches='tight')
-
+            plt.savefig("{}_img_d_{}_{}.png".format(model_name, condition, threshold), bbox_inches='tight')
 
             plt.clf()
             f, ax = plt.subplots(1,1)
@@ -300,11 +301,20 @@ def produce_graphs():
                 
             plt.title("Potential and Actualized Inferences over Time" + subtitle)
             ax.legend()
-            plt.savefig("jpg_img_agg_{}_{}.png".format(condition, threshold), bbox_inches='tight')
-            
-collect_data()
-produce_graphs()            
+            plt.savefig("{}_img_agg_{}_{}.png".format(model_name, condition, threshold), bbox_inches='tight')
 
+def main():
+    exp_steps = 50
+    reasoning_steps = 5000
+    #model_name = "jpglut19ckpt1900"
+    parser = argparse.ArgumentParser(description="Process model <model_name>")
+    parser.add_argument("model_name")
+    args = parser.parse_args()
+    print("Using model_name", args.model_name)
+    collect_data(exp_steps, reasoning_steps, args.model_name)
+    produce_graphs(args.model_name)            
+
+main()    
 #  Idea:  No heat map.
 #  1.  Using a 1.0 threshold, look at heap size over time; also measure number of conclusions drawn after n steps
 #  1.  Using a 0.2 threshold, look at heap size over time; also measure number of conclusions drawn after n steps

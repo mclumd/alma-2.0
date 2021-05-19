@@ -46,7 +46,7 @@ def explosion(size=1000):
     print("="*80)
     return r
 
-def train(explosion_steps=50, num_steps=500, numeric_bits=10, model_name="test1", axiom_file="test1_kb.pl", num_rounds=100):
+def train(explosion_steps=50, num_steps=500, numeric_bits=10, model_name="test1", axiom_file="test1_kb.pl", num_rounds=250):
     global alma_inst,res
     subjects = []
     for place in range(3):

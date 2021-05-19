@@ -1548,6 +1548,7 @@ void process_var_num_res_tasks(kb *collection, res_task_heap *tasks, tommy_array
   while (peek_task->priority == 0) {
     peek_task = res_task_heap_pop(tasks);
     process_one_res_task(collection, tasks, new_arr, bs, *peek_task, buf);
+    // TODO:  try freeing this task now that it's been processed.
     if (tasks->count <= 0) return;
     peek_task = res_task_heap_item(tasks, 0);
   }
@@ -1560,6 +1561,7 @@ void process_var_num_res_tasks(kb *collection, res_task_heap *tasks, tommy_array
       res_task_pri c;
       c = *res_task_heap_pop(tasks);
       process_one_res_task(collection, tasks, new_arr, bs, c, buf);
+      // TODO:  try freeing this task now that it's been processed.
   }
 }
 

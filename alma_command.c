@@ -420,18 +420,23 @@ void kb_halt(kb *collection) {
      tommy_list pre_res_task_buffer;
    */
   res_task_heap_destroy(&collection->res_tasks);
+
+  //tommy_list_foreach(&(collection->pre_res_task_buffer), free);
+
+
   tommy_node *curr_pt;
   tommy_node *tmp_pt;
   struct pre_res_task *PT;
   curr_pt = tommy_list_head(&(collection->pre_res_task_buffer));
   while(curr_pt) {
     PT = (struct pre_res_task *) curr_pt->data;
+    free(PT->t);
     free(PT);
     tmp_pt = curr_pt->next;
-    free(curr_pt);
+    //free(curr_pt);
     curr_pt = tmp_pt;
   }
-      
+
 
   
   tommy_hashlin_foreach(&collection->fif_tasks, free_fif_task_mapping);

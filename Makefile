@@ -1,12 +1,11 @@
 CC = gcc
 #CFLAGS = -std=c11 -pedantic-errors -Wall -Werror -Wshadow -Wpedantic -g
 CFLAGS = -std=gnu11 -pedantic-errors -Wall -Wshadow -Wpedantic -g -mno-avx2 -mtune=generic -mno-avx2 -fPIC -O0
-
 TOMMY = tommyds/tommyds/
 
 all: alma.x shared static python
 
-alma.x: alma.o tommyarray.o tommyhashlin.o tommyhash.o tommylist.o mpc.o alma_parser.o alma_formula.o alma_kb.o alma_unify.o alma_command.o alma_print.o alma_proc.o alma_fif.o alma_backsearch.o res_task_heap.o alma_term_search.o compute_priority.o
+alma.x: res_task_heap.c alma.o tommyarray.o tommyhashlin.o tommyhash.o tommylist.o mpc.o alma_parser.o alma_formula.o alma_kb.o alma_unify.o alma_command.o alma_print.o alma_proc.o alma_fif.o alma_backsearch.o res_task_heap.o alma_term_search.o compute_priority.o
 	$(CC) alma.o tommyarray.o tommyhashlin.o tommyhash.o tommylist.o mpc.o alma_parser.o alma_formula.o alma_kb.o alma_unify.o alma_command.o alma_print.o alma_proc.o alma_fif.o alma_backsearch.o res_task_heap.o alma_term_search.o compute_priority.o -o alma.x
 
 alma.o: alma.c alma_command.h alma_kb.h alma_print.h
