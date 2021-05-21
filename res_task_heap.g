@@ -348,7 +348,6 @@ STATIC int NAME(_clausal_delete)(struct heap_name *heap, clause *c) {
 }
 
 STATIC void NAME(_destroy)(struct heap_name *heap) {
- void res_task_heap_destroy(struct res_task_heap *heap) {
         res_task_pri *current_item;
    res_task *current_res_task;
    //for (int i = 0; i < heap->count; i++) {
