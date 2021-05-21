@@ -425,7 +425,7 @@ void kb_halt(kb *collection) {
   res_task_heap_destroy(&collection->res_tasks);
 
   //tommy_list_foreach(&(collection->pre_res_task_buffer), free);
-  fprintf(stderr, "Destroyed res_task_heap.");
+  //fprintf(stderr, "Destroyed res_task_heap.");
 
   tommy_node *curr_pt;
   tommy_node *tmp_pt;
@@ -434,7 +434,7 @@ void kb_halt(kb *collection) {
   while(curr_pt) {
 
     PT = (struct pre_res_task *) curr_pt->data;
-    fprintf(stderr, "Freeing item from pre_res_task buffer\n.");
+    //fprintf(stderr, "Freeing item from pre_res_task buffer\n.");
     //free_clause(PT->t->x);
     //free_clause(PT->t->y);
     //free(PT->t->pos);
@@ -446,7 +446,7 @@ void kb_halt(kb *collection) {
     curr_pt = tmp_pt;
   }
 
-  fprintf(stderr, "Freed pre_res_task buffer\n.");
+  //fprintf(stderr, "Freed pre_res_task buffer\n.");
   
   tommy_hashlin_foreach(&collection->fif_tasks, free_fif_task_mapping);
   tommy_hashlin_done(&collection->fif_tasks);

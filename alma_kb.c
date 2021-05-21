@@ -699,7 +699,7 @@ static void remove_res_tasks(kb *collection, clause *c) {
   dummy_task.res_task = malloc(sizeof(res_task));
   dummy_task.res_task->x = c;
 
-  fprintf(stderr, "Called remove_res_tasks.\nNote that this code may cause a memory leak\n");
+  //fprintf(stderr, "Called remove_res_tasks.\nNote that this code may cause a memory leak\n");
   while ( res_task_heap_delete(&collection->res_tasks, &dummy_task) ) res_task_heap_delete(&collection->res_tasks, &dummy_task);
   free(dummy_task.res_task);
 }
@@ -885,7 +885,7 @@ void remove_clause(kb *collection, clause *c, kb_str *buf) {
   //Remove any resolutions that involve c
 
   res_task_heap_clausal_delete( &(collection->res_tasks), c);
-  fprintf(stderr, "free removeClause");
+  //fprintf(stderr, "free removeClause");
   free_clause(c);
 }
 
@@ -1061,8 +1061,8 @@ int delete_formula(kb *collection, char *string, int print, kb_str *buf) {
 	while(curr_pt) {
 	  PT = (struct pre_res_task *) curr_pt->data;
 	  if ( 0 && (PT != NULL) && ((PT->t->x == c) || (PT->t->y == c)) ) { // TODO: re-enable; disabled as hack
-	    fprintf(stderr, "Emergency resolution of clause being deleted.\n");
-	    fprintf(stderr, "Printing clause:\n");
+	    //fprintf(stderr, "Emergency resolution of clause being deleted.\n");
+	    //fprintf(stderr, "Printing clause:\n");
 	    clause_print(collection, c, NULL);
 	    // Resolve PT
 	    res_task_pri rt;
@@ -1083,7 +1083,7 @@ int delete_formula(kb *collection, char *string, int print, kb_str *buf) {
         clause_print(collection, curr, buf);
         tee_alt(" not found\n", collection, buf);
       }
-      fprintf(stderr, "free deleteFmla");
+      //fprintf(stderr, "free deleteFmla");
       free_clause(curr);
     }
     tommy_array_done(&clauses);
@@ -1874,7 +1874,7 @@ void pre_res_buffer_to_heap(kb *collection, int single) {
     }
     next = i->next;
     tommy_list_remove_existing(&collection->pre_res_task_buffer, i);
-    fprintf(stderr, "free preres_buffer2heap ");
+    //fprintf(stderr, "free preres_buffer2heap ");
     free(data);
     i = single ? NULL : next; // Hacky -- set i to NULL if we only want to process at most one.
   }
