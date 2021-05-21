@@ -102,8 +102,10 @@ GUARD2
 # define INCLUDE0 #include <stdlib.h>
 # define INCLUDE1 #include STRING(HEADER_NAME)
 # define INCLUDE2 #include "tommy.h"
+# define INCLUDE3 #include "alma_kb.h"
 INCLUDE0
 INCLUDE1
+INCLUDE3
 #else
 # include <stdlib.h>
 #endif
@@ -343,14 +345,25 @@ STATIC int NAME(_clausal_delete)(struct heap_name *heap, clause *c) {
 }
 
 STATIC void NAME(_destroy)(struct heap_name *heap) {
+ void res_task_heap_destroy(struct res_task_heap *heap) {
+   res_task_pri *current_item;
+   res_task *current_res_task;
    for (int i = 0; i < heap->count; i++) {
-     free(res_task_heap_item(heap, i));
+     current_item = res_task_heap_item(heap, i);
+     current_res_task = current_item->res_task;
+     free_clause(current_res_task->x);
+     free_clause(current_res_task->y);
+     // Not explicitly free pos and neg; guess they're part of x and y and
+     // thus handled above.
+     free(current_res_task);
+     free(current_item);
    }
-   
+   tommy_array_done(&heap->data);
+   /*   TODO:  Why do we need the condititional?
    if (heap->count > 0) {
      tommy_array_done(&heap->data);
-   }
-}
+     } */
+ }
 #endif /* !defined(HEADER) */
 
 #undef STATIC

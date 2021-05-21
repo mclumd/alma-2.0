@@ -2,12 +2,14 @@ import alma
 import glut_control.alma_utils as alma_utils
 import numpy as np
 import time
+import sys
 
-kb = '/mnt/hdfs/home/justin/alma-2.0/glut_control/qlearning3.pl'
+kb = 'glut_control/qlearning3.pl'
 
 
 for i in range(3):
     alma_inst,res = alma.init(1,kb, '0', 1, 1000, [], [])
+    #for _ in range(30):
     for _ in range(30):
         prebuf = alma.prebuf(alma_inst)
         full_actions = prebuf[0]
@@ -23,7 +25,11 @@ for i in range(3):
         alma_utils.kb_print(alma_inst)
 
     alma.halt(alma_inst)
-
+    del alma_inst
+    del res
+    del alma
+    del sys.modules["alma"]
     print("Waiting for next round...")
-    time.sleep(60)
+    time.sleep(30)
+    import alma
 print("Done.")

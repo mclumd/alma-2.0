@@ -68,7 +68,7 @@ void kb_init(kb **collection, char *file, char *agent, int verbose, int differen
   collec->calc_priority = differential_priorities ? (compute_priority) : (base_priority);
   collec->tracking_resolutions = rip.tracking_resolutions;
   collec->subject_list = malloc(sizeof(tommy_array));
-  collec->prb_threshold = -1;
+  collec->prb_threshold = 2;
 
   collec->size = 0;
   collec->time = 1;
@@ -390,6 +390,9 @@ void kb_halt(kb *collection) {
     free_clause(tommy_array_get(&collection->new_clauses, i));
   tommy_array_done(&collection->new_clauses);
 
+  tommy_array_done(collection->subject_list);
+  //free(collection->subject_list);
+
   tommy_node *curr = tommy_list_head(&collection->clauses);
   while (curr) {
     index_mapping *data = curr->data;
@@ -422,22 +425,28 @@ void kb_halt(kb *collection) {
   res_task_heap_destroy(&collection->res_tasks);
 
   //tommy_list_foreach(&(collection->pre_res_task_buffer), free);
-
+  fprintf(stderr, "Destroyed res_task_heap.");
 
   tommy_node *curr_pt;
   tommy_node *tmp_pt;
   struct pre_res_task *PT;
   curr_pt = tommy_list_head(&(collection->pre_res_task_buffer));
   while(curr_pt) {
+
     PT = (struct pre_res_task *) curr_pt->data;
-    free(PT->t);
+    fprintf(stderr, "Freeing item from pre_res_task buffer\n.");
+    //free_clause(PT->t->x);
+    //free_clause(PT->t->y);
+    //free(PT->t->pos);
+    //free(PT->t->neg);
+    free(PT->t);     // PT->t is a res_task
     free(PT);
     tmp_pt = curr_pt->next;
     //free(curr_pt);
     curr_pt = tmp_pt;
   }
 
-
+  fprintf(stderr, "Freed pre_res_task buffer\n.");
   
   tommy_hashlin_foreach(&collection->fif_tasks, free_fif_task_mapping);
   tommy_hashlin_done(&collection->fif_tasks);

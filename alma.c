@@ -201,7 +201,9 @@ int main(int argc, char **argv) {
 	char *pos;
 	if (strcmp(line, "step") == 0) {
 	  tee_alt("ALMA %d step:\n",alma_kb, NULL, counter);
+	  pre_res_buffer_to_heap(alma_kb, 0);
 	  kb_step(alma_kb, 0, NULL);
+	  //pre_res_buffer_to_heap(alma_kb, 0);
 	} else if (strcmp(line, "astep") == 0) {
 	  tee_alt("ALMA %d step:\n",alma_kb, NULL, counter);
 	  kb_step(alma_kb, 1, NULL);
