@@ -13,10 +13,9 @@ import alma, alma_utils
 import argparse
 import rl_utils, rl_dataset
 #import resolution_prebuffer as rpb
-from rpb_dqn import rpb_dqn, get_rewards_test1, get_rewards_test3
+from rpb_dqn import rpb_dqn, get_rewards_test1, get_rewards_test3, get_bookshelf_rewards
 import time
 #import tracemalloc
-from memory_profiler import profile
 
 test_params = {
     'explosion_size': 1000,
@@ -30,7 +29,7 @@ def res_task_lits(lit_str):
     return [ x.split('\t') for x in L]
 
 #@profile
-def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000, train_interval=500, update_target_network_interval=10000, debug_level=0, gnn_nodes = 20, exhaustive_training=False, kb='/home/justin/alma-2.0/glut_control/qlearning2.pl', subjects = ['a', 'f', 'g', 'l'], prior_network = None):
+def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000, train_interval=500, update_target_network_interval=10000, debug_level=0, gnn_nodes = 20, exhaustive_training=False, kb='/home/justin/alma-2.0/glut_control/qlearning2.pl', subjects = ['a', 'f', 'g', 'l'], prior_network = None, max_reward=10000):
     """
     Train Q-network on the initial qlearning task.   
 
@@ -57,9 +56,11 @@ def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000,
     #network = rpb_dqn(num_steps *2, subjects, [], use_gnn=use_gnn, gnn_nodes=gnn_nodes)
     if "qlearning3.pl" in kb:
         reward_fn = get_rewards_test3
+    elif "bookshelf1.pl" in kb:
+        reward_fn = get_bookshelf_rewards
     else:
         reward_fn = get_rewards_test1
-    network = rpb_dqn(10000, reward_fn, subjects, [], use_gnn=use_gnn, gnn_nodes=gnn_nodes) if prior_network is None else prior_network    # Use max_reward of 10K
+    network = rpb_dqn(max_reward, reward_fn, subjects, [], use_gnn=use_gnn, gnn_nodes=gnn_nodes) if prior_network is None else prior_network    # Use max_reward of 10K
     replay_buffer = rl_dataset.experience_replay_buffer()
     start_time = time.time()
     for episode in range(network.starting_episode, network.starting_episode + num_episodes):
@@ -133,9 +134,28 @@ def main():
         os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
     import resolution_prebuffer as rpb 
 
-
+    max_reward = 10000
     if args.kb == 'qlearning3.pl':
         subjects = ['a', 'loc', 'up', 'down', 'left', 'right']
+    elif "bookshelf1.pl" in args.kb:
+        subjects = [ 'isA',
+                     'bookshelf',
+                     'contains',
+                     'book',
+                     'sequel',
+                     'prequel',
+                     'thisShelf',
+                     'furniture',
+                     'table',
+                     'legs',
+                     'affords',
+                     'sitting',
+                     'placing',
+                     'desire',
+                     'find',
+                     'myNovel',
+                     'lookFor']
+        max_reward = 1
     else:
             subjects = ['a', 'f', 'g', 'l']
 
@@ -143,7 +163,7 @@ def main():
     if args.reload != "NONE":
         model_name = args.reload
         #network = rpb_dqn(args.episode_length * 2, ['a', 'f', 'g'], [], use_gnn=args.gnn) #TODO: Should be able to read most of this from pkl file.
-        network = rpb_dqn(10000, subjects, [], use_gnn=args.gnn) #TODO: Should be able to read most of this from pkl file.
+        network = rpb_dqn(0, subjects, [], use_gnn=args.gnn) #TODO: Check that, e.g. max_reward reloads correctly from pkl file.
         if "qlearning3.pl" in args.kb:
             network.reward_fn = get_rewards_test3
         else:
@@ -155,9 +175,9 @@ def main():
         print('Training; model name is ', args.train)
         model_name = args.train
         if network is None:
-            network = train(args.episode_length, args.train, True, args.num_episodes, train_interval=args.train_interval, update_target_network_interval=args.target_update_interval, gnn_nodes = args.gnn_nodes, exhaustive_training=args.exhaustive, kb=args.kb, subjects=subjects)
+            network = train(args.episode_length, args.train, True, args.num_episodes, train_interval=args.train_interval, update_target_network_interval=args.target_update_interval, gnn_nodes = args.gnn_nodes, exhaustive_training=args.exhaustive, kb=args.kb, subjects=subjects, max_reward=max_reward)
         else:
-            network = train(args.episode_length, args.train, True, args.num_episodes, train_interval=args.train_interval, update_target_network_interval=args.target_update_interval, gnn_nodes = args.gnn_nodes, exhaustive_training=args.exhaustive, kb=args.kb, subjects=subjects, prior_network=network)
+            network = train(args.episode_length, args.train, True, args.num_episodes, train_interval=args.train_interval, update_target_network_interval=args.target_update_interval, gnn_nodes = args.gnn_nodes, exhaustive_training=args.exhaustive, kb=args.kb, subjects=subjects, prior_network=network, max_reward=max_reward)
         use_net = True
     
     if args.random_network:
