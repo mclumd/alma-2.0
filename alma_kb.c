@@ -1395,6 +1395,17 @@ static int derivations_distrusted(clause *c) {
   return 1;
 }
 
+// Commonly used for special clauses like true, distrust, contra, etc.
+static void init_single_parent(clause *child, clause *parent) {
+  if (parent != NULL) {
+    child->parent_set_count = 1;
+    child->parents = malloc(sizeof(*child->parents));
+    child->parents[0].count = 1;
+    child->parents[0].clauses = malloc(sizeof(*child->parents[0].clauses));
+    child->parents[0].clauses[0] = parent;
+  }
+}
+
 // Creates a meta-formula literal with binary arguments of quotation term for c and the time
 static clause* make_meta_literal(kb *collection, char *predname, clause *c, long time) {
   clause *res = malloc(sizeof(*res));
@@ -1409,6 +1420,7 @@ static clause* make_meta_literal(kb *collection, char *predname, clause *c, long
   quote_from_clause(res->pos_lits[0]->terms+0, c);
   func_from_long(res->pos_lits[0]->terms+1, collection->time);
   res->neg_lits = NULL;
+  res->parent_set_count = 0;
   res->children_count = 0;
   res->parents = NULL;
   res->children = NULL;
@@ -1427,21 +1439,13 @@ static void distrust_recursive(kb *collection, clause *c, clause *contra, kb_str
 
   // Assert atomic distrusted() formula
   clause *d = make_meta_literal(collection, "distrusted", c, collection->time);
+  init_single_parent(d, contra);
   tommy_array_insert(&collection->new_clauses, d);
 
-  // Parent argument provided will be set for distrusted formula
-  if (contra != NULL) {
-    d->parent_set_count = 1;
-    d->parents = malloc(sizeof(*d->parents));
-    d->parents[0].count = 1;
-    d->parents[0].clauses = malloc(sizeof(*d->parents[0].clauses));
-    d->parents[0].clauses[0] = contra;
-  }
-
-  // Recursively distrust children that aren't distrusted already
+  // Recursively distrust children
   if (c->children != NULL) {
     for (int i = 0; i < c->children_count; i++) {
-      if (!c->children[i]->distrusted && derivations_distrusted(c->children[i])) {
+      if (derivations_distrusted(c->children[i])) {
         distrust_recursive(collection, c->children[i], contra, buf);
       }
     }
@@ -1608,6 +1612,7 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
               copy_clause_structure(contra, contradicting);
               contradicting->pos_lits[0]->name = realloc(contradicting->pos_lits[0]->name, strlen("contradicting")+1);
               strcpy(contradicting->pos_lits[0]->name, "contradicting");
+              init_single_parent(contradicting, contra);
               set_variable_ids(contradicting, 1, 0, NULL, collection);
               tommy_array_insert(&collection->new_clauses, contradicting);
 
@@ -1665,13 +1670,8 @@ static void handle_true(kb *collection, clause *truth, kb_str *buf) {
 
     for (int i = 0; i < tommy_array_size(&unquoted); i++) {
       clause *curr = tommy_array_get(&unquoted, i);
+      init_single_parent(curr, truth);
 
-      // Set parent as true() singleton
-      curr->parent_set_count = 1;
-      curr->parents = malloc(sizeof(*curr->parents));
-      curr->parents[0].count = 1;
-      curr->parents[0].clauses = malloc(sizeof(*curr->parents[0].clauses));
-      curr->parents[0].clauses[0] = truth;
       // Inserted same timestep
       tommy_array_insert(&collection->new_clauses, curr);
     }
@@ -1776,7 +1776,8 @@ void process_new_clauses(kb *collection, kb_str *buf) {
 
                       for (int k = 0; k < result->num_clauses; k++) {
                         clause *con = result->clauses[k];
-                        if (con->pos_count == 1 && con->neg_count == 0 && con->fif == NULL && flags_negative(con) &&
+                        if (con->pos_count == 1 && con->neg_count == 0 && con->fif == NULL &&
+                            (flags_negative(con) || flag_active_at_least(con, collection->time)) &&
                             con->pos_lits[0]->term_count == 3 && con->pos_lits[0]->terms[contra_arg].type == QUOTE) {
 
                           binding_list *contra_theta = malloc(sizeof(*contra_theta));
@@ -1786,6 +1787,7 @@ void process_new_clauses(kb *collection, kb_str *buf) {
                           if (quote_term_unify(con->pos_lits[0]->terms[contra_arg].quote, q, contra_theta)) {
                             con->handled = collection->time;
                             clause *handled = make_meta_literal(collection, "handled", con, collection->time);
+                            init_single_parent(handled, c);
                             tommy_array_insert(&collection->new_clauses, handled);
                           }
                           cleanup_bindings(contra_theta);
@@ -1829,13 +1831,7 @@ void process_new_clauses(kb *collection, kb_str *buf) {
                 if (quote_term_unify(arg1->quote, q, theta)) {
                   clause *update_clause = malloc(sizeof(*update_clause));
                   copy_clause_structure(arg2->quote->clause_quote, update_clause);
-
-                  // Parent set as update clause itself
-                  update_clause->parent_set_count = 1;
-                  update_clause->parents = malloc(sizeof(*update_clause->parents));
-                  update_clause->parents[0].count = 1;
-                  update_clause->parents[0].clauses = malloc(sizeof(*update_clause->parents[0].clauses));
-                  update_clause->parents[0].clauses[0] = c;
+                  init_single_parent(update_clause, c);
 
                   subst_clause(theta, update_clause, 0);
                   set_variable_ids(update_clause, 1, 0, NULL, collection);
