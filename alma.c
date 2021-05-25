@@ -68,7 +68,7 @@ int main(int argc, char **argv) {
 
   logs_on = (char) 1;
   python_mode = (char) 0;
-
+  
   //int index;
   rl_init_params rip;
   rip.tracking_resolutions = 0;
@@ -166,7 +166,7 @@ int main(int argc, char **argv) {
 
   kb *alma_kb;
   /* TODO:  Check this for merge issues. */
-  kb_init(&alma_kb, file, agent, verbose, differential_priorities, res_heap_size, rip, NULL, logs_on);
+  kb_init(&alma_kb, file, agent, NULL, NULL, verbose, differential_priorities, res_heap_size, rip, NULL, logs_on);
   kb_print(alma_kb,NULL);
 
   if (run) {
@@ -177,7 +177,7 @@ int main(int argc, char **argv) {
     kb_halt(alma_kb);
   } else {
     char line[LINELEN];
-    
+
     int counter = 0;
 
     while (1) {
@@ -197,7 +197,7 @@ int main(int argc, char **argv) {
 	int len = strlen(line);
 	line[len-1] = '\0';
 	tee_alt("Command '%s' received at %d.\n", alma_kb, NULL, line, counter);
-	
+
 	char *pos;
 	if (strcmp(line, "step") == 0) {
 	  tee_alt("ALMA %d step:\n",alma_kb, NULL, counter);

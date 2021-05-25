@@ -1,4 +1,6 @@
 #include "alma_parser.h"
+#include <pthread.h>
+
 
 mpc_parser_t* Alma;
 mpc_parser_t* Almacomment;
@@ -18,7 +20,14 @@ mpc_parser_t* Funcname;
 mpc_parser_t* Variable;
 mpc_parser_t* Prologconst;
 
+pthread_mutex_t count_mutex;
+int parser_ref_count = 0;
+
 void parse_init(void) {
+  pthread_mutex_lock(&count_mutex);
+  parser_ref_count++;
+  pthread_mutex_unlock(&count_mutex);
+  
   Alma = mpc_new("alma");
   Almacomment = mpc_new("almacomment");
   Almaformula = mpc_new("almaformula");
@@ -106,6 +115,12 @@ int parse_string(char *string, mpc_ast_t **ast) {
 }
 
 void parse_cleanup(void) {
-  mpc_cleanup(17, Alma, Almacomment, Almaformula, Sentence, Formula, FFormula, FFormConc, BFormula,
-    Conjform, Literal, Listofterms, Term, Predname, Constant, Funcname, Variable, Prologconst);
+  pthread_mutex_lock(&count_mutex);
+  parser_ref_count--;
+  pthread_mutex_unlock(&count_mutex);
+
+  if (parser_ref_count == 0) {
+      mpc_cleanup(17, Alma, Almacomment, Almaformula, Sentence, Formula, FFormula, FFormConc, BFormula,
+		  Conjform, Literal, Listofterms, Term, Predname, Constant, Funcname, Variable, Prologconst);
+  }
 }

@@ -57,7 +57,7 @@ extern char python_mode;
 
 // Caller will need to free collection with kb_halt
 /* TODO:  Examine for merge issues. */
-void kb_init(kb **collection, char *file, char *agent, int verbose, int differential_priorities, int res_heap_size, rl_init_params rip, kb_str *buf, int logon) {
+void kb_init(kb **collection, char *file, char *agent, char *trialnum, char *log_dir,  int verbose, int differential_priorities, int res_heap_size, rl_init_params rip, kb_str *buf, int logon) {
   // Allocate and initialize
   *collection = malloc(sizeof(**collection));
   kb *collec = *collection;
@@ -71,7 +71,7 @@ void kb_init(kb **collection, char *file, char *agent, int verbose, int differen
   collec->prb_threshold = 2;
 
   collec->size = 0;
-  collec->time = 1;
+  collec->time = 0;
   collec->prev = collec->now = NULL;
   collec->wallnow = collec->wallprev = NULL;
   collec->idling = 0;
@@ -101,7 +101,7 @@ void kb_init(kb **collection, char *file, char *agent, int verbose, int differen
         {
           collec->subject_list = rip.tracking_subjects;
           collec->num_subjects = rip.tracking_subjects->count;
-	  
+
         }
       else
         {
@@ -133,7 +133,7 @@ void kb_init(kb **collection, char *file, char *agent, int verbose, int differen
   } else {
     collec->use_pre_rtb = 0;
   }
-  
+
 
   // Given a file argument, obtain other initial clauses from
   if (file != NULL) {
@@ -201,8 +201,16 @@ void kb_init(kb **collection, char *file, char *agent, int verbose, int differen
       if (time[idx] == ' ' || time[idx] == ':')
 	time[idx] = '-';
     int agentlen = agent != NULL ? strlen(agent) : 0;
-    char *logname = malloc(4 + agentlen + 1 + timelen + 9);
-    strcpy(logname, "alma");
+    int triallen = trialnum != NULL ? strlen(trialnum) : 0;
+    int log_dir_len = log_dir != NULL ? strlen(log_dir) : 0;
+    char *logname = malloc(log_dir_len + 1 + 4 + agentlen + 1 + triallen + 1 + timelen + 9);
+    if (log_dir != NULL) {
+      strcpy(logname, log_dir);
+      logname[log_dir_len] = '/';
+      log_dir_len += 1;
+    }
+
+    strcpy(logname+log_dir_len, "alma");
     if (agent != NULL)
       strcpy(logname+4, agent);
     logname[4+agentlen] = '-';
@@ -447,7 +455,7 @@ void kb_halt(kb *collection) {
   }
 
   //fprintf(stderr, "Freed pre_res_task buffer\n.");
-  
+
   tommy_hashlin_foreach(&collection->fif_tasks, free_fif_task_mapping);
   tommy_hashlin_done(&collection->fif_tasks);
 

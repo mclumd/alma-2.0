@@ -209,7 +209,7 @@ static PyObject *clause_to_pyobject(kb *collection, clause *c) {
   }
 
   c->pyobject_bit = (char) 0;
-  
+
   return ret_val;
 }
 
@@ -291,8 +291,8 @@ static PyObject *alma_memtest_free(PyObject *self, PyObject *args) {
   return Py_None;
 }
 
-/* 
-   Expects as input a pointer to a knowledge base and a list of doubles with cardinality the number of resolutions in the pre-resolution buffer.  Sets the correspoding priorites accordingly. 
+/*
+   Expects as input a pointer to a knowledge base and a list of doubles with cardinality the number of resolutions in the pre-resolution buffer.  Sets the correspoding priorites accordingly.
 */
 
 
@@ -308,7 +308,7 @@ static PyObject *set_prb_priorities(PyObject *self, PyObject *args) {
   //int subj_len;
   double priority;
   tommy_node *prb_elmnt;
-  
+
 
   if (!PyArg_ParseTuple(args, "lO", &alma_kb, &priority_list )) {
     return NULL;
@@ -320,7 +320,7 @@ static PyObject *set_prb_priorities(PyObject *self, PyObject *args) {
   list_len = PyList_Size(priority_list);
   prb_elmnt = tommy_list_head(collection_prb);
 
-  
+
   for (idx = 0; idx < list_len; idx++) {
     list_item = PyList_GetItem(priority_list, idx);
     if (!PyFloat_Check(list_item)) {
@@ -358,12 +358,43 @@ static PyObject *single_prb_to_resolutions(PyObject *self, PyObject *args) {
 
   //fprintf(stderr, "In prb_to_resolutions\n");
   if (!PyArg_ParseTuple(args, "ld", &alma_kb, &threshold )) {
+static PyObject * alma_init(PyObject *self, PyObject *args) {
+  int verbose, log_mode;
+  PyObject *ret_val;
+  char *file;
+  char *agent;
+  char *trialnum;
+  char *log_dir;
+
+  if (!PyArg_ParseTuple(args, "iissss", &verbose, &log_mode, &file, &agent, &trialnum, &log_dir))
     return NULL;
   }
   collection = (kb *)alma_kb;
   collection->prb_threshold = threshold;
   pre_res_buffer_to_heap(collection, 1);
   return Py_None;
+
+  enable_python_mode();
+
+  kb_str buf;
+  buf.size = 0;
+  buf.limit = 1000;
+  buf.buffer = malloc(buf.limit);
+  buf.buffer[0] = '\0';
+
+  kb *alma_kb;
+  kb_init(&alma_kb,file,agent, trialnum, log_dir, verbose, &buf, log_mode);
+
+  //  ret_val = malloc(buf.size + 1);
+  //  strcpy(ret_val,buf.buffer);
+  //  ret_val[buf.size] = '\0';
+
+  buf.buffer[buf.size] = '\0';
+  ret_val = Py_BuildValue("(l,s),",(long)alma_kb,buf.buffer);
+
+  free(buf.buffer);
+
+  return ret_val;
 }
 
 static PyObject * alma_mode(PyObject *self, PyObject *args) {
@@ -460,7 +491,7 @@ static PyObject *get_res_buf( PyObject *self, PyObject *args) {
   long alma_kb;
   PyObject *py_lst;
   kb *collection;
-  
+
   if (!PyArg_ParseTuple(args, "l", &alma_kb))
     return NULL;
 
@@ -479,9 +510,9 @@ static PyObject *get_res_buf( PyObject *self, PyObject *args) {
   buf.buffer = malloc(buf.limit);
   buf.buffer[0] = '\0';
   buf.curr = buf.buffer;
-  
 
-  
+
+
   for ( size_t i=0; i < res_tasks->count; i++) {
     element = res_task_heap_item(res_tasks, i);   // Type (res_task_pri *)
     t = element->res_task;
@@ -496,7 +527,7 @@ static PyObject *get_res_buf( PyObject *self, PyObject *args) {
 					clause_to_pyobject(collection, t->y),
 					element->priority));
   }
-  
+
 
   clauses_string = malloc(buf.size + 1);
   strcpy(clauses_string, buf.buffer);
@@ -515,7 +546,7 @@ static PyObject *alma_get_pre_res_task_buffer( PyObject *self, PyObject *args) {
   PyObject *py_lst;
   PyObject *resolvent_lst;
   kb *collection;
-  
+
   if (!PyArg_ParseTuple(args, "l", &alma_kb))
     return NULL;
 
@@ -533,7 +564,7 @@ static PyObject *alma_get_pre_res_task_buffer( PyObject *self, PyObject *args) {
   buf.buffer = malloc(buf.limit);
   buf.buffer[0] = '\0';
   buf.curr = buf.buffer;
-  
+
 
 
   tommy_node *i = tommy_list_head(&collection->pre_res_task_buffer);
@@ -547,7 +578,7 @@ static PyObject *alma_get_pre_res_task_buffer( PyObject *self, PyObject *args) {
     alma_function_print(collection, t->neg, &buf);
     tee_alt("\n", collection, &buf);
 
-    
+
     PyList_Append(resolvent_lst, Py_BuildValue("OO",
 					       alma_function_to_pyobject(collection, t->pos),
 					       alma_function_to_pyobject(collection, t->neg)));
@@ -558,7 +589,7 @@ static PyObject *alma_get_pre_res_task_buffer( PyObject *self, PyObject *args) {
 
     i = i->next;
   }
-  
+
 
   clauses_string = malloc(buf.size + 1);
   strcpy(clauses_string, buf.buffer);
@@ -566,15 +597,15 @@ static PyObject *alma_get_pre_res_task_buffer( PyObject *self, PyObject *args) {
   free(buf.buffer);
   return Py_BuildValue("(O,O, s)",py_lst, resolvent_lst, clauses_string);
 }
-  
+
 
 
 
 static PyObject * alma_kbprint(PyObject *self, PyObject *args) {
   char *ret_val;
   long alma_kb;
-  
-  //fprintf(stderr, "In alma_kbprint\n");  
+
+  //fprintf(stderr, "In alma_kbprint\n");
   if (!PyArg_ParseTuple(args, "l", &alma_kb))
     return NULL;
 
@@ -615,7 +646,7 @@ static PyObject * alma_add(PyObject *self, PyObject *args) {
   int len;
   long alma_kb;
 
-  //fprintf(stderr, "In alma_add\n");  
+  //fprintf(stderr, "In alma_add\n");
   if (!PyArg_ParseTuple(args, "ls", &alma_kb, &input))
     return NULL;
 
@@ -900,7 +931,7 @@ static PyObject * alma_init(PyObject *self, PyObject *args) {
 	collection_priorities[idx] =  PyFloat_AsDouble(list_item);
       }
     }
-    
+
 
   kb_str buf;
   buf.size = 0;
@@ -926,7 +957,7 @@ static PyObject * alma_init(PyObject *self, PyObject *args) {
   strcpy(ret_val,buf.buffer);
   ret_val[buf.size] = '\0';
   free(buf.buffer);
-  
+
   return Py_BuildValue("(l,s),",(long)alma_kb,ret_val);
   }
 
