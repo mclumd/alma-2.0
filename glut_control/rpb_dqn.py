@@ -194,12 +194,5 @@ def get_rewards_test3(kb):
     return sum        
 
 def get_bookshelf_rewards(kb):
-    return 1 if "lookFor(bookshelf, myNovel)" in kb else 0
-    sum=0
-    for s in kb.split('\n'):
-        if "(a)" in s:
-            sum += s.count("right")
-    return sum        
-
-def get_bookshelf_rewards(kb):
-    return 1 if "lookFor(bookshelf, myNovel)" in kb else 0
+    return 1 if "lookFor(myNovel, thisShelf)" in kb else 0
+                 

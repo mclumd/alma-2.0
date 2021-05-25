@@ -12,6 +12,17 @@ class ql_batch:
         self.states, self.actions, self.rewards, self.new_states = [], [], [], []
         
 
+def debug_oneaction(alma_inst):
+    prebuf = alma.prebuf(alma_inst)
+    full_actions = prebuf[0]
+    print("first action: ", full_actions[0])
+    priorities =  np.random.uniform(size=len(full_actions))
+    alma.set_priors_prb(alma_inst, priorities.tolist())
+    alma_utils.pr_heap_print(alma_inst)
+    alma.single_prb_to_res_task(alma_inst, 1.0)   # Note the 1.0 is a threshold, not a priority
+    alma_utils.pr_heap_print(alma_inst)
+    alma.astep(alma_inst)
+    alma_utils.kb_print(alma_inst)
 
 #@profile
 def collect_episode(network, replay_buffer, alma_inst, episode_length):
@@ -43,6 +54,8 @@ def collect_episode(network, replay_buffer, alma_inst, episode_length):
             alma.astep(alma_inst)
             kb = alma.kbprint(alma_inst)[0]
             reward = (network.reward_fn(kb) / network.max_reward) if i < (episode_length - 1) else -1  # -1 for the last episode
+            if reward > 0:
+                print("Found positive reward at move {}!".format(i))
             state1 = alma.kb_to_pyobject(alma_inst)
             replay_buffer.append(state0, action, reward, state1)
 
@@ -73,16 +86,17 @@ def play_episode(network, alma_inst, episode_length):
             priorities = 1 - network.get_priorities(actions)*0.9
             alma.set_priors_prb(alma_inst, priorities.flatten().tolist())
             alma.prb_to_res_task(alma_inst, 1.0)   # Note the 1.0 is a threshold, not a priority
-            alma.astep(alma_inst)
-            kb = alma.kbprint(alma_inst)[0]
-            reward = network.reward_fn(kb)
-            record['rewards'].append(reward)
-            print("i=",i)
-            print("-" * 80)
-            print(kb)
-            print("-" * 80)
-            #alma_utils.pr_heap_print(alma_inst, 10)
-            print("=" * 80)
+            
+        alma.astep(alma_inst)
+        kb = alma.kbprint(alma_inst)[0]
+        reward = network.reward_fn(kb)
+        record['rewards'].append(reward)
+        print("i=",i)
+        print("-" * 80)
+        print(kb)
+        print("-" * 80)
+        #alma_utils.pr_heap_print(alma_inst, 10)
+        print("=" * 80)
     return record
             
 def replay_train(network, replay_buffer, exhaustive = False):

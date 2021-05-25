@@ -3,7 +3,7 @@
 if( isA(bookshelf, X), contains(X, book)).
 if( isA(book, X), isA(book, sequel(X))).
 if( isA(book, X), isA(book, prequel(X))).
-isa(bookshelf, thisShelf).
+isA(bookshelf, thisShelf).
 
 % distractors
 
@@ -42,5 +42,5 @@ isA(book, myNovel).
 if(and(contains(X,Y),isA(Y, Z)), lookFor(Z,X)).
 
 
-% Ultimate goal for initial feasability tests will be to entoken lookFor(bookshelf, myNovel).
+% Ultimate goal for initial feasability tests will be to entoken lookFor(thisShelf, myNovel).
 
