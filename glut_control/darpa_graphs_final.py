@@ -2,6 +2,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 
+
+
 def twoDplots1():
     eps = [25000*i for i in range(8)]
 
@@ -287,3 +289,63 @@ alma_inst, res = alma.init(1,kb, '0', 1, 1000, [], [])
         plt.legend()
         plt.show()
         plt.clf()
+
+
+def load_bookshelf():
+    import os
+    import random
+    import numpy as np
+    import itertools
+    import pickle
+    import gc
+    from importlib import reload
+    import alma, alma_utils
+    import argparse
+    import rl_utils, rl_dataset
+    #import resolution_prebuffer as rpb
+    from rpb_dqn import rpb_dqn, get_rewards_test1, get_rewards_test3, get_bookshelf_rewards
+    import time
+
+    subjects = [ 'isA', 'bookshelf', 'contains', 'book', 'sequel',
+                 'prequel', 'thisShelf', 'furniture', 'table',
+                 'legs', 'affords', 'sitting', 'placing',
+                 'desire', 'find', 'myNovel', 'lookFor']
+    max_reward = 1
+    network = rpb_dqn(0, subjects, [], use_gnn=True)
+    network.reward_fn = get_rewards_test3
+    model_name='bookshelf_reuse_ckpt18400'
+    network.model_load(model_name)
+    self = network
+    id_str=model_name
+
+    pkl_file = open(os.path.join(model_prefix, "rpb_dqn_model_{}.pkl".format(id_str)), "rb")
+    (self.subjects, self.words, self.num_subjects, self.num_words, self.subjects_dict, self.words_dict,
+             self.batch_size, self.use_tf, self.seed, self.gamma, self.epsilon, self.eps_min, self.eps_max,
+             self.batch_size, self.max_gnn_nodes, self.max_reward) = pickle.load(pkl_file)
+    from vectorization import graph_representation
+    self.graph_rep = graph_representation(self.subjects, self.max_gnn_nodes)
+    self.current_model.model = keras.models.load_model(os.path.join(model_prefix, "rpb_dqn_current_model_{}".format(id_str)))
+    self.target_model.model = keras.models.load_model(os.path.join(model_prefix, "rpb_dqn_target_model_{}".format(id_str)))
+         import rl_utils
+    from resolution_prebuffer import res_prebuffer, gnn_model, gnn_model_zero
+    import numpy as np
+    from rl_dataset import simple_graph_dataset
+    from spektral.data import DisjointLoader
+    from tensorflow import keras
+    import tensorflow as tf
+    import pickle
+    import datetime
+    import os
+
+    self.graph_rep = graph_representation(self.subjects, self.max_gnn_nodes)
+    self.current_model.model = keras.models.load_model(os.path.join(model_prefix, "rpb_dqn_current_model_{}".format(id_str)))
+    self.target_model.model = keras.models.load_model(os.path.join(model_prefix, "rpb_dqn_target_model_{}".format(id_str)))
+
+
+    import alma
+    kb = 'bookshelf1.pl'
+
+    alma_inst, res = alma.init(1,kb, '0', 1, 1000, [], [])
+
+    import rl_utils
+    return rl_utils.play_episode(network, alma_inst, 100)
