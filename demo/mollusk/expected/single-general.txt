@@ -1,0 +1,7 @@
+~rel(shell_bearer, steve)
+rel(naked_nautilus, steve)
+rel(nautilus, steve)
+rel(cephalopod, steve)
+rel(mollusk, steve)
+abnormal(steve, mollusk, shell_bearer)
+abnormal(steve, nautilus, shell_bearer)

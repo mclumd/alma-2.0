@@ -1,0 +1,4 @@
+~rel(shell_bearer, bob)
+rel(cephalopod, bob)
+rel(mollusk, bob)
+abnormal(bob, mollusk, shell_bearer)

@@ -1,5 +1,5 @@
 *.o
 *.x
-*.txt
+alma*.txt
 *.so
 *.DS_Store
