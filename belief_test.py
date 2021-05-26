@@ -148,7 +148,7 @@ def main():
       present = 0
       for index, expected in enumerate(expecteds):
         if expected_believed[index] > expected_distrusted[index]:
-          print("Found " + expected + " at timestep " + str(expected_believed[index]))
+          #print("Found " + expected + " at timestep " + str(expected_believed[index]))
           present = present + 1
         else:
           print(expected + " missing!")

@@ -1,10 +1,16 @@
 fif(and(foo,
     ancestor(quote(bar), quote(foo), 8)),
 yes_foo).
+fif(and(foo,
+    non_ancestor(quote(bar), quote(foo), 8)),
+no_foo).
 foo.
 fif(and(aaaa,
     ancestor(quote(a(`X)), quote(g(`X,`Y)), 8)),
 a_anc(X,Y)).
+fif(and(aaaa,
+    non_ancestor(quote(q(`X)), quote(g(`X,`Y)), 8)),
+non_anc(X,Y)).
 bar.
 fif(a(Q), b(Q)).
 if(b(X), c(X)).
