@@ -354,15 +354,15 @@ STATIC void NAME(_destroy)(struct heap_name *heap) {
    for (int i = 0; i < tommy_array_size(&heap->data); i++) {
      current_item = res_task_heap_item(heap, i);
      if (i < heap->count) {
-       fprintf(stderr, "free RTHD0");
+       //fprintf(stderr, "free RTHD0");
        current_res_task = current_item->res_task;
        //free_clause(current_res_task->x);
        //free_clause(current_res_task->y);
        // Not explicitly free pos and neg; guess they're part of x and y and
        // thus handled above.
-       free(current_res_task);
+       //free(current_res_task);
      }
-     fprintf(stderr, "free RTHD");
+     //fprintf(stderr, "free RTHD");
      // if (current_item) free(current_item);  // Free current item if not NULL; this may not work.
    }
    tommy_array_done(&heap->data);

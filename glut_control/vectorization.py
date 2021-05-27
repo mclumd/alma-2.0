@@ -88,6 +88,11 @@ class graph_representation:
         while not nodeq.empty():
             sentence_tree, root_idx = nodeq.get()
             term_type = sentence_tree[0]
+
+            if root_idx >= self.num_nodes or new_node_idx >= self.num_nodes:
+                #TODO:  We should, at least, fill the available space instead of just bailing.
+                print("Graph representation overflowed available space.")
+                return
             X[root_idx] = self.node_rep.gnn_feature(sentence_tree)
             if term_type == 'func':
                 func_params = sentence_tree[2]
