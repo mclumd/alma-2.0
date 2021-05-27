@@ -264,6 +264,7 @@ static PyObject *alma_set_priorities(PyObject *self, PyObject *args) {
       collection->subject_priorities[idx] =  PyFloat_AsDouble(list_item);
       }
   }
+  Py_INCREF(Py_None); // JB 5/25/21
   return Py_None;
 }
 
@@ -283,11 +284,13 @@ static PyObject *alma_memtest_alloc(PyObject *self, PyObject *args) {
     obj->value = 0; // initializes the object
     tommy_list_insert_tail(&dummy_list, &obj->node, obj); // inserts the object
   }
+  Py_INCREF(Py_None); // JB 5/25/21
   return Py_None;
 }
 
 static PyObject *alma_memtest_free(PyObject *self, PyObject *args) {
   tommy_list_foreach(&dummy_list, free);
+  Py_INCREF(Py_None); // JB 5/25/21
   return Py_None;
 }
 
@@ -333,6 +336,7 @@ static PyObject *set_prb_priorities(PyObject *self, PyObject *args) {
       prb_elmnt = prb_elmnt->next;
     }
   }
+  Py_INCREF(Py_None); // JB 5/25/21
   return Py_None;
 }
 
@@ -348,6 +352,7 @@ static PyObject *prb_to_resolutions(PyObject *self, PyObject *args) {
   collection = (kb *)alma_kb;
   collection->prb_threshold = threshold;
   pre_res_buffer_to_heap(collection, 0);
+  Py_INCREF(Py_None); // JB 5/25/21
   return Py_None;
 }
 
@@ -363,6 +368,7 @@ static PyObject *single_prb_to_resolutions(PyObject *self, PyObject *args) {
   collection = (kb *)alma_kb;
   collection->prb_threshold = threshold;
   pre_res_buffer_to_heap(collection, 1);
+  Py_INCREF(Py_None); // JB 5/25/21
   return Py_None;
 }
 
@@ -887,8 +893,8 @@ static PyObject * alma_init(PyObject *self, PyObject *args) {
     }
  }
 
-    fprintf(stderr, "subj_list_len %ld\n", subj_list_len);
-    fprintf(stderr, "PyList_Size(subject_priority_list) %ld\n",  PyList_Size(subject_priority_list));
+    //fprintf(stderr, "subj_list_len %ld\n", subj_list_len);
+    //fprintf(stderr, "PyList_Size(subject_priority_list) %ld\n",  PyList_Size(subject_priority_list));
     assert(subj_list_len ==  PyList_Size(subject_priority_list));
     collection_priorities = malloc(sizeof(double)* subj_list_len);
     for (idx = 0; idx < subj_list_len; idx++) {
@@ -929,7 +935,7 @@ static PyObject * alma_init(PyObject *self, PyObject *args) {
   
   return Py_BuildValue("(l,s),",(long)alma_kb,ret_val);
   }
-
+}
 
 /*
 
@@ -942,3 +948,21 @@ initalma(void)
 
 */
 
+
+  /* 
+     Replicate py_test_halt.py so that we can run through valgrind. */
+   */
+int main(int argc, char **argv) {
+  PyObject *alma_inst;
+  PyObject *alma_inst_res;
+  PyObject *alma_args;
+  alma_args = Py_BuildValue("issii[][]", 1, "glut_control/qlearning3.pl", "0", 1, 1000);
+
+  kb *alma_kb;
+  int alma_res_ptr;
+  char *alma_ret_val;
+  alma_inst_res = alma_init(NULL, alma_args);
+  if (!PyArg_ParseTuples(alma_inst_res
+ 
+
+}
