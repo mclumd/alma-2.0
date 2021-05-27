@@ -390,7 +390,7 @@ void kb_halt(kb *collection) {
     free_clause(tommy_array_get(&collection->new_clauses, i));
   tommy_array_done(&collection->new_clauses);
 
-  tommy_array_done(collection->subject_list);
+  //tommy_array_done(collection->subject_list);
   //free(collection->subject_list);
 
   tommy_node *curr = tommy_list_head(&collection->clauses);
@@ -440,7 +440,7 @@ void kb_halt(kb *collection) {
     //free(PT->t->pos);
     //free(PT->t->neg);
     free(PT->t);     // PT->t is a res_task
-    free(PT);
+    //free(PT);
     tmp_pt = curr_pt->next;
     //free(curr_pt);
     curr_pt = tmp_pt;
