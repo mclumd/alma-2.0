@@ -118,7 +118,7 @@ class gnn_model(Model):
                                'tacc': [(total_tacc / num_epochs)]
                                })
 
-#take graph rep from res_prebuff graph_representation and push through neural net
+
 class gnn_model_zero():
     def __init__(self, max_nodes=20, num_features=20):
         #gnn_model.__init__(self, max_nodes)

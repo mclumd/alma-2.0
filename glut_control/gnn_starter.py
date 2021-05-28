@@ -20,6 +20,8 @@ from alma_utils import *
 import argparse
 import random
 
+import dgl_dataset
+
 #os.environ["LD_LIBRARY_PATH"] = "/home/justin/alma-2.0/"
 test_params = {
     'explosion_size': 1000,
@@ -115,6 +117,9 @@ def train(explosion_steps=50, num_steps=500, numeric_bits=3, model_name="test1",
                 res_task_input = [x[:2] for x in res_tasks]
                 #network.train_batch(res_task_input, res_lits)
                 network.save_batch(res_task_input, res_lits)
+
+                dgl_test(network.Xbuffer, network.ybuffer)
+                
                 if idx >= next_clear:
                     print("Network has {} samples, {} of which are positive".format(len(network.ybuffer), network.ypos_count))
                     print("Cleaning network...")
@@ -317,6 +322,14 @@ def main():
                heap_print_freq=1, prb_threshold=args.prb_threshold, use_gnn=args.gnn, kb=args.kb, gnn_nodes=args.gnn_nodes, initial_test=False)
     print("Final result is", res)
     print("Final number is", len(res))
+
+
+
+def dgl_test(X, Y):
+    GNN = dgl_dataset.GNNDataset(X, Y)
+    exit(0)
+
+
 
 
 #main()
