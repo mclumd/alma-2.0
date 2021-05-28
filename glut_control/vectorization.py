@@ -6,7 +6,6 @@ import unif.unifier as un
 import re
 
 
-#convert subjects to dict and label entries as seen below
 class node_representation:
     def __init__(self, subjects):
         if type(subjects) == type({}):
