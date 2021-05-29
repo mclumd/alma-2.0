@@ -120,6 +120,18 @@ static int copy_and_quasiquote_clause(clause *original, clause *copy, clause *qu
 
 // Procedure functions and minor helpers
 
+// Convert string to long while checking for only digits
+static int str_to_long(char *str, long *res) {
+  *res = 0;
+  for (int i = strlen(str)-1, j = 1; i >= 0; i--, j*=10) {
+    if (isdigit(str[i]))
+      *res += (str[i] - '0') * j;
+    else
+      return 0;
+  }
+  return 1;
+}
+
 // For now, introspect fails on flagged formulas
 // It seems intuitive to reject them, since introspection is based on current knowledge
 static int introspect(alma_function *arg, binding_list *bindings, kb *alma, introspect_kind kind) {
@@ -129,6 +141,16 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *alma, intr
   if ((query->type != QUOTE || query->quote->type != CLAUSE) && (query->type != VARIABLE || !(res = bindings_contain(bindings, query->variable))
       || res->term->type != QUOTE || res->term->quote->type != CLAUSE)) {
     return 0;
+  }
+
+  // When second acquired arg is a bound variable, it must have a numeric value; obtain long from it
+  long acquired_time_bound = 0;
+  binding *time_binding = NULL;
+  if (kind == ACQUIRED && (time_binding = bindings_contain(bindings, arg->terms[1].variable))) {
+    if (time_binding->term->type != FUNCTION || time_binding->term->function->term_count != 0)
+      return 0;
+    else
+      str_to_long(time_binding->term->function->name, &acquired_time_bound);
   }
 
   // Create copy and substitute based on bindings available
@@ -149,6 +171,8 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *alma, intr
       tee_alt("Performing neg_int on \"", alma, NULL);
     else if (kind == NEG_INT_GEN)
       tee_alt("Performing neg_int_gen on \"", alma, NULL);
+    else if (kind == ACQUIRED)
+      tee_alt("Performing acquired on \"", alma, NULL);
     clause_print(alma, search_term->quote->clause_quote, NULL);
     tee_alt("\"\n", alma, NULL);
   }
@@ -163,7 +187,9 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *alma, intr
     for (int i = mapping_num_clauses(mapping, search_term->quote->clause_quote->tag)-1; i >= 0; i--) {
       clause *ith = mapping_access(mapping, search_term->quote->clause_quote->tag, i);
       // Must be a non-flagged result with pos / neg literal count matching query
-      if (flags_negative(ith) && counts_match(ith, search_term->quote->clause_quote)) {
+      // If doing acquired proc, and the time argument was bound, it must match the clause
+      if (flags_negative(ith) && counts_match(ith, search_term->quote->clause_quote)
+          && (kind != ACQUIRED || !acquired_time_bound || (ith->acquired == acquired_time_bound))) {
         // Convert clause in question to quotation term
         if (non_specific) {
           q->clause_quote = malloc(sizeof(*q->clause_quote));
@@ -392,18 +418,6 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time,
   return has_ancestor;
 }
 
-// Convert string to long while checking for only digits
-static int str_to_long(char *str, long *res) {
-  *res = 0;
-  for (int i = strlen(str)-1, j = 1; i >= 0; i--, j*=10) {
-    if (isdigit(str[i]))
-      *res += (str[i] - '0') * j;
-    else
-      return 0;
-  }
-  return 1;
-}
-
 // Returns true if digit value of x is less than digit value of y
 // Else, incuding cases where types differ, false
 static int less_than(alma_term *x, alma_term *y, binding_list *bindings, kb *alma) {
@@ -501,45 +515,41 @@ static int quote_cons(alma_term *to_quote, alma_variable *result, binding_list *
 
 // If proc is a valid procedure, runs and returns truth value
 int proc_run(alma_function *proc, binding_list *bindings, kb *alma) {
+  // Each procedure has optional extra argument for bound constraint
   if (strstr(proc->name, "neg_int") == proc->name) {
-    // Must match (given bindings) the schema neg_int(literal(...)) / neg_int_gen(literal(...))
+    // Must match (given bindings) the schema neg_int("...") / neg_int_gen("...") / neg_int_spec("...")
     if (proc->term_count == 1 || proc->term_count == 2) {
-      if (strlen(proc->name) == strlen("neg_int")) {
-        return introspect(proc, bindings, alma, NEG_INT);
-      }
-      else if (strcmp(proc->name, "neg_int_spec") == 0) {
-        return introspect(proc, bindings, alma, NEG_INT_SPEC);
-      }
-      else if (strcmp(proc->name, "neg_int_gen") == 0) {
-        return introspect(proc, bindings, alma, NEG_INT_GEN);
-      }
+      introspect_kind type = NEG_INT;
+      if (strcmp(proc->name, "neg_int_spec") == 0)
+        type = NEG_INT_SPEC;
+      else if (strcmp(proc->name, "neg_int_gen") == 0)
+        type = NEG_INT_GEN;
+      return introspect(proc, bindings, alma, type);
     }
   }
   else if (strstr(proc->name, "pos_int") == proc->name) {
-    // Must match (given bindings) the schema pos_int(literal(...)) / pos_int_gen(literal(...))
+    // Must match (given bindings) the schema pos_int("...") / pos_int_gen("...") / pos_int_spec("...")
     if (proc->term_count == 1 || proc->term_count == 2) {
-      if (strlen(proc->name) == strlen("pos_int")) {
-        return introspect(proc, bindings, alma, POS_INT);
-      }
-      else if (strcmp(proc->name, "pos_int_spec") == 0) {
-        return introspect(proc, bindings, alma, POS_INT_SPEC);
-      }
-      else if (strcmp(proc->name, "pos_int_gen") == 0) {
-        return introspect(proc, bindings, alma, POS_INT_GEN);
-      }
+      introspect_kind type = POS_INT;
+      if (strcmp(proc->name, "pos_int_spec") == 0)
+        type = POS_INT_SPEC;
+      else if (strcmp(proc->name, "pos_int_gen") == 0)
+        type = POS_INT_GEN;
+      return introspect(proc, bindings, alma, type);
     }
   }
   else if (strcmp(proc->name, "acquired") == 0) {
-    // Must match (given bindings) the schema acquired(literal(...), Var) OR acquired(not(literal(...)), Var); Var must be unbound
-    if ((proc->term_count == 2 || proc->term_count == 3)
-        && proc->terms[1].type == VARIABLE && !bindings_contain(bindings, proc->terms[1].variable))
+    // Must match (given bindings) the schema acquired("...", Var)
+    if ((proc->term_count == 2 || proc->term_count == 3) && proc->terms[1].type == VARIABLE)
       return introspect(proc, bindings, alma, ACQUIRED);
   }
   else if (strcmp(proc->name, "ancestor") == 0) {
+    // Must match (given bindings) the schema ancestor("...", "...", Time)
     if (proc->term_count == 3 || proc->term_count == 4)
       return ancestor(proc->terms+0, proc->terms+1, proc->terms+2, bindings, alma, 0);
   }
   else if (strcmp(proc->name, "non_ancestor") == 0) {
+    // Must match (given bindings) the schema non_ancestor("...", "...", Time)
     if (proc->term_count == 3 || proc->term_count == 4)
       return ancestor(proc->terms+0, proc->terms+1, proc->terms+2, bindings, alma, 1);
   }
