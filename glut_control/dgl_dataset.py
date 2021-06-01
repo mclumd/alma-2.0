@@ -29,7 +29,8 @@ class GNNDataset(DGLDataset):
         self.X = Xbuffer
         self.Y = ybuffer
         # The overridden process function is automatically called after construction
-        super().__init__(name='GNN')
+        # https://docs.dgl.ai/api/python/dgl.data.html
+        super().__init__(name='synthetic')
 
     def process(self):
         self.graphs = []
@@ -40,11 +41,11 @@ class GNNDataset(DGLDataset):
         num_nodes = -1
 
         # Iterate over list of graphs
-        # For each adjacency, store a bidirectional edge between lowercase x and y,
-        # this ensures no node is isolated from message passing
-        # Then store the graph label from y
-        # Last, grab num_nodes from size of adjacency matrix
-        i = 0
+        # For each adjacency, store a bidirectional edge between lowercase x and y,                                                         # Potential different architectures include no backwards edges,
+        # this ensures no node is isolated from message passing                                                                             # a standard edge feature to identify backwards edges, and a
+        # Then store the graph label from y                                                                                                 # new "supernode" that has bidirectional edges connecting to
+        # Last, grab num_nodes from size of adjacency matrix                                                                                # and from each existing node. 1 and 3 are common standards,
+        i = 0                                                                                                                               # 2 is not but could be helpful nonetheless.
         for graph in self.X:
             y = 0
             for row in graph[0]:
@@ -70,6 +71,28 @@ class GNNDataset(DGLDataset):
             i += 1
 
         # Convert the label list to tensor for saving.
+        self.labels = torch.LongTensor(self.labels)
+
+    def __getitem__(self, i):
+        return self.graphs[i], self.labels[i]
+
+    def __len__(self):
+        return len(self.graphs)
+
+
+class BigGNNDataset(DGLDataset):
+    def __init__(self, data_list):
+        self.data_list = data_list
+        super().__init__(name='synthetic')
+
+    def process(self):
+        self.graphs = []
+        self.labels = []
+        for set in self.data_list:
+            for i in range(len(set)):
+                g, l = set[i]
+                self.graphs.append(g)
+                self.labels.append(l)
         self.labels = torch.LongTensor(self.labels)
 
     def __getitem__(self, i):

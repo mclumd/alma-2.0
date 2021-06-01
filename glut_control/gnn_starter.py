@@ -78,6 +78,7 @@ def train(explosion_steps=50, num_steps=500, numeric_bits=3, model_name="test1",
     global alma_inst,res
     #hp = hpy()
     #hpy_before = hp.heap()
+    dgl_data = []
     if "test1_kb.pl" in kb:
         subjects = ['a', 'b', 'distanceAt', 'distanceBetweenBoundedBy']
     elif "january_preglut.pl" in kb:
@@ -118,7 +119,7 @@ def train(explosion_steps=50, num_steps=500, numeric_bits=3, model_name="test1",
                 #network.train_batch(res_task_input, res_lits)
                 network.save_batch(res_task_input, res_lits)
 
-                dgl_test(network.Xbuffer, network.ybuffer)
+                # dgl_test(network.Xbuffer, network.ybuffer)
                 
                 if idx >= next_clear:
                     print("Network has {} samples, {} of which are positive".format(len(network.ybuffer), network.ypos_count))
@@ -135,6 +136,12 @@ def train(explosion_steps=50, num_steps=500, numeric_bits=3, model_name="test1",
             if idx > 0 and idx % train_interval == 0:
                 print("Network has {} samples, {} of which are positive".format(len(network.ybuffer), network.ypos_count))
                 if (network.ypos_count > (network.batch_size  / 2)) and (network.yneg_count > (network.batch_size  / 2)):
+
+                    # dgl_test(network.Xbuffer, network.ybuffer)
+                    # build up a list of DGLDatasets
+                    g_data = dgl_dataset.GNNDataset(network.Xbuffer, network.ybuffer)
+                    dgl_data.append(g_data)
+
                     H = network.train_buffered_batch()
                     acc, loss = H.history['accuracy'][0], H.history['loss'][0]
                     #print("accuracy: {} \t loss: {}\ttacc: {}".format(acc, loss, H.history['tacc'][0]))
@@ -162,7 +169,6 @@ def train(explosion_steps=50, num_steps=500, numeric_bits=3, model_name="test1",
         del res_tasks
         del res_task_input
 
-
     network.model_save(model_name, numeric_bits)
     #hpy_after  = hp.heap()
     #hpy_diff = hpy_after - hpy_before
@@ -173,7 +179,7 @@ def train(explosion_steps=50, num_steps=500, numeric_bits=3, model_name="test1",
     #         print("Refreshing the heap.")
     #         _ = explosion(explosion_steps, kb)
     #     test_network(network, num_steps, kb)
-    return network
+    return network, dgl_data
 
 def test_network(network, num_steps, kb):
     global alma_inst
@@ -305,12 +311,15 @@ def main():
         assert(args.reload == "NONE")
         print("Using network: {} with expsteps {}   rsteps {}    model_name {}".format(use_net, args.explosion_steps, args.reasoning_steps, model_name))
         print('Training; model name is ', args.train)
-        network = train(args.explosion_steps, args.reasoning_steps, args.numeric_bits, model_name, args.gnn, args.num_trainings, args.train_interval, args.kb, gnn_nodes=args.gnn_nodes)
+        network, dgl_data = train(args.explosion_steps, args.reasoning_steps, args.numeric_bits, model_name, args.gnn, args.num_trainings, args.train_interval, args.kb, gnn_nodes=args.gnn_nodes)
+        gnn_train(dgl_data)
     if args.reload != "NONE":
         assert(args.train == "NONE")
         model_name = args.reload
         print("Using network: {}, expsteps {}   rsteps {}    model_name {}".format(use_net, args.explosion_steps, args.reasoning_steps, model_name))
         network = resolution_prebuffer.rpf_load(model_name, True)
+
+
 
     
 
@@ -327,7 +336,13 @@ def main():
 
 def dgl_test(X, Y):
     GNN = dgl_dataset.GNNDataset(X, Y)
-    exit(0)
+    return
+
+def gnn_train(data_list):
+    dataset = dgl_dataset.BigGNNDataset(data_list)  #this seems to work!
+    # now for the actual model and training...
+    return
+
 
 
 
