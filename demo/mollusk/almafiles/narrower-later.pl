@@ -1,3 +1,3 @@
 rel(cephalopod, steve).
-if(now(2), rel(nautilus, nancy)).
-if(now(6), rel(naked_nautilus, barry)).
+if(now(2), rel(naked_nautilus, barry)).
+if(now(4), rel(nautilus, nancy)).

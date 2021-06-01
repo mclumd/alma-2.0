@@ -118,7 +118,7 @@ def main():
   expected_dir = os.path.join(args['dir'], "expected")
   pl_dir = os.path.join(args['dir'], "almafiles")
 
-  for filename in os.listdir(expected_dir):
+  for filename in sorted(os.listdir(expected_dir)):
     prefix = filename[:-4]
 
     # Run with base and corresponding pl file from almafiles dir
