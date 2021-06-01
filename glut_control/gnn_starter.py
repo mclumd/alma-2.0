@@ -139,7 +139,7 @@ def train(explosion_steps=50, num_steps=500, numeric_bits=3, model_name="test1",
 
                     # dgl_test(network.Xbuffer, network.ybuffer)
                     # build up a list of DGLDatasets
-                    g_data = dgl_dataset.GNNDataset(network.Xbuffer, network.ybuffer)
+                    g_data = dgl_dataset.AlmaDataset(network.Xbuffer, network.ybuffer)
                     dgl_data.append(g_data)
 
                     H = network.train_buffered_batch()
@@ -335,11 +335,11 @@ def main():
 
 
 def dgl_test(X, Y):
-    GNN = dgl_dataset.GNNDataset(X, Y)
+    GNN = dgl_dataset.AlmaDataset(X, Y)
     return
 
 def gnn_train(data_list):
-    dataset = dgl_dataset.BigGNNDataset(data_list)  #this seems to work!
+    dataset = dgl_dataset.BigAlmaDataset(data_list)  #this seems to work!
     # now for the actual model and training...
     return
 

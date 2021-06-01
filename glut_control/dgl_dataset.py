@@ -24,7 +24,7 @@ import os
 # Built and tested with output from save_batch when use_gnn = True and use_tf = False
 # save_batch calls vectorize, this built and tested on data from the vectorize_alg = gnn1 mode
 
-class GNNDataset(DGLDataset):
+class AlmaDataset(DGLDataset):
     def __init__(self, Xbuffer, ybuffer):
         self.X = Xbuffer
         self.Y = ybuffer
@@ -80,7 +80,9 @@ class GNNDataset(DGLDataset):
         return len(self.graphs)
 
 
-class BigGNNDataset(DGLDataset):
+# Constructor takes a list of AlmaDatasets and mashes them together into one big dataset
+
+class BigAlmaDataset(DGLDataset):
     def __init__(self, data_list):
         self.data_list = data_list
         super().__init__(name='synthetic')
