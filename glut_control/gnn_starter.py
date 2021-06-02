@@ -319,11 +319,6 @@ def main():
         print("Using network: {}, expsteps {}   rsteps {}    model_name {}".format(use_net, args.explosion_steps, args.reasoning_steps, model_name))
         network = resolution_prebuffer.rpf_load(model_name, True)
 
-    print("Now training GCN:")
-    gnn_train(dgl_data)
-
-    
-
     #res = test(use_net, args.explosion_steps, args.reasoning_steps, args.heap_print_size, args.prb_print_size, args.numeric_bits, heap_print_freq=10, model_name = model_name, prb_threshold=0.25)
     print("-"*80)
     print("BEGIN TESTING")
@@ -332,6 +327,12 @@ def main():
                heap_print_freq=1, prb_threshold=args.prb_threshold, use_gnn=args.gnn, kb=args.kb, gnn_nodes=args.gnn_nodes, initial_test=False)
     print("Final result is", res)
     print("Final number is", len(res))
+
+    print("-"*80)
+    print("Now training GCN:")
+    print("-" * 80)
+    gnn_train(dgl_data)
+
 
 
 
@@ -368,21 +369,35 @@ def gnn_train(data_list):
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 
     for epoch in range(20):
+        print("="*80)
+        print("GCN epoch ", epoch, ":")
+        i = 0
         for batched_graph, labels in train_dataloader:
-            pred = model(batched_graph, batched_graph.ndata['attr'].float())
+            #print("Batched Graph ", i)
+            i += 1
+            pred = model(batched_graph, batched_graph.ndata['feat'].float())
             loss = F.cross_entropy(pred, labels)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+        num_correct = 0
+        num_tests = 0
+        for batched_graph, labels in test_dataloader:
+            pred = model(batched_graph, batched_graph.ndata['feat'].float())
+            num_correct += (pred.argmax(1) == labels).sum().item()
+            num_tests += len(labels)
 
-    num_correct = 0
-    num_tests = 0
-    for batched_graph, labels in test_dataloader:
-        pred = model(batched_graph, batched_graph.ndata['attr'].float())
-        num_correct += (pred.argmax(1) == labels).sum().item()
-        num_tests += len(labels)
+        print('GCN accuracy:', num_correct / num_tests)
+        print("=" * 80)
 
-    print('Test accuracy:', num_correct / num_tests)
+    # num_correct = 0
+    # num_tests = 0
+    # for batched_graph, labels in test_dataloader:
+    #     pred = model(batched_graph, batched_graph.ndata['feat'].float())
+    #     num_correct += (pred.argmax(1) == labels).sum().item()
+    #     num_tests += len(labels)
+
+    # print('GCN accuracy:', num_correct / num_tests)
 
     return
 

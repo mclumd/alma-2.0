@@ -28,6 +28,8 @@ class AlmaDataset(DGLDataset):
     def __init__(self, Xbuffer, ybuffer):
         self.X = Xbuffer
         self.Y = ybuffer
+        self.dim_nfeats = 11    # hardcoded for now, can work on this later
+        self.gclasses = 2       # hardcoded for now, can work on this later
         # The overridden process function is automatically called after construction
         # https://docs.dgl.ai/api/python/dgl.data.html
         super().__init__(name='synthetic')
@@ -66,12 +68,13 @@ class AlmaDataset(DGLDataset):
             # Convert to tensor via torch to avoid the "numpy.ndarray has no attribute 'device'" error
             # https://discuss.dgl.ai/t/attributeerror-numpy-ndarray-object-has-no-attribute-device/241
             g.ndata['feat'] = torch.LongTensor(graph[1])
-            self.graphs.append(g)
+            self.graphs.append(dgl.add_self_loop(g))        #stops the zero-in-degree issue with GCN
             self.labels.append(label)
             i += 1
 
         # Convert the label list to tensor for saving.
         self.labels = torch.LongTensor(self.labels)
+
 
     def __getitem__(self, i):
         return self.graphs[i], self.labels[i]
@@ -85,6 +88,8 @@ class AlmaDataset(DGLDataset):
 class BigAlmaDataset(DGLDataset):
     def __init__(self, data_list):
         self.data_list = data_list
+        self.dim_nfeats = data_list[0].dim_nfeats
+        self.gclasses = data_list[0].gclasses
         super().__init__(name='synthetic')
 
     def process(self):
@@ -96,6 +101,7 @@ class BigAlmaDataset(DGLDataset):
                 self.graphs.append(g)
                 self.labels.append(l)
         self.labels = torch.LongTensor(self.labels)
+
 
     def __getitem__(self, i):
         return self.graphs[i], self.labels[i]

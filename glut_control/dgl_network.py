@@ -1,6 +1,9 @@
 import dgl
 import torch.nn as nn
 from dgl.nn import GraphConv
+import torch
+import torch.nn.functional as F
+import dgl.data
 
 
 # Also boilerplate from dgl.ai
@@ -31,6 +34,7 @@ from dgl.nn import GraphConv
 
 class GCN(nn.Module):
     def __init__(self, in_feats, h_feats, num_classes):
+        # self.allow_zero_in_degree = True      # does not work as intended??? solved issue with dgl.add_self_loop(g) in dataset process
         super(GCN, self).__init__()
         self.conv1 = GraphConv(in_feats, h_feats)
         self.conv2 = GraphConv(h_feats, num_classes)
