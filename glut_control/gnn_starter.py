@@ -386,6 +386,18 @@ def gnn_train(data_list):
             pred = model(batched_graph, batched_graph.ndata['feat'].float())
             num_correct += (pred.argmax(1) == labels).sum().item()
             num_tests += len(labels)
+            if (pred.argmax(1) == labels).sum().item() != 5:
+                print("*"*80)
+                print("INCORRECT PREDICTION "*4)
+                print(pred.argmax(1))
+                print(labels)
+                graph_list = dgl.unbatch(batched_graph)
+                for graph in graph_list:
+                    print("-" * 80)
+                    print("src/dst lists: ", graph.adj(True, 'cpu', None, graph.etypes[0]))
+                    print("features: ", graph.ndata['feat'])
+                    print("-" * 80)
+                print("*"*80)
 
         print('GCN accuracy:', num_correct / num_tests)
         print("=" * 80)
