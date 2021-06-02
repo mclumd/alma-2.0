@@ -21,6 +21,7 @@ import argparse
 import random
 
 import dgl_dataset
+import dgl_network
 
 #os.environ["LD_LIBRARY_PATH"] = "/home/justin/alma-2.0/"
 test_params = {
@@ -305,21 +306,21 @@ def main():
     if args.cpu_only:
         # TODO:  This may need to be done before any tensorflow imports
         os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
-        
+
     if args.train != "NONE":
         model_name = args.train
         assert(args.reload == "NONE")
         print("Using network: {} with expsteps {}   rsteps {}    model_name {}".format(use_net, args.explosion_steps, args.reasoning_steps, model_name))
         print('Training; model name is ', args.train)
         network, dgl_data = train(args.explosion_steps, args.reasoning_steps, args.numeric_bits, model_name, args.gnn, args.num_trainings, args.train_interval, args.kb, gnn_nodes=args.gnn_nodes)
-        gnn_train(dgl_data)
     if args.reload != "NONE":
         assert(args.train == "NONE")
         model_name = args.reload
         print("Using network: {}, expsteps {}   rsteps {}    model_name {}".format(use_net, args.explosion_steps, args.reasoning_steps, model_name))
         network = resolution_prebuffer.rpf_load(model_name, True)
 
-
+    print("Now training GCN:")
+    gnn_train(dgl_data)
 
     
 
@@ -334,13 +335,55 @@ def main():
 
 
 
+
 def dgl_test(X, Y):
     GNN = dgl_dataset.AlmaDataset(X, Y)
     return
 
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import dgl.data
+from dgl.dataloading import GraphDataLoader
+from torch.utils.data.sampler import SubsetRandomSampler
+
+# A lot of this is boilerplate from:
+# https://docs.dgl.ai/tutorials/blitz/5_graph_classification.html#sphx-glr-tutorials-blitz-5-graph-classification-py
+
 def gnn_train(data_list):
     dataset = dgl_dataset.BigAlmaDataset(data_list)  #this seems to work!
-    # now for the actual model and training...
+
+    num_examples = len(dataset)
+    num_train = int(num_examples * 0.8)
+
+    train_sampler = SubsetRandomSampler(torch.arange(num_train))
+    test_sampler = SubsetRandomSampler(torch.arange(num_train, num_examples))
+
+    train_dataloader = GraphDataLoader(
+        dataset, sampler=train_sampler, batch_size=5, drop_last=False)
+    test_dataloader = GraphDataLoader(
+        dataset, sampler=test_sampler, batch_size=5, drop_last=False)
+
+    model = dgl_network.GCN(dataset.dim_nfeats, 16, dataset.gclasses)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+
+    for epoch in range(20):
+        for batched_graph, labels in train_dataloader:
+            pred = model(batched_graph, batched_graph.ndata['attr'].float())
+            loss = F.cross_entropy(pred, labels)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+    num_correct = 0
+    num_tests = 0
+    for batched_graph, labels in test_dataloader:
+        pred = model(batched_graph, batched_graph.ndata['attr'].float())
+        num_correct += (pred.argmax(1) == labels).sum().item()
+        num_tests += len(labels)
+
+    print('Test accuracy:', num_correct / num_tests)
+
     return
 
 
