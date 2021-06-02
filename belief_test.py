@@ -111,12 +111,16 @@ def main():
   ap = argparse.ArgumentParser()
   ap.add_argument('-b', '--base', required=True, help='Base axiom file', type=str)
   ap.add_argument('-d', '--dir', required=True, help='.pl and .txt directory', type=str)
+  ap.add_argument('-a', '--axiom_count', required=True, help='Base axiom count', type=int)
   args = vars(ap.parse_args())
 
   distrust_re = re.compile("distrusted\(\"(.*)\", ([0-9]*)\)")
 
   expected_dir = os.path.join(args['dir'], "expected")
   pl_dir = os.path.join(args['dir'], "almafiles")
+
+  base_axiom_count = args['axiom_count']
+  axiom_parent_count = [0] * base_axiom_count
 
   for filename in sorted(os.listdir(expected_dir)):
     prefix = filename[:-4]
@@ -139,6 +143,11 @@ def main():
 
       for time, (timestep, messages) in enumerate(log_info):
         for index, (sentence, parents, child) in timestep.items():
+          if parents is not None:
+            for parent_set in parents:
+              for parent in parent_set:
+                if parent < base_axiom_count:
+                  axiom_parent_count[parent] = axiom_parent_count[parent]+1 
           if sentence in expecteds:
             expected_believed[expecteds.index(sentence)] = time
           distrust = distrust_re.search(sentence)
@@ -153,6 +162,9 @@ def main():
         else:
           print(expected + " missing!")
       print(str(present) + "/" + str(len(expecteds)) + " expected beliefs found in log " + log + "\n")
+
+  for index, entry in enumerate(axiom_parent_count):
+    print("Used axiom " + str(index) + " to infer " + str(entry) + " times")
 
 if __name__ == "__main__":
   main()

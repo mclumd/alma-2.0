@@ -64,25 +64,25 @@ fif(and(abnormal(Ab, Kind, Pred), not(rel(Pred, Ab))), distrust(quote(abnormal(`
 % Reinstatement of narrowest ontology category, as found by the lack of a more-specific is-a instance to be the parent
 fif(and(contradicting(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
     and(rel(Kind, Obj),
-    and(non_ancestor(quote(rel(is_a, `Kind_spec, `Kind)), quote(rel(`Kind, `Obj)), T),
-    pos_int(quote(fif(and(rel(`Kind, Obj), neg_int(quote(abnormal(`Obj, ``Kind, ``Pred)))), not(rel(`Pred, Obj)))))))),
+    and(pos_int(quote(fif(and(rel(`Kind, Obj), neg_int(quote(abnormal(`Obj, ``Kind, ``Pred)))), not(rel(`Pred, Obj))))),
+    non_ancestor(quote(rel(is_a, `Kind_spec, `Kind)), quote(rel(`Kind, `Obj)), T)))),
 reinstate(quote(not(rel(`Pred, `Obj))), T)).
 
 fif(and(contradicting(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
     and(rel(Kind, Obj),
-    and(non_ancestor(quote(rel(is_a, `Kind_spec, `Kind)), quote(rel(`Kind, `Obj)), T),
-    pos_int(quote(fif(and(rel(`Kind, Obj), neg_int(quote(abnormal(`Obj, ``Kind, ``Pred)))), rel(`Pred, Obj))))))),
+    and(pos_int(quote(fif(and(rel(`Kind, Obj), neg_int(quote(abnormal(`Obj, ``Kind, ``Pred)))), rel(`Pred, Obj)))),
+    non_ancestor(quote(rel(is_a, `Kind_spec, `Kind)), quote(rel(`Kind, `Obj)), T)))),
 reinstate(quote(rel(`Pred, `Obj)), T)).
 
 % Versions for Kind related to contradictand by non-default rule
 fif(and(contradicting(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
     and(rel(Kind, Obj),
-    and(non_ancestor(quote(rel(is_a, `Kind_spec, `Kind)), quote(rel(`Kind, `Obj)), T),
-    pos_int(quote(fif(rel(`Kind, Obj), not(rel(`Pred, Obj)))))))),
+    and(pos_int(quote(fif(rel(`Kind, Obj), not(rel(`Pred, Obj))))),
+    non_ancestor(quote(rel(is_a, `Kind_spec, `Kind)), quote(rel(`Kind, `Obj)), T)))),
 reinstate(quote(not(rel(`Pred, `Obj))), T)).
 
 fif(and(contradicting(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
     and(rel(Kind, Obj),
-    and(non_ancestor(quote(rel(is_a, `Kind_spec, `Kind)), quote(rel(`Kind, `Obj)), T),
-    pos_int(quote(fif(rel(`Kind, Obj), rel(`Pred, Obj))))))),
+    and(pos_int(quote(fif(rel(`Kind, Obj), rel(`Pred, Obj)))),
+    non_ancestor(quote(rel(is_a, `Kind_spec, `Kind)), quote(rel(`Kind, `Obj)), T)))),
 reinstate(quote(rel(`Pred, `Obj)), T)).
