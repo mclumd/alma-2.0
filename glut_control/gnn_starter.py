@@ -368,38 +368,54 @@ def gnn_train(data_list):
     model = dgl_network.GCN(dataset.dim_nfeats, 16, dataset.gclasses)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 
-    for epoch in range(20):
+    for epoch in range(5):
         print("="*80)
         print("GCN epoch ", epoch, ":")
         i = 0
         for batched_graph, labels in train_dataloader:
-            #print("Batched Graph ", i)
+            # print("Batched Graph ", i)
             i += 1
             pred = model(batched_graph, batched_graph.ndata['feat'].float())
             loss = F.cross_entropy(pred, labels)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+
+            num_correct = 0
+            num_tests = 0
+            for batched_graph, labels in test_dataloader:
+                pred = model(batched_graph, batched_graph.ndata['feat'].float())
+                num_correct += (pred.argmax(1) == labels).sum().item()
+                num_tests += len(labels)
+
+            print('GCN accuracy at', int(i/len(train_dataloader)*10000)/100.0, "% of training", ':', num_correct / num_tests)
+
         num_correct = 0
         num_tests = 0
         for batched_graph, labels in test_dataloader:
             pred = model(batched_graph, batched_graph.ndata['feat'].float())
             num_correct += (pred.argmax(1) == labels).sum().item()
             num_tests += len(labels)
-            if (pred.argmax(1) == labels).sum().item() != 5:
-                print("*"*80)
-                print("INCORRECT PREDICTION "*4)
-                print(pred.argmax(1))
-                print(labels)
-                graph_list = dgl.unbatch(batched_graph)
-                for graph in graph_list:
-                    print("-" * 80)
-                    print("src/dst lists: ", graph.adj(True, 'cpu', None, graph.etypes[0]))
-                    print("features: ", graph.ndata['feat'])
-                    print("-" * 80)
-                print("*"*80)
 
-        print('GCN accuracy:', num_correct / num_tests)
+            show_errors = False
+            # show_errors = True
+            if show_errors:
+                if (pred.argmax(1) == labels).sum().item() != 5:
+                    for a in range(batched_graph.batch_size):
+                        if pred.argmax(1)[a] != labels[a]:
+                            print("*"*80)
+                            print("INCORRECT PREDICTION "*4)
+                            print("Predicted:", pred.argmax(1)[a])
+                            print("Actual:", labels[a])
+                            graph_list = dgl.unbatch(batched_graph)
+                            print("-" * 80)
+                            torch.set_printoptions(threshold=100_000)        # Want to see it all
+                            print("src/dst lists: ", graph_list[a].adj(True, 'cpu', None, graph_list[a].etypes[0]))
+                            print("features: ", graph_list[a].ndata['feat'])
+                            print("-" * 80)
+                            print("*"*80)
+
+        print('GCN accuracy epoch', epoch, ':', num_correct / num_tests)
         print("=" * 80)
 
     # num_correct = 0
