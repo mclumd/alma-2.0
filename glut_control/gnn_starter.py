@@ -28,11 +28,11 @@ test_params = {
     'explosion_size': 1000,
     'alma_heap_print_size': 100
 }
-alma_inst,res = alma.init(1,'test1_kb.pl', '0', 1, 1000, [], [])
+# alma_inst,res = alma.init(1,'test1_kb.pl', '0', 1, 1000, [], [])
 # alma_inst,res = alma.init(1,'test2.pl', '0', 1, 1000, [], [])
 # alma_inst,res = alma.init(1,'test3.pl', '0', 1, 1000, [], [])
 # alma_inst,res = alma.init(1,'test4.pl', '0', 1, 1000, [], [])
-# alma_inst,res = alma.init(1,'test5.pl', '0', 1, 1000, [], [])
+alma_inst,res = alma.init(1,'test5.pl', '0', 1, 1000, [], [])
 
 def res_task_lits(lit_str):
     L = lit_str.split('\n')[:-1]
@@ -392,7 +392,7 @@ def gnn_train(data_list):
                 num_correct += (pred.argmax(1) == labels).sum().item()
                 num_tests += len(labels)
 
-            print('GCN accuracy at', int(i/len(train_dataloader)*10000)/100.0, "% of training", ':', num_correct / num_tests)
+            print('GCN accuracy at', "{:.2f}".format(i/len(train_dataloader)*100), "% of training", ':', num_correct / num_tests)
 
         num_correct = 0
         num_tests = 0
