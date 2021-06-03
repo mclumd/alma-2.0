@@ -29,6 +29,10 @@ test_params = {
     'alma_heap_print_size': 100
 }
 alma_inst,res = alma.init(1,'test1_kb.pl', '0', 1, 1000, [], [])
+# alma_inst,res = alma.init(1,'test2.pl', '0', 1, 1000, [], [])
+# alma_inst,res = alma.init(1,'test3.pl', '0', 1, 1000, [], [])
+# alma_inst,res = alma.init(1,'test4.pl', '0', 1, 1000, [], [])
+# alma_inst,res = alma.init(1,'test5.pl', '0', 1, 1000, [], [])
 
 def res_task_lits(lit_str):
     L = lit_str.split('\n')[:-1]
