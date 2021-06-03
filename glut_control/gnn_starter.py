@@ -32,7 +32,11 @@ test_params = {
 # alma_inst,res = alma.init(1,'test2.pl', '0', 1, 1000, [], [])
 # alma_inst,res = alma.init(1,'test3.pl', '0', 1, 1000, [], [])
 # alma_inst,res = alma.init(1,'test4.pl', '0', 1, 1000, [], [])
-alma_inst,res = alma.init(1,'test5.pl', '0', 1, 1000, [], [])
+# alma_inst,res = alma.init(1,'test5.pl', '0', 1, 1000, [], [])
+# alma_inst,res = alma.init(1,'qlearning1.pl', '0', 1, 1000, [], [])
+# alma_inst,res = alma.init(1,'qlearning2.pl', '0', 1, 1000, [], [])
+alma_inst,res = alma.init(1,'qlearning3.pl', '0', 1, 1000, [], [])
+
 
 def res_task_lits(lit_str):
     L = lit_str.split('\n')[:-1]
@@ -380,8 +384,10 @@ def gnn_train(data_list):
             # print("Batched Graph ", i)
             i += 1
             pred = model(batched_graph, batched_graph.ndata['feat'].float())
+            # loss = F.binary_cross_entropy(pred, labels)
             loss = F.cross_entropy(pred, labels)
             optimizer.zero_grad()
+            tloss = loss
             loss.backward()
             optimizer.step()
 
@@ -393,6 +399,7 @@ def gnn_train(data_list):
                 num_tests += len(labels)
 
             print('GCN accuracy at', "{:.2f}".format(i/len(train_dataloader)*100), "% of training", ':', num_correct / num_tests)
+            print('Loss:', tloss)
 
         num_correct = 0
         num_tests = 0
