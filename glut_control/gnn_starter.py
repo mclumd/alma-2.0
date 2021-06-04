@@ -28,14 +28,15 @@ test_params = {
     'explosion_size': 1000,
     'alma_heap_print_size': 100
 }
-# alma_inst,res = alma.init(1,'test1_kb.pl', '0', 1, 1000, [], [])
+alma_inst,res = alma.init(1,'test1_kb.pl', '0', 1, 1000, [], [])
 # alma_inst,res = alma.init(1,'test2.pl', '0', 1, 1000, [], [])
 # alma_inst,res = alma.init(1,'test3.pl', '0', 1, 1000, [], [])
 # alma_inst,res = alma.init(1,'test4.pl', '0', 1, 1000, [], [])
 # alma_inst,res = alma.init(1,'test5.pl', '0', 1, 1000, [], [])
-alma_inst,res = alma.init(1,'qlearning1.pl', '0', 1, 1000, [], [])
+# alma_inst,res = alma.init(1,'qlearning1.pl', '0', 1, 1000, [], [])
 # alma_inst,res = alma.init(1,'qlearning2.pl', '0', 1, 1000, [], [])
 # alma_inst,res = alma.init(1,'qlearning3.pl', '0', 1, 1000, [], [])
+# alma_inst,res = alma.init(1,'ps_test_search.pl', '0', 1, 1000, [], [])
 
 
 def res_task_lits(lit_str):
@@ -60,6 +61,14 @@ def explosion(size, kb):
         elif "january_preglut.pl" in kb:
             obs_fmla = "location(a{}).".format(i)
             alma.add(alma_inst, obs_fmla)
+        elif "qlearning1.pl" in kb:
+            obs_fmla_a = "f({}).".format(i)
+            obs_fmla_b = "g({}).".format(i)
+            alma.add(alma_inst, obs_fmla_a)
+            alma.add(alma_inst, obs_fmla_b)
+        elif "ps_test_search.pl" in kb:
+            obs_fmla_a = "obj_prop_val({}, {}, {})".format(i, random.randint(0, 4), random.randint(0, 100))
+            alma.add(alma_inst, obs_fmla_a)
         r = alma.prebuf(alma_inst)
         alma.astep(alma_inst)
     print("Explosion done.")
@@ -90,7 +99,7 @@ def train(explosion_steps=50, num_steps=500, numeric_bits=3, model_name="test1",
 
     dgl_data = []
     new_dgl_dataset = False
-    new_dgl_dataset = True
+    # new_dgl_dataset = True
     if new_dgl_dataset:
         if "test1_kb.pl" in kb:
             subjects = ['a', 'b', 'distanceAt', 'distanceBetweenBoundedBy']
