@@ -4,6 +4,7 @@ from dgl.nn import GraphConv
 import torch
 import torch.nn.functional as F
 import dgl.data
+import pickle
 
 
 # Also boilerplate from dgl.ai
@@ -45,3 +46,12 @@ class GCN(nn.Module):
         h = self.conv2(g, h)
         g.ndata['h'] = h
         return dgl.mean_nodes(g, 'h')
+
+
+def save_gnn_model(model, model_name):
+    pickle.dump(model, open(model_name + ".p", "wb"))
+
+
+def load_gnn_model(model_name):
+    model = pickle.load(open(model_name + ".p", "rb"))
+    return model

@@ -33,9 +33,9 @@ test_params = {
 # alma_inst,res = alma.init(1,'test3.pl', '0', 1, 1000, [], [])
 # alma_inst,res = alma.init(1,'test4.pl', '0', 1, 1000, [], [])
 # alma_inst,res = alma.init(1,'test5.pl', '0', 1, 1000, [], [])
-# alma_inst,res = alma.init(1,'qlearning1.pl', '0', 1, 1000, [], [])
+alma_inst,res = alma.init(1,'qlearning1.pl', '0', 1, 1000, [], [])
 # alma_inst,res = alma.init(1,'qlearning2.pl', '0', 1, 1000, [], [])
-alma_inst,res = alma.init(1,'qlearning3.pl', '0', 1, 1000, [], [])
+# alma_inst,res = alma.init(1,'qlearning3.pl', '0', 1, 1000, [], [])
 
 
 def res_task_lits(lit_str):
@@ -87,7 +87,40 @@ def train(explosion_steps=50, num_steps=500, numeric_bits=3, model_name="test1",
     global alma_inst,res
     #hp = hpy()
     #hpy_before = hp.heap()
+
     dgl_data = []
+    new_dgl_dataset = False
+    new_dgl_dataset = True
+    if new_dgl_dataset:
+        if "test1_kb.pl" in kb:
+            subjects = ['a', 'b', 'distanceAt', 'distanceBetweenBoundedBy']
+        elif "january_preglut.pl" in kb:
+            subjects = ["a{}".format(x) for x in range(explosion_steps)]
+
+        if "test1_kb.pl" in kb and not use_gnn:
+            for place in range(3):
+                for cat_subj in ['a', 'b']:
+                    subjects.append("{}/{}".format(cat_subj, place))
+                for num_subj in range(2 ** numeric_bits):
+                    subjects.append("{}/{}".format(num_subj, place))
+
+        network = resolution_prebuffer.res_prebuffer(subjects, [], use_gnn=use_gnn, gnn_nodes=gnn_nodes)
+
+        alma_inst, res = alma.init(1, kb, '0', 1, 1000, [], [])
+        exp = explosion(explosion_steps * 20, kb)       # making a big but less redundant dataset
+        res_tasks = exp[0]
+        res_lits = res_task_lits(exp[2])
+        res_task_input = [x[:2] for x in res_tasks]
+        prb = alma.prebuf(alma_inst)
+        res_tasks = prb[0]
+        res_lits = res_task_lits(prb[2])
+        res_task_input = [x[:2] for x in res_tasks]
+        network.save_batch(res_task_input, res_lits)
+
+        g_data = dgl_dataset.AlmaDataset(network.Xbuffer, network.ybuffer)
+        dgl_data.append(g_data)
+
+
     if "test1_kb.pl" in kb:
         subjects = ['a', 'b', 'distanceAt', 'distanceBetweenBoundedBy']
     elif "january_preglut.pl" in kb:
@@ -148,8 +181,9 @@ def train(explosion_steps=50, num_steps=500, numeric_bits=3, model_name="test1",
 
                     # dgl_test(network.Xbuffer, network.ybuffer)
                     # build up a list of DGLDatasets
-                    g_data = dgl_dataset.AlmaDataset(network.Xbuffer, network.ybuffer)
-                    dgl_data.append(g_data)
+                    if not new_dgl_dataset:
+                        g_data = dgl_dataset.AlmaDataset(network.Xbuffer, network.ybuffer)
+                        dgl_data.append(g_data)
 
                     H = network.train_buffered_batch()
                     acc, loss = H.history['accuracy'][0], H.history['loss'][0]
