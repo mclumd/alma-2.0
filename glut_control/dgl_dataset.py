@@ -28,11 +28,20 @@ class AlmaDataset(DGLDataset):
     def __init__(self, Xbuffer, ybuffer):
         self.X = Xbuffer
         self.Y = ybuffer
-        self.dim_nfeats = 11    # hardcoded for now, can work on this later
-        self.gclasses = 2       # hardcoded for now, can work on this later
+        self.dim_nfeats = len(self.X[0][1])
+        self.gclasses = self.classes_helper
+        # self.dim_nfeats = 11    # hardcoded for now, can work on this later
+        # self.gclasses = 2       # hardcoded for now, can work on this later
         # The overridden process function is automatically called after construction
         # https://docs.dgl.ai/api/python/dgl.data.html
         super().__init__(name='synthetic')
+
+    @property
+    def classes_helper(self):
+        classes = set()
+        for label in self.Y:
+            set.add(label)
+        return len(classes)
 
     def process(self):
         self.graphs = []
