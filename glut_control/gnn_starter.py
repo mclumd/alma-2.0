@@ -61,14 +61,11 @@ def explosion(size, kb):
         elif "january_preglut.pl" in kb:
             obs_fmla = "location(a{}).".format(i)
             alma.add(alma_inst, obs_fmla)
-        # elif "qlearning1.pl" in kb:
-        #     obs_fmla_a = "f({}).".format(i)
-        #     obs_fmla_b = "g({}).".format(i)
-        #     alma.add(alma_inst, obs_fmla_a)
-        #     alma.add(alma_inst, obs_fmla_b)
-        # elif "ps_test_search.pl" in kb:
-        #     obs_fmla_a = "obj_prop_val({}, {}, {})".format(i, random.randint(0, 4), random.randint(0, 100))
-        #     alma.add(alma_inst, obs_fmla_a)
+        elif "qlearning1.pl" in kb:
+            obs_fmla_a = "f({}).".format(i)
+            obs_fmla_b = "g({}).".format(i)
+            alma.add(alma_inst, obs_fmla_a)
+            alma.add(alma_inst, obs_fmla_b)
         r = alma.prebuf(alma_inst)
         alma.astep(alma_inst)
     print("Explosion done.")
@@ -97,7 +94,10 @@ def train(explosion_steps=50, num_steps=500, numeric_bits=3, model_name="test1",
     #hp = hpy()
     #hpy_before = hp.heap()
 
-    print(kb)
+    # ***************** #
+    # BUILD DGL DATASET #
+    # ***************** #
+
     dgl_data = []
     new_dgl_dataset = False
     new_dgl_dataset = True
@@ -106,9 +106,8 @@ def train(explosion_steps=50, num_steps=500, numeric_bits=3, model_name="test1",
             subjects = ['a', 'b', 'distanceAt', 'distanceBetweenBoundedBy']
         elif "january_preglut.pl" in kb:
             subjects = ["a{}".format(x) for x in range(explosion_steps)]
-        # elif "qlearning1.pl" in kb:
-        #     print("HERE")
-        #     subjects = ['f', 'g', 'a', 'b', 'c', 'd']
+        elif "qlearning1.pl" in kb:
+            subjects = ['f', 'g', 'a']
 
         if "test1_kb.pl" in kb and not use_gnn:
             for place in range(3):
@@ -133,14 +132,17 @@ def train(explosion_steps=50, num_steps=500, numeric_bits=3, model_name="test1",
         g_data = dgl_dataset.AlmaDataset(network.Xbuffer, network.ybuffer)
         dgl_data.append(g_data)
 
+    # ****************** #
+    # END DGL DATA BLOCK #
+    # ****************** #
+
 
     if "test1_kb.pl" in kb:
         subjects = ['a', 'b', 'distanceAt', 'distanceBetweenBoundedBy']
     elif "january_preglut.pl" in kb:
         subjects = ["a{}".format(x) for x in range(explosion_steps)]
-    # elif "qlearning1.pl" in kb:
-    #     print("HERE")
-    #     subjects = ['f', 'g', 'a', 'b', 'c', 'd']
+    elif "qlearning1.pl" in kb:
+        subjects = ['f', 'g', 'a']
 
     if "test1_kb.pl" in kb and not use_gnn:
         for place in range(3):
@@ -176,9 +178,6 @@ def train(explosion_steps=50, num_steps=500, numeric_bits=3, model_name="test1",
                 res_task_input = [x[:2] for x in res_tasks]
                 #network.train_batch(res_task_input, res_lits)
                 network.save_batch(res_task_input, res_lits)
-
-                # dgl_test(network.Xbuffer, network.ybuffer)
-                
                 if idx >= next_clear:
                     print("Network has {} samples, {} of which are positive".format(len(network.ybuffer), network.ypos_count))
                     print("Cleaning network...")
@@ -197,9 +196,8 @@ def train(explosion_steps=50, num_steps=500, numeric_bits=3, model_name="test1",
 
                     # dgl_test(network.Xbuffer, network.ybuffer)
                     # build up a list of DGLDatasets
-                    if not new_dgl_dataset:
-                        g_data = dgl_dataset.AlmaDataset(network.Xbuffer, network.ybuffer)
-                        dgl_data.append(g_data)
+                    # g_data = dgl_dataset.AlmaDataset(network.Xbuffer, network.ybuffer)
+                    # dgl_data.append(g_data)
 
                     H = network.train_buffered_batch()
                     acc, loss = H.history['accuracy'][0], H.history['loss'][0]
@@ -238,6 +236,8 @@ def train(explosion_steps=50, num_steps=500, numeric_bits=3, model_name="test1",
     #         print("Refreshing the heap.")
     #         _ = explosion(explosion_steps, kb)
     #     test_network(network, num_steps, kb)
+
+    # slightly hacky, return dgl_data here for the dgl train/test loops
     return network, dgl_data
 
 def test_network(network, num_steps, kb):
@@ -282,6 +282,8 @@ def test(network, network_priors, exp_size=10, num_steps=500, alma_heap_print_si
         subjects = ['a', 'b', 'distanceAt', 'distanceBetweenBoundedBy']
     elif "january_preglut.pl" in kb:
         subjects = ["a{}".format(x) for x in range(exp_size)]
+    elif "qlearning1.pl" in kb:
+        subjects = ['f', 'g', 'a']
 
     if initial_test:
         for _ in range(10):
@@ -386,6 +388,10 @@ def main():
     print("Final result is", res)
     print("Final number is", len(res))
 
+
+    # ************** #
+    # GNN TRAIN/TEST #
+    # ************** #
     print("-"*80)
     print("Now training GCN:")
     print("-" * 80)
