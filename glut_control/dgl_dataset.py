@@ -29,7 +29,9 @@ class AlmaDataset(DGLDataset):
         self.X = Xbuffer
         self.Y = ybuffer
         self.dim_nfeats = len(self.X[0][1][0])
-        self.gclasses = len(np.unique(self.Y)) # untested, but should work!
+        self.gclasses = len(np.unique(self.Y))  # doesn't work, why?
+
+        self.gclasses = 2
 
         # self.dim_nfeats = 11    # hardcoded for now, can work on this later
         # self.gclasses = 2       # hardcoded for now, can work on this later

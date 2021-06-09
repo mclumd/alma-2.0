@@ -62,9 +62,9 @@ def explosion(size, kb):
             obs_fmla = "location(a{}).".format(i)
             alma.add(alma_inst, obs_fmla)
         elif "qlearning1.pl" in kb:
-            obs_fmla_a = "f({}).".format(i)
+            #obs_fmla_a = "f({}).".format(i)
             obs_fmla_b = "g({}).".format(i)
-            alma.add(alma_inst, obs_fmla_a)
+            #alma.add(alma_inst, obs_fmla_a)
             alma.add(alma_inst, obs_fmla_b)
         r = alma.prebuf(alma_inst)
         alma.astep(alma_inst)
