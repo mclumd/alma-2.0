@@ -33,6 +33,10 @@ import pickle
 #    minibatch element.
 #
 
+# ********* #
+# Basic GCN #
+# ********* #
+
 class GCN(nn.Module):
     def __init__(self, in_feats, h_feats, num_classes):
         # self.allow_zero_in_degree = True      # does not work as intended??? solved issue with dgl.add_self_loop(g) in dataset process
@@ -46,6 +50,10 @@ class GCN(nn.Module):
         h = self.conv2(g, h)
         g.ndata['h'] = h
         return dgl.mean_nodes(g, 'h')
+
+# *********************** #
+# Pickling Still Untested #
+# *********************** #
 
 
 def save_gnn_model(model, model_name):
