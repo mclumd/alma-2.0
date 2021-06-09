@@ -88,6 +88,7 @@ class AlmaDataset(DGLDataset):
 
 
 # Constructor takes a list of AlmaDatasets and mashes them together into one big dataset
+# Probably don't need this anymore, but not bad to have on hand
 
 class BigAlmaDataset(DGLDataset):
     def __init__(self, data_list):
