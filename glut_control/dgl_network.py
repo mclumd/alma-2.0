@@ -51,10 +51,17 @@ class GCN(nn.Module):
         g.ndata['h'] = h
         return dgl.mean_nodes(g, 'h')
 
+# class ACN(nn.Module):
+#     def __init__(self, in_feats, h_feats, num_classes):
+#         super(GCN, self).__init__()
+
+
+
+
+
 # *********************** #
 # Pickling Still Untested #
 # *********************** #
-
 
 def save_gnn_model(model, model_name):
     pickle.dump(model, open(model_name + ".p", "wb"))
