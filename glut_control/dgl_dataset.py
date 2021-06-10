@@ -115,3 +115,60 @@ class BigAlmaDataset(DGLDataset):
 
     def __len__(self):
         return len(self.graphs)
+
+
+# Take the same data as an AlmaDataset but produce a single graph to represent the whole knowledge base
+# Flattening everything is THE simplest way, but maybe it'll work well? Can try higher-dimensionality representations.
+# Exploitability of graph structure may be lost, but how to implement subgraph classification? Or perhaps the network will still recognize graph structures in the flattened data
+# This is designed for node classification, but we could also represent each theorem in KB as a node and do edge prediction!
+    # could represent each piece of KB as a disjoint subgraph, edges between root nodes could denote inference pairs? priority via edge features? we would need two super distinct edge types
+
+class KBDataset(DGLDataset):
+    def __init__(self, Xbuffer, ybuffer):
+        self.X = Xbuffer
+        self.Y = ybuffer
+        self.dim_nfeats = len(self.X[0][0].flatten().append(self.X[0][1]).flatten())
+        self.gclasses = len(np.unique(self.Y))  # doesn't work, why?
+        self.gclasses = 2
+        super().__init__(name='synthetic')
+
+    def process(self):
+        self.graphs = []
+        self.labels = []
+        self.node_feats = []
+        src = np.array([1])     # A placeholder for the array before we begin appending edge information
+        dst = np.array([1])     # It will be sliced off before passing to the dgl.graph constructor, maybe there is a better way to do this? Don't know numpy that well
+        label = None
+        num_nodes = -1
+
+        # Flatten graphs into node features and store labels
+        i = 0                                                                                                                               # 2 is not but could be helpful nonetheless.
+        for graph in self.X:
+            self.node_feats.append(graph[0].flatten().append(graph[1].flatten()))
+            num_nodes = len(self.X)
+            label = self.Y[i]
+            self.labels.append(label)
+            i += 1
+
+        src = np.array([1])  # A placeholder for the array before we begin appending edge information
+        dst = np.array([1])  # It will be sliced off before passing to the dgl.graph constructor, maybe there is a better way to do this? Don't know numpy that well
+        # Fully connected graph --> edge = "these nodes are in the same kb"
+        for a in range(len(self.X)):
+            for b in range(len(self.X)):
+                src = np.append(src, [a])
+                src = np.append(src, [b])
+                dst = np.append(dst, [b])
+                dst = np.append(dst, [a])
+
+        g = dgl.graph((src[1:], dst[1:]), num_nodes=num_nodes)
+        g.ndata['feat'] = torch.LongTensor(self.node_feats)
+        self.graphs.append(dgl.add_self_loop(g))  # stops the zero-in-degree issue with GCN
+
+        # Convert the label list to tensor for saving.
+        self.labels = torch.LongTensor(self.labels)
+
+    def __getitem__(self, i):
+        return self.node_feats[i], self.labels[i]
+
+    def __len__(self):
+        return len(self.X)
