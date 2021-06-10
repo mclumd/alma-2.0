@@ -425,9 +425,9 @@ def gnn_train(data_list):
     test_sampler = SubsetRandomSampler(torch.arange(num_train, num_examples))
 
     train_dataloader = GraphDataLoader(
-        dataset, sampler=train_sampler, batch_size=5, drop_last=False)
+        dataset, sampler=train_sampler, batch_size=1, drop_last=False)
     test_dataloader = GraphDataLoader(
-        dataset, sampler=test_sampler, batch_size=5, drop_last=False)
+        dataset, sampler=test_sampler, batch_size=1, drop_last=False)
 
     model = dgl_network.GCN(dataset.dim_nfeats, 16, dataset.gclasses)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
