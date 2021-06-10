@@ -62,10 +62,13 @@ def explosion(size, kb):
             obs_fmla = "location(a{}).".format(i)
             alma.add(alma_inst, obs_fmla)
         elif "qlearning1.pl" in kb:
-            #obs_fmla_a = "f({}).".format(i)
+            # obs_fmla_a = "f({}).".format(i)
             obs_fmla_b = "g({}).".format(i)
-            #alma.add(alma_inst, obs_fmla_a)
+            # alma.add(alma_inst, obs_fmla_a)
             alma.add(alma_inst, obs_fmla_b)
+        elif "ps_test_search.pl" in kb:
+            obs_fmla_a = "obj_prop_val(a, location, {}).".format(i)
+            alma.add(alma_inst, obs_fmla_a)
         r = alma.prebuf(alma_inst)
         alma.astep(alma_inst)
     print("Explosion done.")
@@ -108,6 +111,8 @@ def train(explosion_steps=50, num_steps=500, numeric_bits=3, model_name="test1",
             subjects = ["a{}".format(x) for x in range(explosion_steps)]
         elif "qlearning1.pl" in kb:
             subjects = ['f', 'g', 'a']
+        elif "ps_test_search.pl" in kb:
+            subjects = ['obj_prop_val', 'location', 'a']
 
         if "test1_kb.pl" in kb and not use_gnn:
             for place in range(3):
@@ -143,6 +148,8 @@ def train(explosion_steps=50, num_steps=500, numeric_bits=3, model_name="test1",
         subjects = ["a{}".format(x) for x in range(explosion_steps)]
     elif "qlearning1.pl" in kb:
         subjects = ['f', 'g', 'a']
+    elif "ps_test_search.pl" in kb:
+        subjects = ['obj_prop_val', 'location', 'a']
 
     if "test1_kb.pl" in kb and not use_gnn:
         for place in range(3):
@@ -284,6 +291,8 @@ def test(network, network_priors, exp_size=10, num_steps=500, alma_heap_print_si
         subjects = ["a{}".format(x) for x in range(exp_size)]
     elif "qlearning1.pl" in kb:
         subjects = ['f', 'g', 'a']
+    elif "ps_test_search.pl" in kb:
+        subjects = ['obj_prop_val', 'location', 'a']
 
     if initial_test:
         for _ in range(10):
