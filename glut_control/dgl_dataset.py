@@ -172,3 +172,9 @@ class KBDataset(DGLDataset):
 
     def __len__(self):
         return len(self.X)
+
+
+# Above structure potentially makes it harder for DGL to recognize and exploit graph structure of data
+# It also definitely uses a LOT of memory
+# Why not vectorize every axiom/theorem once (no pairs), toss them in one disjoint graph together, and run link prediction?
+# We could strongly identify root nodes with a second feature and only care about root to root links, strength of which is the priority
