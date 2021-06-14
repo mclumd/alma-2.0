@@ -56,6 +56,16 @@ class GCN(nn.Module):
 #         super(GCN, self).__init__()
 
 
+# https://pytorch.org/tutorials/beginner/saving_loading_models.html
+# pytorch comes with save/load!
+
+def save_gcn_model(model, model_name):
+    torch.save(model, model_name + ".pt")
+
+def load_gcn_model(model_name, in_feats, h_feats, num_classes):
+    model = torch.load(model_name + ".pt")
+    model.eval()
+
 
 
 
@@ -63,10 +73,10 @@ class GCN(nn.Module):
 # Pickling Still Untested #
 # *********************** #
 
-def save_gnn_model(model, model_name):
-    pickle.dump(model, open(model_name + ".p", "wb"))
-
-
-def load_gnn_model(model_name):
-    model = pickle.load(open(model_name + ".p", "rb"))
-    return model
+# def save_gnn_model(model, model_name):
+#     pickle.dump(model, open(model_name + ".p", "wb"))
+#
+#
+# def load_gnn_model(model_name):
+#     model = pickle.load(open(model_name + ".p", "rb"))
+#     return model
