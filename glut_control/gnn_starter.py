@@ -455,18 +455,12 @@ def gnn_train(data_list):
             num_tests = 0
             for batched_graph, labels in test_dataloader:
                 pred = model(batched_graph, batched_graph.ndata['feat'].float())
+                # try printing pred here?
                 num_correct += (pred.argmax(1) == labels).sum().item()
                 num_tests += len(labels)
 
             print('GCN accuracy at', "{:.2f}".format(i/len(train_dataloader)*100), "% of training", ':', num_correct / num_tests)
             print('Loss:', tloss)
-
-        num_correct = 0
-        num_tests = 0
-        for batched_graph, labels in test_dataloader:
-            pred = model(batched_graph, batched_graph.ndata['feat'].float())
-            num_correct += (pred.argmax(1) == labels).sum().item()
-            num_tests += len(labels)
 
             show_errors = False
             # show_errors = True
@@ -486,7 +480,6 @@ def gnn_train(data_list):
                             print("-" * 80)
                             print("*"*80)
 
-        print('GCN accuracy epoch', epoch, ':', num_correct / num_tests)
         print("=" * 80)
 
     # num_correct = 0
