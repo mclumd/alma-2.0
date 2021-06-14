@@ -427,7 +427,7 @@ from torch.utils.data.sampler import SubsetRandomSampler
 # https://docs.dgl.ai/tutorials/blitz/5_graph_classification.html#sphx-glr-tutorials-blitz-5-graph-classification-py
 
 def gnn_train(data_list):
-    dataset = dgl_dataset.BigAlmaDataset(data_list)  #this seems to work!
+    dataset = dgl_dataset.BigAlmaDataset(data_list)
 
     num_examples = len(dataset)
     num_train = int(num_examples * 0.8)
