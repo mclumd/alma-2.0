@@ -101,7 +101,7 @@ def train(explosion_steps=50, num_steps=500, numeric_bits=3, model_name="test1",
 
     dgl_data = []
     new_dgl_dataset = False
-    new_dgl_dataset = True
+    # new_dgl_dataset = True
     if new_dgl_dataset:
         if "test1_kb.pl" in kb:
             subjects = ['a', 'b', 'distanceAt', 'distanceBetweenBoundedBy']
@@ -130,7 +130,9 @@ def train(explosion_steps=50, num_steps=500, numeric_bits=3, model_name="test1",
         res_lits = res_task_lits(prb[2])
         res_task_input = [x[:2] for x in res_tasks]
         network.save_batch(res_task_input, res_lits)
+        print("Network has {} samples, {} of which are positive".format(len(network.ybuffer), network.ypos_count))
 
+        temp = network.ybuffer
         g_data = dgl_dataset.AlmaDataset(network.Xbuffer, network.ybuffer)
         dgl_data.append(g_data)
 
@@ -181,6 +183,11 @@ def train(explosion_steps=50, num_steps=500, numeric_bits=3, model_name="test1",
                 res_task_input = [x[:2] for x in res_tasks]
                 #network.train_batch(res_task_input, res_lits)
                 network.save_batch(res_task_input, res_lits)
+
+                if not new_dgl_dataset:
+                    g_data = dgl_dataset.AlmaDataset(network.Xbuffer, network.ybuffer)
+                    dgl_data.append(g_data)
+
                 if idx >= next_clear:
                     print("Network has {} samples, {} of which are positive".format(len(network.ybuffer), network.ypos_count))
                     print("Cleaning network...")
@@ -429,9 +436,9 @@ def gnn_train(data_list):
     test_sampler = SubsetRandomSampler(torch.arange(num_train, num_examples))
 
     train_dataloader = GraphDataLoader(
-        dataset, sampler=train_sampler, batch_size=1, drop_last=False)
+        dataset, sampler=train_sampler, batch_size=5, drop_last=False)
     test_dataloader = GraphDataLoader(
-        dataset, sampler=test_sampler, batch_size=1, drop_last=False)
+        dataset, sampler=test_sampler, batch_size=5, drop_last=False)
 
     model = dgl_network.GCN(dataset.dim_nfeats, 16, dataset.gclasses)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
@@ -455,9 +462,12 @@ def gnn_train(data_list):
             num_tests = 0
             for batched_graph, labels in test_dataloader:
                 pred = model(batched_graph, batched_graph.ndata['feat'].float())
-                # try printing pred here?
+                t1, t2 = torch.max(pred, 1)
                 num_correct += (pred.argmax(1) == labels).sum().item()
                 num_tests += len(labels)
+
+                # pred[x] = [confidence class == 0, confidence class == 1] for sample x
+                # t2[x] == binary prediction for sample x, t1[x] == magnitude of confidence value for prediction made in t2 on sample x
 
             print('GCN accuracy at', "{:.2f}".format(i/len(train_dataloader)*100), "% of training", ':', num_correct / num_tests)
             print('Loss:', tloss)
