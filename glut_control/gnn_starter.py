@@ -28,7 +28,7 @@ test_params = {
     'explosion_size': 1000,
     'alma_heap_print_size': 100
 }
-# alma_inst,res = alma.init(1,'test1_kb.pl', '0', 1, 1000, [], [])
+alma_inst,res = alma.init(1,'test1_kb.pl', '0', 1, 1000, [], [])
 # alma_inst,res = alma.init(1,'test2.pl', '0', 1, 1000, [], [])
 # alma_inst,res = alma.init(1,'test3.pl', '0', 1, 1000, [], [])
 # alma_inst,res = alma.init(1,'test4.pl', '0', 1, 1000, [], [])
@@ -406,15 +406,17 @@ def main():
     print("-"*80)
     print("Now training GCN:")
     print("-" * 80)
-    gnn_train(dgl_data)
+    gnn = gnn_train(dgl_data)
+    print("-"*80)
+    print("Now testing GCN:")
+    print("-"*80)
+    res = gnn_test(gnn, use_net, args.explosion_steps, args.testing_reasoning_steps, args.heap_print_size,
+               args.prb_print_size, args.numeric_bits,
+               heap_print_freq=1, prb_threshold=args.prb_threshold, use_gnn=args.gnn, kb=args.kb,
+               gnn_nodes=args.gnn_nodes, initial_test=False)
+    print("Final result is", res)
+    print("Final number is", len(res))
 
-
-
-
-
-def dgl_test(X, Y):
-    GNN = dgl_dataset.AlmaDataset(X, Y)
-    return
 
 import torch
 import torch.nn as nn
@@ -443,13 +445,15 @@ def gnn_train(data_list):
     model = dgl_network.GCN(dataset.dim_nfeats, 16, dataset.gclasses)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 
-    for epoch in range(5):
+    for epoch in range(1):
         print("="*80)
         print("GCN epoch ", epoch, ":")
         i = 0
         for batched_graph, labels in train_dataloader:
             # print("Batched Graph ", i)
             i += 1
+            if i > 150:
+                break
             pred = model(batched_graph, batched_graph.ndata['feat'].float())
             # loss = F.binary_cross_entropy(pred, labels)
             loss = F.cross_entropy(pred, labels)
@@ -501,7 +505,124 @@ def gnn_train(data_list):
 
     # print('GCN accuracy:', num_correct / num_tests)
 
-    return
+    return model
+
+
+def gnn_test(network, network_priors, exp_size=10, num_steps=500, alma_heap_print_size=100, prb_print_size=30, numeric_bits=10, heap_print_freq=10, prb_threshold=-1, use_gnn = False, kb='/home/justin/alma-2.0/glut_control/test1_kb.pl', gnn_nodes=2000, initial_test=False):
+    global alma_inst,res
+    alma_inst,res = alma.init(1,kb, '0', 1, 1000, [], [])
+    dbb_instances = []
+    exp = explosion(exp_size, kb)
+    res_tasks = exp[0]
+    if len(res_tasks) == 0:
+        return []
+    res_lits = res_task_lits(exp[2])
+    #subjects = ['a0', 'a1', 'b0', 'b1']
+    # Compute initial subjects.  We want 'a','b' and first 8K integers in each of three places
+    subjects = []
+    if "test1_kb.pl" in kb and not use_gnn:
+        for place in range(3):
+            for cat_subj in ['a', 'b']:
+                subjects.append("{}/{}".format(cat_subj, place))
+            for num_subj in range(2 ** numeric_bits):
+                subjects.append("{}/{}".format(num_subj, place))
+    # for place in range(3):
+    #     for cat_subj in ['a', 'b']:
+    #         subjects.append("{}/{}".format(cat_subj, place))
+    #     for num_subj in range(2**numeric_bits):
+    #         subjects.append("{}/{}".format(num_subj, place))
+
+    if "test1_kb.pl" in kb:
+        subjects = ['a', 'b', 'distanceAt', 'distanceBetweenBoundedBy']
+    elif "january_preglut.pl" in kb:
+        subjects = ["a{}".format(x) for x in range(exp_size)]
+    elif "qlearning1.pl" in kb:
+        subjects = ['f', 'g', 'a']
+    # elif "ps_test_search.pl" in kb:
+
+    res_task_input = [ x[:2] for x in res_tasks]
+    if network_priors:
+        temp_network = resolution_prebuffer.res_prebuffer(subjects, [], use_gnn=use_gnn, gnn_nodes=gnn_nodes)
+        X = temp_network.vectorize(res_task_input)
+        Y = np.zeros(len(X)) # filler data, labels don't matter
+        dataset = dgl_dataset.AlmaDataset(X, Y)
+
+        test_sampler = SubsetRandomSampler(torch.arange(0, len(dataset)))
+        test_dataloader = GraphDataLoader(
+            dataset, sampler=test_sampler, batch_size=len(dataset), drop_last=False)
+
+        for batched_graph, labels in test_dataloader:
+            pred = network(batched_graph, batched_graph.ndata['feat'].float())
+            t1, t2 = torch.max(pred, 1)
+            # t2[x] == binary prediction for sample x, t1[x] == magnitude of confidence value for prediction made in t2 on sample x
+            priorities = np.zeros(len(X))
+            for i in range(len(priorities)):
+                priorities[i] = 1 - pred[i][1]
+    else:
+        priorities = np.random.uniform(size=len(res_task_input))
+
+    alma.set_priors_prb(alma_inst, priorities.flatten().tolist())
+    alma.prb_to_res_task(alma_inst, prb_threshold)
+
+    #print("prb: ", alma.prebuf(alma_inst))
+    kb = alma.kbprint(alma_inst)[0]
+    print("kb: ")
+    for s in kb.split('\n'):
+        print(s)
+    for idx in range(num_steps):
+        prb = alma.prebuf(alma_inst)[0]
+        if (idx % heap_print_freq == 0):
+            print("Step: ", idx)
+            print("prb size: ", len(prb))
+            for fmla in prb:
+                print(fmla)
+            print("\n"*3)
+            print("KB:")
+            for fmla in alma.kbprint(alma_inst)[0].split('\n'):
+                print(fmla)
+                if ': distanceBetweenBoundedBy' in fmla:
+                    dbb_instances.append(fmla)
+            print("DBB {}: {}".format(idx, len(dbb_instances)))
+
+            rth = alma.res_task_buf(alma_inst)
+            print("Heap:")
+            print("HEAP size {}: {} ".format(idx, len(rth[1].split('\n')[:-1])))
+            for i, fmla in enumerate(rth[1].split('\n')[:-1]):
+                pri = rth[0][i][-1]
+                print("i={}:\t{}\tpri={}".format(i, fmla, pri))
+                if i >  alma_heap_print_size:
+                    break
+            print("-"*80)
+
+        if len(prb) > 0:
+            res_task_input = [x[:2] for x in prb]
+
+            if network_priors:
+                temp_network = resolution_prebuffer.res_prebuffer(subjects, [], use_gnn=use_gnn, gnn_nodes=gnn_nodes)
+                X = temp_network.vectorize(res_task_input)
+                Y = np.zeros(len(X))  # filler data, labels don't matter
+                dataset = dgl_dataset.AlmaDataset(X, Y)
+
+                test_sampler = SubsetRandomSampler(torch.arange(0, len(dataset)))
+                test_dataloader = GraphDataLoader(
+                    dataset, sampler=test_sampler, batch_size=len(dataset), drop_last=False)
+
+                for batched_graph, labels in test_dataloader:
+                    pred = network(batched_graph, batched_graph.ndata['feat'].float())
+                    t1, t2 = torch.max(pred, 1)
+                    # t2[x] == binary prediction for sample x, t1[x] == magnitude of confidence value for prediction made in t2 on sample x
+                    priorities = np.zeros(len(X))
+                    for i in range(len(priorities)):
+                        priorities[i] = 1 - pred[i][1]
+
+            else:
+                np.random.uniform(size=len(res_task_input))
+
+            alma.set_priors_prb(alma_inst, priorities.flatten().tolist())
+            alma.prb_to_res_task(alma_inst, prb_threshold)
+        #alma.add(alma_inst, "distanceAt(a, {}, {}).".format(idx, idx))
+        alma.astep(alma_inst)
+    return dbb_instances
 
 
 
