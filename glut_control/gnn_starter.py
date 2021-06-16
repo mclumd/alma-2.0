@@ -445,7 +445,7 @@ def gnn_train(data_list):
     model = dgl_network.GCN(dataset.dim_nfeats, 16, dataset.gclasses)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 
-    for epoch in range(1):
+    for epoch in range(5):
         print("="*80)
         print("GCN epoch ", epoch, ":")
         i = 0
@@ -475,6 +475,10 @@ def gnn_train(data_list):
 
             print('GCN accuracy at', "{:.2f}".format(i/len(train_dataloader)*100), "% of training", ':', num_correct / num_tests)
             print('Loss:', tloss)
+
+            if num_correct / num_tests > 0.99 and tloss < 0.01:
+                print("good GCN, returning early")
+                return model
 
             show_errors = False
             # show_errors = True
