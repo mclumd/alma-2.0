@@ -74,7 +74,9 @@ belief_test.py [-h] -b BASE -d DIR -a AXIOM_COUNT
 
 Arguments:
 `-b BASE, --base BASE` Base axiom file
+
 `-d DIR, --dir DIR` .pl and .txt directory
+
 `-a AXIOM_COUNT, --axiom_count AXIOM_COUNT` Base axiom count
 
 The directory provided should contain a subdirectory `almafiles` with .pl files, and a subdirectory `expected` with .txt files of expected steady-state beliefs.

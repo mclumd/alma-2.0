@@ -294,7 +294,7 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time,
   if (ancestor_copy->type == QUOTE && ancestor_copy->quote->type == CLAUSE &&
       descendant_copy->type == QUOTE && descendant_copy->quote->type == CLAUSE) {
     if (alma->verbose) {
-      tee_alt("Performing ancestor on \"", alma, NULL);
+      tee_alt("Performing ancestor proc on descendant \"", alma, NULL);
       clause_print(alma, descendant_copy->quote->clause_quote, NULL);
       tee_alt("\" for ancestor \"", alma, NULL);
       clause_print(alma, ancestor_copy->quote->clause_quote, NULL);
