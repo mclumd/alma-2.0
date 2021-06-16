@@ -39,12 +39,9 @@ fif(and(contradicting(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
     and(pos_int(quote(fif(and(rel(`Kind_a, Obj), rel(`Prop_a, Obj)), rel(`Pred, Obj)))),
     and(rel(Kind_b, Obj),
     and(rel(Prop_b, Obj),
-    ancestor(quote(fif(and(rel(`Kind_b, Obj), rel(`Prop_b, Obj)), rel(`Pred, Obj))), quote(rel(`Pred, `Obj)), T)))))))),
+    and(ancestor(quote(fif(and(rel(`Kind_b, Obj), rel(`Prop_b, Obj)), rel(`Pred, Obj))), quote(rel(`Pred, `Obj)), T),
+    not_equal(quote(fif(and(rel(`Kind_a, Obj), rel(`Prop_a, Obj)), rel(`Pred, Obj))), quote(fif(and(rel(`Kind_b, Obj), rel(`Prop_b, Obj)), rel(`Pred, Obj)))))))))))),
 and(update(quote(fif(and(rel(`Kind_a, Obj), rel(`Prop_a, Obj)), not(rel(`Pred, Obj)))), quote(fif(and(rel(`Kind_a, Obj), and(rel(`Prop_a, Obj), neg_int(quote(abnormal(`Obj, ``Kind_a, ``Pred))))), not(rel(`Pred, Obj))))),
 and(reinstate(quote(rel(`Pred, `Obj)), T),
 and(fif(and(rel(Kind_a, Ab_Obj), and(not(rel(Prop_a, Ab_Obj)), rel(Pred, Ab_Obj))), abnormal(Ab_Obj, Kind_a, Pred)),
 fif(and(abnormal(Ab, Kind_a, Pred), not(rel(Pred, Ab))), distrust(quote(abnormal(`Ab, `Kind_a, `Pred)))))))).
-
-% To deal with this premise when adding new proc...
-    %not_equal(quote(fif(and(rel(`Kind_a, Obj), rel(`Prop_a, Obj)), rel(`Pred, Obj))), quote(fif(and(rel(`Kind_b, Obj), rel(`Prop_b, Obj)), rel(`Pred, Obj)))))))))))),
-

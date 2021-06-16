@@ -513,6 +513,40 @@ static int quote_cons(alma_term *to_quote, alma_variable *result, binding_list *
   return 1;
 }
 
+// not_equal(A, B) returns true if A and B with bindings substituted are not identical clause quotes
+static int not_equal(alma_term *arg1, alma_term *arg2, binding_list *bindings, kb *alma) {
+  // Create copies and substitute based on bindings available
+  alma_term *arg1_copy = malloc(sizeof(*arg1_copy));
+  copy_alma_term(arg1, arg1_copy);
+  subst_term(bindings, arg1_copy, 0);
+
+  alma_term *arg2_copy = malloc(sizeof(*arg2_copy));
+  copy_alma_term(arg2, arg2_copy);
+  subst_term(bindings, arg2_copy, 0);
+
+  int not_equal = 1;
+  if (arg1_copy->type == QUOTE && arg1_copy->quote->type == CLAUSE &&
+      arg2_copy->type == QUOTE && arg2_copy->quote->type == CLAUSE) {
+    if (alma->verbose) {
+      tee_alt("Testing not-equal on \"", alma, NULL);
+      clause_print(alma, arg1_copy->quote->clause_quote, NULL);
+      tee_alt("\" and \"", alma, NULL);
+      clause_print(alma, arg2_copy->quote->clause_quote, NULL);
+      tee_alt("\"\n", alma, NULL);
+    }
+
+    not_equal = clauses_differ(arg1_copy->quote->clause_quote, arg2_copy->quote->clause_quote);
+  }
+
+  free_term(arg1_copy);
+  free(arg1_copy);
+  free_term(arg2_copy);
+  free(arg2_copy);
+
+  return not_equal;
+}
+
+
 // If proc is a valid procedure, runs and returns truth value
 int proc_run(alma_function *proc, binding_list *bindings, kb *alma) {
   // Each procedure has optional extra argument for bound constraint
@@ -562,6 +596,10 @@ int proc_run(alma_function *proc, binding_list *bindings, kb *alma) {
         && proc->terms[0].type == VARIABLE && proc->terms[1].type == VARIABLE
         && !bindings_contain(bindings, proc->terms[1].variable))
       return quote_cons(proc->terms+0, (proc->terms+1)->variable, bindings, alma);
+  }
+  else if (strcmp(proc->name, "not_equal") == 0) {
+    if (proc->term_count == 2)
+      return not_equal(proc->terms+0, proc->terms+1, bindings, alma);
   }
   return 0;
 }

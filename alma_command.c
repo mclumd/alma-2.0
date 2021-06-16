@@ -71,8 +71,9 @@ void kb_init(kb **collection, char **files, int file_count, char *agent, char *t
   tommy_array_init(&collec->retire_set);
   tommy_array_init(&collec->retire_parents);
 
-  const alma_proc procs[11] = {{"neg_int", 1}, {"neg_int_spec", 1}, {"neg_int_gen", 1}, {"pos_int", 1}, {"pos_int_spec", 1},
-                   {"pos_int_gen", 1}, {"acquired", 2}, {"ancestor", 3}, {"non_ancestor", 3}, {"less_than", 2}, {"quote_cons", 2}};
+  const alma_proc procs[12] = {{"neg_int", 1}, {"neg_int_spec", 1}, {"neg_int_gen", 1}, {"pos_int", 1}, {"pos_int_spec", 1},
+                   {"pos_int_gen", 1}, {"acquired", 2}, {"ancestor", 3}, {"non_ancestor", 3}, {"less_than", 2}, {"quote_cons", 2},
+                   {"not_equal", 2}};
   memcpy(collec->procs, procs, sizeof(procs));
 
   parse_init();
