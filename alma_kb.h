@@ -54,8 +54,14 @@ typedef struct kb {
 
   int idling; // Boolean for idle KB state, from lack of tasks to advance
   tommy_array new_clauses; // Clauses to be permanently added when next step
-  tommy_array distrusted; // Root clauses distusted when stepping in last step
-  tommy_array distrust_parents; // Formula as parent to use for distrust() instance created from corresponding clause in distrusted
+
+  tommy_array distrust_set; // Root clauses distrusted when stepping in last step
+  tommy_array distrust_parents; // Formulas as parents to use for distrusted() instances created from corresponding clauses
+  tommy_array handle_set; // Contra clauses handled when stepping in last step
+  tommy_array handle_parents; // Formulas as parents to use for handled() instances created from corresponding clauses
+  tommy_array retire_set; // Root clauses retired when stepping in last step
+  tommy_array retire_parents; // Formulas as parents to use for retired() instance created from corresponding clauses
+
 
   tommy_list clauses; // Linked list storing index_mappings, keeps track of all clauses
   tommy_hashlin index_map; // Maps index value to a clause

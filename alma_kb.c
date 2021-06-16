@@ -1452,6 +1452,10 @@ static void distrust_recursive(kb *collection, clause *c, clause *contra, kb_str
   }
 }
 
+static void retire_recursive(kb *collection, clause *c, clause *contra, kb_str *buf) {
+  // TODO: appropriate retired-handling code to recurse through clause and descendants as needed
+}
+
 static void binding_subst(binding_list *target, binding_list *theta) {
   for (int i = 0; i < target->num_bindings; i++)
     subst_term(theta, target->list[i].term, 0);
@@ -1616,9 +1620,9 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
               set_variable_ids(contradicting, 1, 0, NULL, collection);
               tommy_array_insert(&collection->new_clauses, contradicting);
 
-              tommy_array_insert(&collection->distrusted, current_task->x);
+              tommy_array_insert(&collection->distrust_set, current_task->x);
               tommy_array_insert(&collection->distrust_parents, contra);
-              tommy_array_insert(&collection->distrusted, current_task->y);
+              tommy_array_insert(&collection->distrust_set, current_task->y);
               tommy_array_insert(&collection->distrust_parents, contra);
             }
           }
@@ -1700,7 +1704,7 @@ static void handle_distrust(kb *collection, clause *distrust, kb_str *buf) {
 
           // Distrust each match found
           if (quote_term_unify(lit->terms[0].quote, q, theta)) {
-            tommy_array_insert(&collection->distrusted, ith);
+            tommy_array_insert(&collection->distrust_set, ith);
             tommy_array_insert(&collection->distrust_parents, distrust);
           }
           cleanup_bindings(theta);
@@ -1785,10 +1789,8 @@ void process_new_clauses(kb *collection, kb_str *buf) {
 
                           // Contradicting() formula found with argument matching reinstate arg; mark this contradiction as handled
                           if (quote_term_unify(con->pos_lits[0]->terms[contra_arg].quote, q, contra_theta)) {
-                            con->handled = collection->time;
-                            clause *handled = make_meta_literal(collection, "handled", con, collection->time);
-                            init_single_parent(handled, c);
-                            tommy_array_insert(&collection->new_clauses, handled);
+                            tommy_array_insert(&collection->handle_set, con);
+                            tommy_array_insert(&collection->handle_parents, c);
                           }
                           cleanup_bindings(contra_theta);
                         }
@@ -1837,7 +1839,7 @@ void process_new_clauses(kb *collection, kb_str *buf) {
                   set_variable_ids(update_clause, 1, 0, NULL, collection);
                   tommy_array_insert(&collection->new_clauses, update_clause);
 
-                  tommy_array_insert(&collection->distrusted, jth);
+                  tommy_array_insert(&collection->distrust_set, jth);
                   tommy_array_insert(&collection->distrust_parents, c);
                 }
                 cleanup_bindings(theta);
@@ -1894,19 +1896,42 @@ void process_new_clauses(kb *collection, kb_str *buf) {
       tommy_array_set(&collection->new_clauses, i, NULL);
     }
   }
-
   tommy_array_done(&collection->new_clauses);
   tommy_array_init(&collection->new_clauses);
 
-  for (tommy_size_t i = 0; i < tommy_array_size(&collection->distrusted); i++) {
-    clause *c = tommy_array_get(&collection->distrusted, i);
+  // Alter flag and make distrusted() formula for those newly distrusted, as well as distrusted descendants
+  for (tommy_size_t i = 0; i < tommy_array_size(&collection->distrust_set); i++) {
+    clause *c = tommy_array_get(&collection->distrust_set, i);
     clause *parent = tommy_array_get(&collection->distrust_parents, i);
     distrust_recursive(collection, c, parent, buf);
   }
-
-  tommy_array_done(&collection->distrusted);
-  tommy_array_init(&collection->distrusted);
+  tommy_array_done(&collection->distrust_set);
+  tommy_array_init(&collection->distrust_set);
   tommy_array_done(&collection->distrust_parents);
   tommy_array_init(&collection->distrust_parents);
 
+  // Alter flag and make handled() formula for those newly handled
+  for (tommy_size_t i = 0; i < tommy_array_size(&collection->handle_set); i++) {
+    clause *c = tommy_array_get(&collection->handle_set, i);
+    clause *parent = tommy_array_get(&collection->handle_parents, i);
+    c->handled = collection->time;
+    clause *handled = make_meta_literal(collection, "handled", c, collection->time);
+    init_single_parent(handled, parent);
+    tommy_array_insert(&collection->new_clauses, handled);
+  }
+  tommy_array_done(&collection->handle_set);
+  tommy_array_init(&collection->handle_set);
+  tommy_array_done(&collection->handle_parents);
+  tommy_array_init(&collection->handle_parents);
+
+  // Alter flag and make retired() formula for those newly retired, as well as retired descendants
+  for (tommy_size_t i = 0; i < tommy_array_size(&collection->distrust_set); i++) {
+    clause *c = tommy_array_get(&collection->retire_set, i);
+    clause *parent = tommy_array_get(&collection->retire_parents, i);
+    retire_recursive(collection, c, parent, buf);
+  }
+  tommy_array_done(&collection->retire_set);
+  tommy_array_init(&collection->retire_set);
+  tommy_array_done(&collection->retire_parents);
+  tommy_array_init(&collection->retire_parents);
 }

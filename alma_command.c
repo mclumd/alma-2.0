@@ -50,6 +50,7 @@ void kb_init(kb **collection, char **files, int file_count, char *agent, char *t
   collec->idling = 0;
   collec->variable_id_count = 0;
   collec->next_index = 0;
+
   tommy_array_init(&collec->new_clauses);
   tommy_list_init(&collec->clauses);
   tommy_hashlin_init(&collec->index_map);
@@ -58,11 +59,17 @@ void kb_init(kb **collection, char **files, int file_count, char *agent, char *t
   tommy_hashlin_init(&collec->neg_map);
   tommy_list_init(&collec->neg_list);
   tommy_hashlin_init(&collec->fif_map);
+
   tommy_array_init(&collec->res_tasks);
   tommy_hashlin_init(&collec->fif_tasks);
   tommy_list_init(&collec->backsearch_tasks);
-  tommy_array_init(&collec->distrusted);
+
+  tommy_array_init(&collec->distrust_set);
   tommy_array_init(&collec->distrust_parents);
+  tommy_array_init(&collec->handle_set);
+  tommy_array_init(&collec->handle_parents);
+  tommy_array_init(&collec->retire_set);
+  tommy_array_init(&collec->retire_parents);
 
   const alma_proc procs[11] = {{"neg_int", 1}, {"neg_int_spec", 1}, {"neg_int_gen", 1}, {"pos_int", 1}, {"pos_int_spec", 1},
                    {"pos_int_gen", 1}, {"acquired", 2}, {"ancestor", 3}, {"non_ancestor", 3}, {"less_than", 2}, {"quote_cons", 2}};
@@ -269,8 +276,12 @@ void kb_halt(kb *collection) {
     free_clause(tommy_array_get(&collection->new_clauses, i));
   tommy_array_done(&collection->new_clauses);
 
-  tommy_array_done(&collection->distrusted);
+  tommy_array_done(&collection->distrust_set);
   tommy_array_done(&collection->distrust_parents);
+  tommy_array_done(&collection->handle_set);
+  tommy_array_done(&collection->handle_parents);
+  tommy_array_done(&collection->retire_set);
+  tommy_array_done(&collection->retire_parents);
 
   tommy_node *curr = tommy_list_head(&collection->clauses);
   while (curr) {
