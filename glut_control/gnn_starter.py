@@ -452,8 +452,8 @@ def gnn_train(data_list):
         for batched_graph, labels in train_dataloader:
             # print("Batched Graph ", i)
             i += 1
-            if i > 150:
-                break
+            # if i > 150:
+                # break
             pred = model(batched_graph, batched_graph.ndata['feat'].float())
             # loss = F.binary_cross_entropy(pred, labels)
             loss = F.cross_entropy(pred, labels)
