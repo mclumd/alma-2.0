@@ -360,7 +360,7 @@ STATIC void NAME(_destroy)(struct heap_name *heap) {
        //free_clause(current_res_task->y);
        // Not explicitly free pos and neg; guess they're part of x and y and
        // thus handled above.
-       free(current_res_task);
+       //free(current_res_task);
      }
      //fprintf(stderr, "free RTHD");
      // if (current_item) free(current_item);  // Free current item if not NULL; this may not work.

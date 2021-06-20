@@ -2,6 +2,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 
+
+
 def twoDplots1():
     eps = [25000*i for i in range(8)]
 
@@ -244,46 +246,107 @@ alma_inst, res = alma.init(1,kb, '0', 1, 1000, [], [])
                         1023, 1024, 1025, 1026, 1027, 1028, 1029, 1030, 1031, 1032, 1033,
                         1034, 1035, 1036, 1037]
     #fig, axs = plt.subplots(2,4)
-    plt.plot(list(range(1, 11)), rewards10, label = 'Reward', marker='.')
-    plt.xlabel("Step")
-    plt.ylabel("Reward")
-    plt.title("Rewards Over 10 Reasoning Steps")
-    # for i in range(8):
-    #     row = i // 4
-    #     col = i % 4
-    #     axs[row, col].plot(r[i], marker=".", label = "Epoch {}".format(i))
-    #     axs[row, col].plot(rideal, marker=".", label = "Greedy Policy")
-    #     axs[row, col].set_xlabel("Step")
-    #     axs[row, col].set_ylabel("Reward")
-    #     axs[row, col].legend()
-    # fig.suptitle("Rewards Per Step After Training Epochs (vs Greedy Rewards)", fontsize=16)
-    #plt.legend()    
-    plt.show()
-    plt.clf()
+    # plt.plot(list(range(1, 11)), rewards10, label = 'Reward', marker='.')
+    # plt.xlabel("Step")
+    # plt.ylabel("Reward")
+    # plt.title("Rewards Over 10 Reasoning Steps")
+    # plt.show()
+    # plt.clf()
     
-    plt.plot(list(range(1, 1025)), rewards1024, label = 'Reward', marker='.')
-    plt.xlabel("Step")
-    plt.ylabel("Reward")
-    plt.title("Rewards Over 1024 Reasoning Steps")
-    plt.show()
+    # plt.plot(list(range(1, 1025)), rewards1024, label = 'Reward', marker='.')
+    # plt.xlabel("Step")
+    # plt.ylabel("Reward")
+    # plt.title("Rewards Over 1024 Reasoning Steps")
+    # plt.show()
+    # plt.clf()
+
+    # plt.plot(list(range(1, 1025)), heap_lengths1024, label = 'Heap Size', marker='.')
+    # plt.xlabel("Step")
+    # plt.ylabel("Number of Formulae")
+    # plt.title("Heap Size Over 1024 Reasoning Steps")
+    # plt.show()
     plt.clf()
 
-    plt.plot(list(range(1, 1025)), heap_lengths1024, label = 'Heap Size', marker='.')
-    plt.xlabel("Step")
-    plt.ylabel("Number of Formulae")
-    plt.title("Heap Size Over 1024 Reasoning Steps")
-    plt.show()
-    plt.clf()
-
-    for endpt in [3, 6, 11, 1024]:
-        domain = np.arange(1, endpt, dtype=np.float64)
+    for endpt in [11, 1023]:
+        domain = np.arange(1, endpt+1, dtype=np.float64)
         exp1024 = np.abs(np.power(2,domain))
-        #superexp1024 = np.power(2, exp1024)
-        plt.plot(domain, np.log2(np.array(heap_lengths1024[1:endpt])), label = 'Heap Size', marker='.')
+        superexp1024 = np.power(2, exp1024)
+        plt.plot(domain, np.log2(np.array(heap_lengths1024[1:endpt+1])), label = 'Heap Size', marker='.')
+        #plt.plot(domain, np.array(heap_lengths1024[1:endpt+1]), label = 'Heap Size', marker='.')
         plt.plot(domain, exp1024, label = 'Doubly Exponential (2^(2^n))', marker='.')
+        #plt.plot(domain, superexp1024, label = 'Doubly Exponential (2^(2^n))', marker='.')
         plt.xlabel("Step")
-        plt.ylabel("Number of Formulae (Log2 Scale)")
-        plt.title("Heap Size Over {} Reasoning Steps".format(endpt-1))
+        plt.ylabel(" $\log_2$ of the Number of Formulae")
+        #plt.yscale('log', basey=2)
+        #plt.xscale('log', basex=2)
+        #plt.yticks(domain, ["$2^{{ {} }}".format(x) for x in domain])
+        #plt.yticks(np.arange(1, 2**(2**(endpt+1)), 2**(2**(endpt+1))//5, dtype=np.float64), ["$2^{{ {} }}".format(x) for x in np.arange(1, endpt+1, endpt//5)])
+        #plt.yticks(superexp1024[1:endpt+1])
+        
+        #plt.yticks(["$2^{{ {} }} $".format(x) for x in np.arange(1, endpt+1, endpt//5)])
+        #plt.yticks(np.arange(endpt-1), ["$2^{{ {} }} $".format(x) for x in domain])
+        #plt.yticks(np.arange(5), ["$2^{{ {} }} $".format(x) for x in domain])
+        plt.title("Heap Size Over {} Reasoning Steps".format(endpt+1))
         plt.legend()
         plt.show()
         plt.clf()
+
+
+def load_bookshelf():
+    import os
+    import random
+    import numpy as np
+    import itertools
+    import pickle
+    import gc
+    from importlib import reload
+    import alma, alma_utils
+    import argparse
+    import rl_utils, rl_dataset
+    #import resolution_prebuffer as rpb
+    from rpb_dqn import rpb_dqn, get_rewards_test1, get_rewards_test3, get_bookshelf_rewards
+    import time
+
+    subjects = [ 'isA', 'bookshelf', 'contains', 'book', 'sequel',
+                 'prequel', 'thisShelf', 'furniture', 'table',
+                 'legs', 'affords', 'sitting', 'placing',
+                 'desire', 'find', 'myNovel', 'lookFor']
+    max_reward = 1
+    network = rpb_dqn(0, subjects, [], use_gnn=True)
+    network.reward_fn = get_rewards_test3
+    model_name='bookshelf_reuse_ckpt18400'
+    network.model_load(model_name)
+    self = network
+    id_str=model_name
+
+    pkl_file = open(os.path.join(model_prefix, "rpb_dqn_model_{}.pkl".format(id_str)), "rb")
+    (self.subjects, self.words, self.num_subjects, self.num_words, self.subjects_dict, self.words_dict,
+             self.batch_size, self.use_tf, self.seed, self.gamma, self.epsilon, self.eps_min, self.eps_max,
+             self.batch_size, self.max_gnn_nodes, self.max_reward) = pickle.load(pkl_file)
+    from vectorization import graph_representation
+    self.graph_rep = graph_representation(self.subjects, self.max_gnn_nodes)
+    self.current_model.model = keras.models.load_model(os.path.join(model_prefix, "rpb_dqn_current_model_{}".format(id_str)))
+    self.target_model.model = keras.models.load_model(os.path.join(model_prefix, "rpb_dqn_target_model_{}".format(id_str)))
+    import rl_utils
+    from resolution_prebuffer import res_prebuffer, gnn_model, gnn_model_zero
+    import numpy as np
+    from rl_dataset import simple_graph_dataset
+    from spektral.data import DisjointLoader
+    from tensorflow import keras
+    import tensorflow as tf
+    import pickle
+    import datetime
+    import os
+
+    self.graph_rep = graph_representation(self.subjects, self.max_gnn_nodes)
+    self.current_model.model = keras.models.load_model(os.path.join(model_prefix, "rpb_dqn_current_model_{}".format(id_str)))
+    self.target_model.model = keras.models.load_model(os.path.join(model_prefix, "rpb_dqn_target_model_{}".format(id_str)))
+
+
+    import alma
+    kb = 'bookshelf1.pl'
+
+    alma_inst, res = alma.init(1,kb, '0', 1, 1000, [], [])
+
+    import rl_utils
+    return rl_utils.play_episode(network, alma_inst, 100)

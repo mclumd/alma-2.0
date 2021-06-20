@@ -7,7 +7,6 @@
 #include "alma_kb.h"
 #include "alma_print.h"
 #include "tommy.h"
-//#include "py_import_call_execute.h"
 
 #if PY_MAJOR_VERSION >= 3
 #define PY3
@@ -18,7 +17,7 @@
 #include "tommy.h"
 
 //#define LOG(...) fprintf(stderr, __VA_ARGS__)
-#define LOG(...) 
+#define LOG(...)
 
 extern char python_mode;
 extern char logs_on;
@@ -34,16 +33,16 @@ static PyObject * clause_to_pyobject(kb *collection, clause *c);
 static PyObject * alma_init(PyObject *self, PyObject *args);
 
 /*  Some notes on memroy management:
-    1.  Py_BuildValue copies strings before placing them into Python objects.  So it's not enough to free the original object, we also need to free the Python object.   
+    1.  Py_BuildValue copies strings before placing them into Python objects.  So it's not enough to free the original object, we also need to free the Python object.
         (source:  https://docs.python.org/3/c-api/arg.html)
-    2.  Python methods which create Python objects will set the reference count to 1.  It is up to whoever owns the reference to decrement the reference count.  
+    2.  Python methods which create Python objects will set the reference count to 1.  It is up to whoever owns the reference to decrement the reference count.
         (source:  https://pythonextensionpatterns.readthedocs.io/en/latest/refcount.html)
         a.  We might decrement the reference count from Python (maybe using del (?), or even just exiting from a function!)
 	b.  We might just keep track of all returned reference in a global variable and decrement them on halt.
 
 We'll go with 2a.   Some notes on reference counting (https://pythonextensionpatterns.readthedocs.io/en/latest/refcount.html):
    1.  References can be new, stolen or borrowed.
-   2.  The "contract":   
+   2.  The "contract":
 
    Type           Contract
 
@@ -80,7 +79,7 @@ static PyObject *alma_function_to_pyobject(kb *collection, alma_function *func) 
 
   /* DEBUG */
   //return temp;
-  
+
   LOG( "ckpt func1:  temp ref count = %ld\n", Py_REFCNT(temp));
   if (func->term_count > 0) {
     //tee_alt("(", collection, buf);
@@ -93,7 +92,7 @@ static PyObject *alma_function_to_pyobject(kb *collection, alma_function *func) 
       tmp2 = alma_term_to_pyobject(collection, func->terms + i);
 
 
-      
+
       //Py_INCREF(tmp2);
       LOG( "ckpt func2:  temp ref count = %ld\n", Py_REFCNT(temp));
       LOG( "ckpt func2:  tmp2 refcount = %ld\n", Py_REFCNT(tmp2));
@@ -104,7 +103,7 @@ static PyObject *alma_function_to_pyobject(kb *collection, alma_function *func) 
       LOG( "ckpt func4.25:  tmp2 refcount = %ld\n", Py_REFCNT(tmp2));
     }
     //    tee_alt(")", collection, buf);
-    } 
+    }
   LOG( "ckpt func4.5:  temp ref count = %ld \t func->name: %s\n", Py_REFCNT(temp), func->name);
   ret_val = Py_BuildValue("[s,s,O]","func",func->name,temp);
   LOG( "ckpt func5:  temp ref count = %ld\n", Py_REFCNT(temp));
@@ -124,7 +123,7 @@ static PyObject *clause_to_pyobject(kb *collection, clause *c) {
 
   LOG("co ckpt0\n");
 
-  
+
   if (c->tag == FIF) {
     ret_val = Py_BuildValue("[s]","fif");
     temp1 = Py_BuildValue("[]");
@@ -174,7 +173,7 @@ static PyObject *clause_to_pyobject(kb *collection, clause *c) {
       /* DEBUG ONLY */
       //return Py_BuildValue("[s]", "non_neg");
       /* REMOVE */
-      
+
       temp1 = lits_to_pyobject(collection, c->pos_lits, c->pos_count, "or", 0); //"\\/", 0);
 
       if (c->tag == BIF) {
@@ -198,8 +197,8 @@ static PyObject *clause_to_pyobject(kb *collection, clause *c) {
       ret_val = Py_BuildValue("[s,O,O]",c->tag == BIF? "bif" : "if",temp1,temp2);
       LOG( "ckp co4, temp1 refcount == %ld\n", Py_REFCNT(temp1));
       LOG( "ckp co4, temp2 refcount == %ld\n", Py_REFCNT(temp2));
-      Py_DECREF(temp1);  
-      Py_DECREF(temp2);  
+      Py_DECREF(temp1);
+      Py_DECREF(temp2);
       LOG( "ckp co5, temp1 refcount == %ld\n", Py_REFCNT(temp1));
       LOG( "ckp co5, temp2 refcount == %ld\n", Py_REFCNT(temp2));
     }
@@ -224,7 +223,7 @@ static PyObject *alma_quote_to_pyobject(kb *collection, alma_quote *quote) {
 
   ret_val = Py_BuildValue("[s,O]","quote",temp);
   // Py_DECREF(temp);   // temp's reference is stolen by ret_val
-  
+
   return ret_val;
 }
 
@@ -296,19 +295,19 @@ static PyObject *lits_to_pyobject(kb *collection, alma_function **lits, int coun
   PyObject *temp3 = NULL;
   int i;
 
-  assert(count > 0);  
+  assert(count > 0);
   // Returning early here fixes memory leak; issue is quite likely in this function. */
   if (count > 1)  {
     retval = Py_BuildValue("[s]",delimiter);
     temp1 = Py_BuildValue("[]");
     for (i = 0; i < count; i++) {
       temp2 = alma_function_to_pyobject(collection, lits[i]);
-      
+
       if (negate)
 	temp2 = Py_BuildValue("[s,O]","neg",temp2);
-      
+
       PyList_Append(temp1,temp2);
-      Py_DECREF(temp2); 
+      Py_DECREF(temp2);
     }
 
     PyList_Append(retval,temp1);
@@ -332,7 +331,7 @@ static PyObject *lits_to_pyobject(kb *collection, alma_function **lits, int coun
   
   temp1 = Py_BuildValue("[]");
 
-  /* 
+  /*
      What happens to temp1 if count==1?   temp1 will be the list [temp2] and retval will be NULL.
 
  */
@@ -343,7 +342,7 @@ static PyObject *lits_to_pyobject(kb *collection, alma_function **lits, int coun
       temp2 = Py_BuildValue("[s,O]","neg",temp2);
 
     PyList_Append(temp1,temp2);
-    Py_DECREF(temp2); 
+    Py_DECREF(temp2);
   }
 
 
@@ -695,7 +694,7 @@ static PyObject *alma_get_pre_res_task_buffer( PyObject *self, PyObject *args) {
 
   resolvent_lst  = Py_BuildValue("[]");
   collection = (kb *)alma_kb;
-  
+
 
   res_task *t;
 
@@ -740,11 +739,11 @@ static PyObject *alma_get_pre_res_task_buffer( PyObject *self, PyObject *args) {
     LOG( "tmp refs %ld \n", Py_REFCNT(tmp));
     Py_DECREF(tmp);
     LOG("x refs %ld \n---------------------------------------\n", Py_REFCNT(x));
-    LOG("y refs %ld \n---------------------------------------\n", Py_REFCNT(y)); 
-    LOG("tmp refs %ld \n---------------------------------------\n", Py_REFCNT(tmp)); 
+    LOG("y refs %ld \n---------------------------------------\n", Py_REFCNT(y));
+    LOG("tmp refs %ld \n---------------------------------------\n", Py_REFCNT(tmp));
 
 
-    
+
     i = i->next;
     LOG( " ckpt 4\n");
   }
@@ -756,7 +755,7 @@ static PyObject *alma_get_pre_res_task_buffer( PyObject *self, PyObject *args) {
   //strcpy(clauses_string, buf.buffer);
   //clauses_string[buf.size] = '\0';
 
-  
+
   result = Py_BuildValue("(O,O, s)",py_lst, resolvent_lst, buf.buffer);
   LOG( " resolvent_lst refs %ld \n", Py_REFCNT(resolvent_lst));
   Py_DECREF(resolvent_lst);
@@ -885,7 +884,7 @@ static PyObject * alma_update(PyObject *self, PyObject *args) {
   int len;
   long alma_kb;
   PyObject *result;
-  
+
   if (!PyArg_ParseTuple(args, "ls", &alma_kb, &input))
     return NULL;
 
@@ -918,7 +917,7 @@ static PyObject * alma_obs(PyObject *self, PyObject *args) {
   int len;
   long alma_kb;
   PyObject *result;
-  
+
   if (!PyArg_ParseTuple(args, "ls", &alma_kb, &input))
     return NULL;
 
@@ -952,7 +951,7 @@ static PyObject * alma_bs(PyObject *self, PyObject *args) {
   int len;
   long alma_kb;
   PyObject *result;
-  
+
   if (!PyArg_ParseTuple(args, "ls", &alma_kb, &input))
     return NULL;
 
@@ -1125,7 +1124,7 @@ static PyObject * alma_init(PyObject *self, PyObject *args) {
   }
 
 
-  /*    
+  /*
 static PyObject * alma_init(PyObject *self, PyObject *args) {
   int verbose, log_mode;
   PyObject *ret_val;
@@ -1178,7 +1177,7 @@ initalma(void)
 */
 
     /*
-     Replicate py_test_halt.py so that we can run through valgrind.   
+     Replicate py_test_halt.py so that we can run through valgrind.
      Can this run by linking to libpython?   Doesn't seem to work as expected...
    */
 
@@ -1203,10 +1202,10 @@ initalma(void)
   }
 
 
-  } 
+  }
 
 
   */
 
 
- 
+

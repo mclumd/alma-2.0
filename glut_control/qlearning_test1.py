@@ -19,7 +19,7 @@ import time
 import multiprocessing
 
 _use_mp = False
-_reuse_buffer = True
+_reuse_buffer = False
 
 test_params = {
     'explosion_size': 1000,
@@ -109,7 +109,12 @@ def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000,
         if (episode % train_interval == 0) and (episode > 0):
             if _reuse_buffer:
                 rb_backup = replay_buffer.copy()
-            rl_utils.replay_train(network, replay_buffer, exhaustive_training)
+            total_reward = np.sum(np.maximum(0, replay_buffer.rewards))
+            if total_reward > 0:
+                print("Training with total reward of {}".format(total_reward))
+                rl_utils.replay_train(network, replay_buffer, exhaustive_training)
+            else:
+                print("Total reward is 0")
             if episode % update_target_network_interval == 0:
                 print("Updating at: ", time.time() - start_time)
                 network.target_model.model.set_weights(network.current_model.model.get_weights())
@@ -182,7 +187,7 @@ def main():
     max_reward = 10000
     if args.kb == 'qlearning3.pl':
         subjects = ['a', 'loc', 'up', 'down', 'left', 'right']
-    elif "bookshelf1.pl" in args.kb:
+    elif ("bookshelf1.pl" in args.kb) or ("bookshelf2.pl" in args.kb):
         subjects = [ 'isA',
                      'bookshelf',
                      'contains',
