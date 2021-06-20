@@ -349,12 +349,12 @@ void kb_print(kb *collection, kb_str *buf) {
 
 
 void kb_print_res_heap(kb *collection, kb_str *buf) {
-  res_task_heap *res_tasks = &collection->res_tasks;
-  res_task_pri tp;
-  res_task *t;
-  int j = 0;
+  //res_task_heap *res_tasks = &collection->res_tasks;
+ // res_task_pri tp;
+//  res_task *t;
+//  int j = 0;
 
-  if ((res_tasks->count > 0)) {
+/*  if ((res_tasks->count > 0)) {
     tee("Begin RH---------------------------------------\n");
     tee("Resolution tasks.\n");
     tee("Heap count: %d\n\n", res_tasks->count);
@@ -367,7 +367,7 @@ void kb_print_res_heap(kb *collection, kb_str *buf) {
       tee_alt("\n", buf);
     }
   tee("End RH---------------------------------------\n");
-  }
+  }  */
   tee_alt("\n", buf);
   if (logs_on) {
     fflush(collection->almalog);

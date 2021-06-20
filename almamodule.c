@@ -292,7 +292,6 @@ static PyObject *alma_fol_to_pyobject(kb *collection, alma_node *node) {
 
 static PyObject *lits_to_pyobject(kb *collection, alma_function **lits, int count, char *delimiter, int negate) {
   PyObject *retval, *temp1, *temp2 = NULL;
-  PyObject *temp3 = NULL;
   int i;
 
   assert(count > 0);
