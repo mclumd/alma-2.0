@@ -185,11 +185,8 @@ int main(int argc, char **argv) {
       fflush(stdout);
 
       if (fgets(line, LINELEN, stdin) == NULL) {
-	tee("\nTracking resolutions is %d.  Line 168\n", rip.tracking_resolutions); fflush(stdout);
 	if (rip.tracking_resolutions==1) {
-	  tee("\nWriting resolution matrix (%d subjects, horizon==%d) ... ", alma_kb->num_subjects, rip.resolutions_horizon); fflush(stdout);
 	  write_resolution_matrix(alma_kb, alma_kb->num_subjects, rip.resolutions_horizon, rip.resolutions_file);
-	  tee("\ndone!\n");fflush(stdout);
 	}
 	kb_halt(alma_kb);
 	break;
@@ -216,12 +213,8 @@ int main(int argc, char **argv) {
 	  pre_res_buffer_to_heap(alma_kb, 0);
 	  tee_alt("Flushed pre resolution task buffer\n",alma_kb, NULL,counter);
 	} else if (strcmp(line, "halt") == 0) {
-	  tee("\nTracking resolutions is %d.  Line 190.\n", rip.tracking_resolutions); fflush(stdout);
 	  if (rip.tracking_resolutions == 1) {
-	    tee("\nWriting resolution matrix ... "); fflush(stdout);
-	    tee("\nWriting resolution matrix (%d subjects, horizon==%d) ... ", alma_kb->num_subjects, rip.resolutions_horizon); fflush(stdout);
 	    write_resolution_matrix(alma_kb, alma_kb->num_subjects, rip.resolutions_horizon, rip.resolutions_file);
-	    tee("\ndone!\n"); fflush(stdout);
 	  }
 	  kb_halt(alma_kb);
 	  break;
