@@ -343,7 +343,7 @@ void kb_print(kb *collection, kb_str *buf) {
   tee_alt("\n", collection, buf);
 
   if (logs_on) {
-    fflush(almalog);
+//    fflush(almalog);
   }
 }
 
@@ -398,7 +398,7 @@ void kb_halt(kb *collection) {
     free_clause(tommy_array_get(&collection->new_clauses, i));
   tommy_array_done(&collection->new_clauses);
 
-  tommy_array_done(collection->subject_list);
+  //tommy_array_done(collection->subject_list);
   //free(collection->subject_list);
 
   tommy_node *curr = tommy_list_head(&collection->clauses);
@@ -432,8 +432,11 @@ void kb_halt(kb *collection) {
    */
   res_task_heap_destroy(&collection->res_tasks);
 
-  //tommy_list_foreach(&(collection->pre_res_task_buffer), free);
+  tommy_list_foreach(&(collection->pre_res_task_buffer), free);
   //fprintf(stderr, "Destroyed res_task_heap.");
+
+
+  /*
 
   tommy_node *curr_pt;
   tommy_node *tmp_pt;
@@ -449,10 +452,14 @@ void kb_halt(kb *collection) {
     //free(PT->t->neg);
     free(PT->t);     // PT->t is a res_task
     free(PT);
-    tmp_pt = curr_pt->next;
-    //free(curr_pt);
-    curr_pt = tmp_pt;
-  }
+    if (curr_pt->next) {
+      tmp_pt = curr_pt->next;
+      //free(curr_pt);
+      curr_pt = tmp_pt;
+    } else {
+      curr_pt = NULL;
+    }
+    }  */
 
   //fprintf(stderr, "Freed pre_res_task buffer\n.");
 
