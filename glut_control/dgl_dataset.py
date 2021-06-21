@@ -66,6 +66,10 @@ class AlmaDataset(DGLDataset):
                         dst = np.append(dst, [x])
                     x += 1
                 y += 1
+            src = np.append(src, [0])
+            src = np.append(src, [50])
+            dst = np.append(dst, [50])
+            dst = np.append(dst, [0])
             label = self.Y[i]
             num_nodes = len(graph[0][0])
             # Create a graph and add it to the list of graphs and labels.

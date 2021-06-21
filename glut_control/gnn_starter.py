@@ -476,7 +476,7 @@ def gnn_train(data_list):
             print('GCN accuracy at', "{:.2f}".format(i/len(train_dataloader)*100), "% of training", ':', num_correct / num_tests)
             print('Loss:', tloss)
 
-            if num_correct / num_tests > 0.99 and tloss < 0.01:
+            if num_correct / num_tests > 0.97 and tloss < 0.001 and epoch > 1:
                 print("good GCN, returning early")
                 return model
 
