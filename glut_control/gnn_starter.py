@@ -446,6 +446,7 @@ def gnn_train(data_list):
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 
     for epoch in range(5):
+        minloss = math.inf
         print("="*80)
         print("GCN epoch ", epoch, ":")
         i = 0
@@ -479,6 +480,9 @@ def gnn_train(data_list):
             if num_correct / num_tests > 0.97 and tloss < 0.001 and epoch > 1:
                 print("good GCN, returning early")
                 return model
+
+            if tloss < minloss and num_correct / num_tests > .9:
+                dgl_network.save_gcn_model(model, "best_gcn_epoch" + epoch)
 
             show_errors = False
             # show_errors = True
