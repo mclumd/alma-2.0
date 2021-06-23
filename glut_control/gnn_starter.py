@@ -406,9 +406,9 @@ def main():
     print("-"*80)
     print("Now training GCN:")
     print("-" * 80)
-    gnn = gnn_train(dgl_data)
-    # dataset = dgl_dataset.BigAlmaDataset(dgl_data)
-    # gnn = dgl_network.load_gcn_model("best_gcn_epoch0", dataset.dim_nfeats, 16, dataset.gclasses)
+    # gnn = gnn_train(dgl_data)
+    dataset = dgl_dataset.BigAlmaDataset(dgl_data)
+    gnn = dgl_network.load_gcn_model("best_gcn_epoch0", dataset.dim_nfeats, 16, dataset.gclasses)
     print("-"*80)
     print("Now testing GCN:")
     print("-"*80)
@@ -631,7 +631,8 @@ def gnn_test(network, network_priors, exp_size=10, num_steps=500, alma_heap_prin
                     # t2[x] == binary prediction for sample x, t1[x] == magnitude of confidence value for prediction made in t2 on sample x
                     priorities = np.zeros(len(X))
                     for i in range(len(priorities)):
-                        priorities[i] = 1 - pred[i][1]
+                        priorities[i] = pred[i][1]  # activation val
+                        priorities[i] = 1 / (1 + np.exp(priorities[i]))  # sigmoid
 
             else:
                 np.random.uniform(size=len(res_task_input))
