@@ -407,6 +407,8 @@ def main():
     print("Now training GCN:")
     print("-" * 80)
     gnn = gnn_train(dgl_data)
+    # dataset = dgl_dataset.BigAlmaDataset(dgl_data)
+    # gnn = dgl_network.load_gcn_model("best_gcn_epoch0", dataset.dim_nfeats, 16, dataset.gclasses)
     print("-"*80)
     print("Now testing GCN:")
     print("-"*80)
@@ -454,8 +456,8 @@ def gnn_train(data_list):
         for batched_graph, labels in train_dataloader:
             # print("Batched Graph ", i)
             i += 1
-            # if i > 200:
-            #     break
+            if i > 150:
+                break
             pred = model(batched_graph, batched_graph.ndata['feat'].float())
             # loss = F.binary_cross_entropy(pred, labels)
             loss = F.cross_entropy(pred, labels)

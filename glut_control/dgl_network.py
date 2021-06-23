@@ -65,6 +65,7 @@ def save_gcn_model(model, model_name):
 def load_gcn_model(model_name, in_feats, h_feats, num_classes):
     model = torch.load(model_name + ".pt")
     model.eval()
+    return model
 
 
 
