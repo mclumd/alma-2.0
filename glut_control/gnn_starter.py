@@ -444,6 +444,7 @@ def gnn_train(data_list):
 
     model = dgl_network.GCN(dataset.dim_nfeats, 16, dataset.gclasses)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+    model.train()
 
     for epoch in range(5):
         minloss = math.inf
@@ -453,8 +454,8 @@ def gnn_train(data_list):
         for batched_graph, labels in train_dataloader:
             # print("Batched Graph ", i)
             i += 1
-            # if i > 150:
-                # break
+            # if i > 200:
+            #     break
             pred = model(batched_graph, batched_graph.ndata['feat'].float())
             # loss = F.binary_cross_entropy(pred, labels)
             loss = F.cross_entropy(pred, labels)
@@ -477,15 +478,15 @@ def gnn_train(data_list):
             print('GCN accuracy at', "{:.2f}".format(i/len(train_dataloader)*100), "% of training", ':', num_correct / num_tests)
             print('Loss:', tloss)
 
-            if num_correct / num_tests > 0.97 and tloss < 0.001 and epoch > 3:
-                print("good GCN, returning early")
-                model.eval()
-                return model
-
             if tloss < minloss and num_correct / num_tests > .9:
                 minloss = tloss
                 print("saving model")
                 dgl_network.save_gcn_model(model, "best_gcn_epoch" + str(epoch))
+
+            if num_correct / num_tests > 0.97 and tloss < 0.001 and epoch > 0:
+                print("good GCN, returning early")
+                model.eval()
+                return model
 
             show_errors = False
             # show_errors = True
@@ -569,7 +570,8 @@ def gnn_test(network, network_priors, exp_size=10, num_steps=500, alma_heap_prin
             # t2[x] == binary prediction for sample x, t1[x] == magnitude of confidence value for prediction made in t2 on sample x
             priorities = np.zeros(len(X))
             for i in range(len(priorities)):
-                priorities[i] = 1 - pred[i][1]
+                priorities[i] = pred[i][1]                      # activation val
+                priorities[i] = 1 / (1 + np.exp(priorities[i])) # sigmoid
     else:
         priorities = np.random.uniform(size=len(res_task_input))
 
