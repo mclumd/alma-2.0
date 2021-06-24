@@ -407,8 +407,8 @@ def main():
     print("Now training GCN:")
     print("-" * 80)
     # gnn = gnn_train(dgl_data)
-    dataset = dgl_dataset.BigAlmaDataset(dgl_data)
-    gnn = dgl_network.load_gcn_model("best_gcn_epoch0", dataset.dim_nfeats, 16, dataset.gclasses)
+    # dataset = dgl_dataset.BigAlmaDataset(dgl_data)
+    # gnn = dgl_network.load_gcn_model("returned_gcn", dataset.dim_nfeats, 16, dataset.gclasses)
     print("-"*80)
     print("Now testing GCN:")
     print("-"*80)
@@ -485,7 +485,7 @@ def gnn_train(data_list):
                 print("saving model")
                 dgl_network.save_gcn_model(model, "best_gcn_epoch" + str(epoch))
 
-            if num_correct / num_tests > 0.97 and tloss < 0.001 and epoch > 0:
+            if num_correct / num_tests > 0.97 and tloss < 0.001 and epoch > 3:
                 print("good GCN, returning early")
                 dgl_network.save_gcn_model(model, "returned_gcn")
                 model.eval()
