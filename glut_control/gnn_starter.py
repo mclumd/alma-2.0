@@ -485,7 +485,7 @@ def gnn_train(data_list):
                 print("saving model")
                 dgl_network.save_gnn_model(model, "best_gcn_epoch" + str(epoch))
 
-            if num_correct / num_tests > 0.97 and tloss < 0.001 and epoch > 0:
+            if num_correct / num_tests > 0.97 and tloss < 0.001 and epoch > 3:
                 print("good GCN, returning early")
                 dgl_network.save_gnn_model(model, "returned_gcn")
                 model.eval()
