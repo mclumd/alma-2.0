@@ -699,6 +699,7 @@ static void remove_res_tasks(kb *collection, clause *c) {
   dummy_task.res_task = malloc(sizeof(res_task));
   dummy_task.res_task->x = c;
 
+  //fprintf(stderr, "Called remove_res_tasks.\nNote that this code may cause a memory leak\n");
   while ( res_task_heap_delete(&collection->res_tasks, &dummy_task) ) res_task_heap_delete(&collection->res_tasks, &dummy_task);
   free(dummy_task.res_task);
 }
@@ -884,6 +885,7 @@ void remove_clause(kb *collection, clause *c, kb_str *buf) {
   //Remove any resolutions that involve c
 
   res_task_heap_clausal_delete( &(collection->res_tasks), c);
+  //fprintf(stderr, "free removeClause");
   free_clause(c);
 }
 
@@ -943,13 +945,14 @@ static int res_task_now(res_task *t) {
 }
 
 static void pre_res_task_buffer_add(tommy_list *pre_res_task_buffer, res_task *t, res_task_heap *tasks) {
-  struct pre_res_task *PT = malloc(sizeof(struct pre_res_task));
-  if ( res_task_now(t) ) {   // If this is a now() resolution, push it on with priority 0.
+  if ( res_task_now(t) ) {   // If this is a now() resolution, push it straight onto the res_task_heap with priority 0.
     res_task_pri *rtask = malloc(sizeof(*rtask));
     rtask->res_task = t;
     rtask->priority = 0;
     res_task_heap_push(tasks, rtask);
   } else {
+    struct pre_res_task *PT = malloc(sizeof(*PT));
+
     PT->t = t;
     PT->priority = 1;
     tommy_list_insert_tail(pre_res_task_buffer, &PT->node, PT);
@@ -1058,8 +1061,8 @@ int delete_formula(kb *collection, char *string, int print, kb_str *buf) {
 	while(curr_pt) {
 	  PT = (struct pre_res_task *) curr_pt->data;
 	  if ( 0 && (PT != NULL) && ((PT->t->x == c) || (PT->t->y == c)) ) { // TODO: re-enable; disabled as hack
-	    fprintf(stderr, "Emergency resolution of clause being deleted.\n");
-	    fprintf(stderr, "Printing clause:\n");
+	    //fprintf(stderr, "Emergency resolution of clause being deleted.\n");
+	    //fprintf(stderr, "Printing clause:\n");
 	    clause_print(collection, c, NULL);
 	    // Resolve PT
 	    res_task_pri rt;
@@ -1080,6 +1083,7 @@ int delete_formula(kb *collection, char *string, int print, kb_str *buf) {
         clause_print(collection, curr, buf);
         tee_alt(" not found\n", collection, buf);
       }
+      //fprintf(stderr, "free deleteFmla");
       free_clause(curr);
     }
     tommy_array_done(&clauses);
@@ -1548,7 +1552,7 @@ void process_var_num_res_tasks(kb *collection, res_task_heap *tasks, tommy_array
   while (peek_task->priority == 0) {
     peek_task = res_task_heap_pop(tasks);
     process_one_res_task(collection, tasks, new_arr, bs, *peek_task, buf);
-    // TODO:  try freeing this task now that it's been processed.
+    free(peek_task);
     if (tasks->count <= 0) return;
     peek_task = res_task_heap_item(tasks, 0);
   }
@@ -1558,10 +1562,10 @@ void process_var_num_res_tasks(kb *collection, res_task_heap *tasks, tommy_array
       /* Do nothing if everything has been processed. */
       // TODO:  Better to modify num_to_process after resolving prioirty 0 tasks.
       if (tasks->count <= 0) return;
-      res_task_pri c;
-      c = *res_task_heap_pop(tasks);
-      process_one_res_task(collection, tasks, new_arr, bs, c, buf);
-      // TODO:  try freeing this task now that it's been processed.
+      res_task_pri *c;
+      c = res_task_heap_pop(tasks);
+      process_one_res_task(collection, tasks, new_arr, bs, *c, buf);
+      free(c);
   }
 }
 
@@ -1870,6 +1874,8 @@ void pre_res_buffer_to_heap(kb *collection, int single) {
     }
     next = i->next;
     tommy_list_remove_existing(&collection->pre_res_task_buffer, i);
+    //fprintf(stderr, "free preres_buffer2heap ");
+    free(data);
     i = single ? NULL : next; // Hacky -- set i to NULL if we only want to process at most one.
   }
 }

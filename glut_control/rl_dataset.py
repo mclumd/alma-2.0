@@ -2,6 +2,7 @@
 from sklearn.utils import shuffle
 import numpy as np
 import os
+import copy
 
 """
 
@@ -89,6 +90,23 @@ class experience_replay_buffer:
             self.actions.append(actions)
             self.rewards.append(rewards)
             self.states1.append(states1)
+
+    def copy(self):
+        new_rb = experience_replay_buffer()
+        new_rb.states0 = copy.deepcopy(self.states0)
+        new_rb.actions = copy.deepcopy(self.actions)
+        new_rb.rewards = copy.deepcopy(self.rewards)
+        new_rb.states1 = copy.deepcopy(self.states1)
+        return new_rb
+
+    def extend(self, states0, actions, rewards, states1):
+        assert(len(states0) == len(actions))
+        assert(len(states0) == len(rewards))
+        assert(len(states0) == len(states1))
+        self.states0.extend(states0)
+        self.actions.extend(actions)
+        self.rewards.extend(rewards)
+        self.states1.extend(states1)
         
     def get_batch(self, size):
         self.states0, self.actions, self.rewards, self.states1 = shuffle(self.states0, self.actions, self.rewards, self.states1)

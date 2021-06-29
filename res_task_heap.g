@@ -102,8 +102,10 @@ GUARD2
 # define INCLUDE0 #include <stdlib.h>
 # define INCLUDE1 #include STRING(HEADER_NAME)
 # define INCLUDE2 #include "tommy.h"
+# define INCLUDE3 #include "alma_kb.h"
 INCLUDE0
 INCLUDE1
+INCLUDE3
 #else
 # include <stdlib.h>
 #endif
@@ -338,19 +340,38 @@ STATIC int NAME(_clausal_delete)(struct heap_name *heap, clause *c) {
     }
   }
   NAME(_heapify)(heap);
-  for (int j=0; j < num_matches; j++) NAME(_pop)(heap);
+  for (int j=0; j < num_matches; j++) {
+      element = NAME(_pop)(heap);
+      free(element);
+  }
   return num_matches;
 }
 
 STATIC void NAME(_destroy)(struct heap_name *heap) {
-   for (int i = 0; i < heap->count; i++) {
-     free(res_task_heap_item(heap, i));
+        res_task_pri *current_item;
+   res_task *current_res_task;
+   //for (int i = 0; i < heap->count; i++) {
+   for (int i = 0; i < tommy_array_size(&heap->data); i++) {
+     current_item = res_task_heap_item(heap, i);
+     if (i < heap->count) {
+       //fprintf(stderr, "free RTHD0");
+       current_res_task = current_item->res_task;
+       //free_clause(current_res_task->x);
+       //free_clause(current_res_task->y);
+       // Not explicitly free pos and neg; guess they're part of x and y and
+       // thus handled above.
+       //free(current_res_task);
+     }
+     //fprintf(stderr, "free RTHD");
+     // if (current_item) free(current_item);  // Free current item if not NULL; this may not work.
    }
-   
+   tommy_array_done(&heap->data);
+   /*   TODO:  Why do we need the condititional?
    if (heap->count > 0) {
      tommy_array_done(&heap->data);
-   }
+     } */
 }
+
 #endif /* !defined(HEADER) */
 
 #undef STATIC

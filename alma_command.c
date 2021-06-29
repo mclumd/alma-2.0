@@ -57,7 +57,7 @@ extern char python_mode;
 
 // Caller will need to free collection with kb_halt
 /* TODO:  Examine for merge issues. */
-void kb_init(kb **collection, char *file, char *agent, int verbose, int differential_priorities, int res_heap_size, rl_init_params rip, kb_str *buf, int logon) {
+void kb_init(kb **collection, char *file, char *agent, char *trialnum, char *log_dir,  int verbose, int differential_priorities, int res_heap_size, rl_init_params rip, kb_str *buf, int logon) {
   // Allocate and initialize
   *collection = malloc(sizeof(**collection));
   kb *collec = *collection;
@@ -68,10 +68,10 @@ void kb_init(kb **collection, char *file, char *agent, int verbose, int differen
   collec->calc_priority = differential_priorities ? (compute_priority) : (base_priority);
   collec->tracking_resolutions = rip.tracking_resolutions;
   collec->subject_list = malloc(sizeof(tommy_array));
-  collec->prb_threshold = -1;
+  collec->prb_threshold = 2;
 
   collec->size = 0;
-  collec->time = 1;
+  collec->time = 0;
   collec->prev = collec->now = NULL;
   collec->wallnow = collec->wallprev = NULL;
   collec->idling = 0;
@@ -101,7 +101,7 @@ void kb_init(kb **collection, char *file, char *agent, int verbose, int differen
         {
           collec->subject_list = rip.tracking_subjects;
           collec->num_subjects = rip.tracking_subjects->count;
-	  
+
         }
       else
         {
@@ -133,7 +133,7 @@ void kb_init(kb **collection, char *file, char *agent, int verbose, int differen
   } else {
     collec->use_pre_rtb = 0;
   }
-  
+
 
   // Given a file argument, obtain other initial clauses from
   if (file != NULL) {
@@ -201,8 +201,16 @@ void kb_init(kb **collection, char *file, char *agent, int verbose, int differen
       if (time[idx] == ' ' || time[idx] == ':')
 	time[idx] = '-';
     int agentlen = agent != NULL ? strlen(agent) : 0;
-    char *logname = malloc(4 + agentlen + 1 + timelen + 9);
-    strcpy(logname, "alma");
+    int triallen = trialnum != NULL ? strlen(trialnum) : 0;
+    int log_dir_len = log_dir != NULL ? strlen(log_dir) : 0;
+    char *logname = malloc(log_dir_len + 1 + 4 + agentlen + 1 + triallen + 1 + timelen + 9);
+    if (log_dir != NULL) {
+      strcpy(logname, log_dir);
+      logname[log_dir_len] = '/';
+      log_dir_len += 1;
+    }
+
+    strcpy(logname+log_dir_len, "alma");
     if (agent != NULL)
       strcpy(logname+4, agent);
     logname[4+agentlen] = '-';
@@ -335,18 +343,18 @@ void kb_print(kb *collection, kb_str *buf) {
   tee_alt("\n", collection, buf);
 
   if (logs_on) {
-    fflush(almalog);
+//    fflush(almalog);
   }
 }
 
 
 void kb_print_res_heap(kb *collection, kb_str *buf) {
-  res_task_heap *res_tasks = &collection->res_tasks;
-  res_task_pri tp;
-  res_task *t;
-  int j = 0;
+  //res_task_heap *res_tasks = &collection->res_tasks;
+ // res_task_pri tp;
+//  res_task *t;
+//  int j = 0;
 
-  if ((res_tasks->count > 0)) {
+/*  if ((res_tasks->count > 0)) {
     tee("Begin RH---------------------------------------\n");
     tee("Resolution tasks.\n");
     tee("Heap count: %d\n\n", res_tasks->count);
@@ -359,7 +367,7 @@ void kb_print_res_heap(kb *collection, kb_str *buf) {
       tee_alt("\n", buf);
     }
   tee("End RH---------------------------------------\n");
-  }
+  }  */
   tee_alt("\n", buf);
   if (logs_on) {
     fflush(collection->almalog);
@@ -389,6 +397,9 @@ void kb_halt(kb *collection) {
   for (tommy_size_t i = 0; i < tommy_array_size(&collection->new_clauses); i++)
     free_clause(tommy_array_get(&collection->new_clauses, i));
   tommy_array_done(&collection->new_clauses);
+
+  //tommy_array_done(collection->subject_list);
+  //free(collection->subject_list);
 
   tommy_node *curr = tommy_list_head(&collection->clauses);
   while (curr) {
@@ -421,24 +432,37 @@ void kb_halt(kb *collection) {
    */
   res_task_heap_destroy(&collection->res_tasks);
 
-  //tommy_list_foreach(&(collection->pre_res_task_buffer), free);
+  tommy_list_foreach(&(collection->pre_res_task_buffer), free);
+  //fprintf(stderr, "Destroyed res_task_heap.");
 
+
+  /*
 
   tommy_node *curr_pt;
   tommy_node *tmp_pt;
   struct pre_res_task *PT;
   curr_pt = tommy_list_head(&(collection->pre_res_task_buffer));
   while(curr_pt) {
+
     PT = (struct pre_res_task *) curr_pt->data;
-    free(PT->t);
+    //fprintf(stderr, "Freeing item from pre_res_task buffer\n.");
+    //free_clause(PT->t->x);
+    //free_clause(PT->t->y);
+    //free(PT->t->pos);
+    //free(PT->t->neg);
+    free(PT->t);     // PT->t is a res_task
     free(PT);
-    tmp_pt = curr_pt->next;
-    //free(curr_pt);
-    curr_pt = tmp_pt;
-  }
+    if (curr_pt->next) {
+      tmp_pt = curr_pt->next;
+      //free(curr_pt);
+      curr_pt = tmp_pt;
+    } else {
+      curr_pt = NULL;
+    }
+    }  */
 
+  //fprintf(stderr, "Freed pre_res_task buffer\n.");
 
-  
   tommy_hashlin_foreach(&collection->fif_tasks, free_fif_task_mapping);
   tommy_hashlin_done(&collection->fif_tasks);
 

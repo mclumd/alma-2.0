@@ -68,7 +68,7 @@ int main(int argc, char **argv) {
 
   logs_on = (char) 1;
   python_mode = (char) 0;
-
+  
   //int index;
   rl_init_params rip;
   rip.tracking_resolutions = 0;
@@ -166,7 +166,7 @@ int main(int argc, char **argv) {
 
   kb *alma_kb;
   /* TODO:  Check this for merge issues. */
-  kb_init(&alma_kb, file, agent, verbose, differential_priorities, res_heap_size, rip, NULL, logs_on);
+  kb_init(&alma_kb, file, agent, NULL, NULL, verbose, differential_priorities, res_heap_size, rip, NULL, logs_on);
   kb_print(alma_kb,NULL);
 
   if (run) {
@@ -177,7 +177,7 @@ int main(int argc, char **argv) {
     kb_halt(alma_kb);
   } else {
     char line[LINELEN];
-    
+
     int counter = 0;
 
     while (1) {
@@ -185,11 +185,8 @@ int main(int argc, char **argv) {
       fflush(stdout);
 
       if (fgets(line, LINELEN, stdin) == NULL) {
-	tee("\nTracking resolutions is %d.  Line 168\n", rip.tracking_resolutions); fflush(stdout);
 	if (rip.tracking_resolutions==1) {
-	  tee("\nWriting resolution matrix (%d subjects, horizon==%d) ... ", alma_kb->num_subjects, rip.resolutions_horizon); fflush(stdout);
 	  write_resolution_matrix(alma_kb, alma_kb->num_subjects, rip.resolutions_horizon, rip.resolutions_file);
-	  tee("\ndone!\n");fflush(stdout);
 	}
 	kb_halt(alma_kb);
 	break;
@@ -197,11 +194,13 @@ int main(int argc, char **argv) {
 	int len = strlen(line);
 	line[len-1] = '\0';
 	tee_alt("Command '%s' received at %d.\n", alma_kb, NULL, line, counter);
-	
+
 	char *pos;
 	if (strcmp(line, "step") == 0) {
 	  tee_alt("ALMA %d step:\n",alma_kb, NULL, counter);
+	  pre_res_buffer_to_heap(alma_kb, 0);
 	  kb_step(alma_kb, 0, NULL);
+	  //pre_res_buffer_to_heap(alma_kb, 0);
 	} else if (strcmp(line, "astep") == 0) {
 	  tee_alt("ALMA %d step:\n",alma_kb, NULL, counter);
 	  kb_step(alma_kb, 1, NULL);
@@ -214,12 +213,8 @@ int main(int argc, char **argv) {
 	  pre_res_buffer_to_heap(alma_kb, 0);
 	  tee_alt("Flushed pre resolution task buffer\n",alma_kb, NULL,counter);
 	} else if (strcmp(line, "halt") == 0) {
-	  tee("\nTracking resolutions is %d.  Line 190.\n", rip.tracking_resolutions); fflush(stdout);
 	  if (rip.tracking_resolutions == 1) {
-	    tee("\nWriting resolution matrix ... "); fflush(stdout);
-	    tee("\nWriting resolution matrix (%d subjects, horizon==%d) ... ", alma_kb->num_subjects, rip.resolutions_horizon); fflush(stdout);
 	    write_resolution_matrix(alma_kb, alma_kb->num_subjects, rip.resolutions_horizon, rip.resolutions_file);
-	    tee("\ndone!\n"); fflush(stdout);
 	  }
 	  kb_halt(alma_kb);
 	  break;
