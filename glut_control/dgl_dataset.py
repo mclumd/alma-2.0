@@ -73,7 +73,9 @@ class AlmaDataset(DGLDataset):
             label = self.Y[i]
             num_nodes = len(graph[0][0])
             # Create a graph and add it to the list of graphs and labels.
-            g = dgl.graph((src[1:], dst[1:]), num_nodes=num_nodes)
+            src = src[1:]
+            dst = dst[1:]
+            g = dgl.graph((src, dst), num_nodes=num_nodes)
             # Grab features for g from X[i][1]
             # Convert to tensor via torch to avoid the "numpy.ndarray has no attribute 'device'" error
             # https://discuss.dgl.ai/t/attributeerror-numpy-ndarray-object-has-no-attribute-device/241
