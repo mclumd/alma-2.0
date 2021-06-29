@@ -407,7 +407,7 @@ def main():
     print("-" * 80)
 
     gnn = gnn_train(dgl_data)
-    # gnn = dgl_network.load_gnn_model("best_gcn_epoch3")
+    # gnn = dgl_network.load_gnn_model("returned_gcn")
 
     print("-"*80)
     print("Now testing GCN:")
@@ -477,6 +477,25 @@ def gnn_train(data_list):
                 # pred[x] = [confidence class == 0, confidence class == 1] for sample x
                 # t2[x] == binary prediction for sample x, t1[x] == magnitude of confidence value for prediction made in t2 on sample x
 
+                show_errors = False
+                show_errors = True
+                if show_errors and i/len(train_dataloader) > .1 and num_tests < 10:
+                    if (pred.argmax(1) == labels).sum().item() != 5:
+                        for a in range(batched_graph.batch_size):
+                            if pred.argmax(1)[a] != labels[a]:
+                                print("*" * 80)
+                                print("INCORRECT PREDICTION " * 4)
+                                print("OVERALL ACC: ", num_correct/num_tests*100, "%")
+                                print("Predicted:", pred.argmax(1)[a])
+                                print("Actual:", labels[a])
+                                graph_list = dgl.unbatch(batched_graph)
+                                print("-" * 80)
+                                torch.set_printoptions(threshold=100_000)  # Want to see it all
+                                print("src/dst lists: ", graph_list[a].adj(True, 'cpu', None, graph_list[a].etypes[0]))
+                                print("features: ", graph_list[a].ndata['feat'])
+                                print("-" * 80)
+                                print("*" * 80)
+
             print('GCN accuracy at', "{:.2f}".format(i/len(train_dataloader)*100), "% of training", ':', num_correct / num_tests)
             print('Loss:', tloss)
 
@@ -485,29 +504,13 @@ def gnn_train(data_list):
                 print("saving model")
                 dgl_network.save_gnn_model(model, "best_gcn_epoch" + str(epoch))
 
-            if num_correct / num_tests > 0.97 and tloss < 0.001 and i/len(train_dataloader) > .2:
+            if num_correct / num_tests > 0.97 and tloss < 0.001:
                 print("good GCN, returning early")
                 dgl_network.save_gnn_model(model, "returned_gcn")
                 model.eval()
                 return model
 
-            show_errors = False
-            # show_errors = True
-            if show_errors:
-                if (pred.argmax(1) == labels).sum().item() != 5:
-                    for a in range(batched_graph.batch_size):
-                        if pred.argmax(1)[a] != labels[a]:
-                            print("*"*80)
-                            print("INCORRECT PREDICTION "*4)
-                            print("Predicted:", pred.argmax(1)[a])
-                            print("Actual:", labels[a])
-                            graph_list = dgl.unbatch(batched_graph)
-                            print("-" * 80)
-                            torch.set_printoptions(threshold=100_000)        # Want to see it all
-                            print("src/dst lists: ", graph_list[a].adj(True, 'cpu', None, graph_list[a].etypes[0]))
-                            print("features: ", graph_list[a].ndata['feat'])
-                            print("-" * 80)
-                            print("*"*80)
+
 
         print("=" * 80)
 
