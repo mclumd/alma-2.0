@@ -394,10 +394,10 @@ def main():
     print("-"*80)
     print("BEGIN TESTING")
     print("-"*80)
-    #res = test(network, use_net, args.explosion_steps, args.testing_reasoning_steps, args.heap_print_size, args.prb_print_size, args.numeric_bits,
-    #           heap_print_freq=1, prb_threshold=args.prb_threshold, use_gnn=args.gnn, kb=args.kb, gnn_nodes=args.gnn_nodes, initial_test=False)
-    #print("Final result is", res)
-    #print("Final number is", len(res))
+    res = test(network, use_net, args.explosion_steps, args.testing_reasoning_steps, args.heap_print_size, args.prb_print_size, args.numeric_bits,
+               heap_print_freq=1, prb_threshold=args.prb_threshold, use_gnn=args.gnn, kb=args.kb, gnn_nodes=args.gnn_nodes, initial_test=False)
+    print("Final result is", res)
+    print("Final number is", len(res))
 
     # ************** #
     # GNN TRAIN/TEST #

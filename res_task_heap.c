@@ -1,5 +1,6 @@
  #include <stdlib.h>
  #include "res_task_heap.h"
+ #include "alma_kb.h"
  void res_task_heap_init(struct res_task_heap *heap, int size) {
   tommy_array_init(&heap->data);
   heap->max_size = 1 << TOMMY_ARRAY_BIT;
@@ -125,14 +126,20 @@ int res_task_pri_clause_cont( res_task_pri a, clause *c) {
     }
   }
   res_task_heap_heapify(heap);
-  for (int j=0; j < num_matches; j++) res_task_heap_pop(heap);
+  for (int j=0; j < num_matches; j++) {
+      element = res_task_heap_pop(heap);
+      free(element);
+  }
   return num_matches;
 }
  void res_task_heap_destroy(struct res_task_heap *heap) {
-   for (int i = 0; i < heap->count; i++) {
-     free(res_task_heap_item(heap, i));
+        res_task_pri *current_item;
+   res_task *current_res_task;
+   for (int i = 0; i < tommy_array_size(&heap->data); i++) {
+     current_item = res_task_heap_item(heap, i);
+     if (i < heap->count) {
+       current_res_task = current_item->res_task;
+     }
    }
-   if (heap->count > 0) {
-     tommy_array_done(&heap->data);
-   }
+   tommy_array_done(&heap->data);
 }
