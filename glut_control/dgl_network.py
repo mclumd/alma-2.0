@@ -1,6 +1,7 @@
 import dgl
 import torch.nn as nn
 from dgl.nn import GraphConv
+from dgl.nn import GatedGraphConv
 import torch
 import torch.nn.functional as F
 import dgl.data
@@ -51,10 +52,18 @@ class GCN(nn.Module):
         g.ndata['h'] = h
         return dgl.mean_nodes(g, 'h')
 
-# class ACN(nn.Module):
-#     def __init__(self, in_feats, h_feats, num_classes):
-#         super(GCN, self).__init__()
+class GatedGCN(nn.Module):
+    def __init__(self, in_feats, h_feats, num_classes):
+        super(GatedGCN, self).__init__()
+        self.conv1 = GatedGraphConv(in_feats, h_feats, 16, 1, bias=True)
+        self.conv2 = GatedGraphConv(h_feats, num_classes, 16, 1, bias=True)
 
+    def forward(self, g):
+        h = self.conv1(g, g.ndata['feat'], g.etypes)
+        h = F.relu(h)
+        h = self.conv2(g, h, g.etypes)
+        g.ndata['h'] = h
+        return dgl.mean_nodes(g, 'h')
 
 # https://pytorch.org/tutorials/beginner/saving_loading_models.html
 # pytorch comes with save/load!
