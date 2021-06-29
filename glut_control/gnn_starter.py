@@ -394,10 +394,10 @@ def main():
     print("-"*80)
     print("BEGIN TESTING")
     print("-"*80)
-    res = test(network, use_net, args.explosion_steps, args.testing_reasoning_steps, args.heap_print_size, args.prb_print_size, args.numeric_bits,
-               heap_print_freq=1, prb_threshold=args.prb_threshold, use_gnn=args.gnn, kb=args.kb, gnn_nodes=args.gnn_nodes, initial_test=False)
-    print("Final result is", res)
-    print("Final number is", len(res))
+    # res = test(network, use_net, args.explosion_steps, args.testing_reasoning_steps, args.heap_print_size, args.prb_print_size, args.numeric_bits,
+    #            heap_print_freq=1, prb_threshold=args.prb_threshold, use_gnn=args.gnn, kb=args.kb, gnn_nodes=args.gnn_nodes, initial_test=False)
+    # print("Final result is", res)
+    # print("Final number is", len(res))
 
     # ************** #
     # GNN TRAIN/TEST #
@@ -439,12 +439,10 @@ def gnn_train(data_list):
     train_sampler = SubsetRandomSampler(torch.arange(num_train))
     test_sampler = SubsetRandomSampler(torch.arange(num_train, num_examples))
 
-    TEST_BATCH_SIZE = 5
-
     train_dataloader = GraphDataLoader(
         dataset, sampler=train_sampler, batch_size=5, drop_last=False)
     test_dataloader = GraphDataLoader(
-        dataset, sampler=test_sampler, batch_size=TEST_BATCH_SIZE, drop_last=False)
+        dataset, sampler=test_sampler, batch_size=5, drop_last=False)
 
     model = dgl_network.GCN(dataset.dim_nfeats, 16, dataset.gclasses)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
@@ -482,7 +480,7 @@ def gnn_train(data_list):
                 show_errors = False
                 # show_errors = True
                 if show_errors and i/len(train_dataloader) > .1 and num_tests < 10:
-                    if (pred.argmax(1) == labels).sum().item() != TEST_BATCH_SIZE:
+                    if (pred.argmax(1) == labels).sum().item() != 5:
                         for a in range(batched_graph.batch_size):
                             if pred.argmax(1)[a] != labels[a]:
                                 print("*" * 80)
@@ -505,7 +503,7 @@ def gnn_train(data_list):
                 print("saving model")
                 dgl_network.save_gnn_model(model, "best_gcn_epoch" + str(epoch))
 
-            if num_correct / num_tests > 0.97 and tloss < 0.001:
+            if num_correct / num_tests > 0.97 and tloss < 0.001 and epoch > 0:
                 print("good GCN, returning early")
                 dgl_network.save_gnn_model(model, "returned_gcn")
                 model.eval()
