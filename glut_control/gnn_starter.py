@@ -440,11 +440,12 @@ def gnn_train(data_list):
     test_sampler = SubsetRandomSampler(torch.arange(num_train, num_examples))
 
     train_dataloader = GraphDataLoader(
-        dataset, sampler=train_sampler, batch_size=5, drop_last=False)
+        dataset, sampler=train_sampler, batch_size=32, drop_last=False)
     test_dataloader = GraphDataLoader(
         dataset, sampler=test_sampler, batch_size=5, drop_last=False)
 
-    model = dgl_network.GCN(dataset.dim_nfeats, 16, dataset.gclasses)
+    # model = dgl_network.GCN(dataset.dim_nfeats, 16, dataset.gclasses)
+    model = dgl_network.GatedGCN(dataset.dim_nfeats, 16, dataset.gclasses)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
     model.train()
 
@@ -456,8 +457,8 @@ def gnn_train(data_list):
         for batched_graph, labels in train_dataloader:
             # print("Batched Graph ", i)
             i += 1
-            # if i > 150:
-            #     break
+            if i > 250:
+                break
             pred = model(batched_graph, batched_graph.ndata['feat'].float())
             # loss = F.binary_cross_entropy(pred, labels)
             loss = F.cross_entropy(pred, labels)
@@ -503,7 +504,7 @@ def gnn_train(data_list):
                 print("saving model")
                 dgl_network.save_gnn_model(model, "best_gcn_epoch" + str(epoch))
 
-            if num_correct / num_tests > 0.97 and tloss < 0.001 and epoch > 0:
+            if num_correct / num_tests > 0.97 and tloss < 0.001 and epoch > 3:
                 print("good GCN, returning early")
                 dgl_network.save_gnn_model(model, "returned_gcn")
                 model.eval()

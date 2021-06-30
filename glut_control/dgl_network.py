@@ -5,6 +5,7 @@ from dgl.nn import GatedGraphConv
 import torch
 import torch.nn.functional as F
 import dgl.data
+import numpy as np
 import pickle
 
 
@@ -55,13 +56,18 @@ class GCN(nn.Module):
 class GatedGCN(nn.Module):
     def __init__(self, in_feats, h_feats, num_classes):
         super(GatedGCN, self).__init__()
-        self.conv1 = GatedGraphConv(in_feats, h_feats, 16, 1, bias=True)
-        self.conv2 = GatedGraphConv(h_feats, num_classes, 16, 1, bias=True)
+        self.conv1 = GatedGraphConv(in_feats, h_feats, 8, 1, bias=True)
+        self.conv2 = GatedGraphConv(h_feats, num_classes, 8, 1, bias=True)
 
-    def forward(self, g):
-        h = self.conv1(g, g.ndata['feat'], g.etypes)
+    def forward(self, g, in_feat):
+        etypes = torch.tensor((), dtype=torch.int32)
+        num_edges = g.num_edges()
+        edges = np.zeros(num_edges)
+        etypes = etypes.new_tensor(edges)
+
+        h = self.conv1(g, in_feat, etypes)
         h = F.relu(h)
-        h = self.conv2(g, h, g.etypes)
+        h = self.conv2(g, h, etypes)
         g.ndata['h'] = h
         return dgl.mean_nodes(g, 'h')
 
