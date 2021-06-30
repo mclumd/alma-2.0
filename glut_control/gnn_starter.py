@@ -406,8 +406,8 @@ def main():
     print("Now training GCN:")
     print("-" * 80)
 
-    # gnn = gnn_train(dgl_data)
-    gnn = dgl_network.load_gnn_model("best_gcn_epoch0")
+    gnn = gnn_train(dgl_data)
+    # gnn = dgl_network.load_gnn_model("best_gcn_epoch0")
 
     print("-"*80)
     print("Now testing GCN:")
@@ -456,7 +456,7 @@ def gnn_train(data_list):
         i = 0
         for batched_graph, labels in train_dataloader:
             # print("Batched Graph ", i)
-            # i += 1
+            i += 1
             # if i > 250:
             #     break
             pred = model(batched_graph, batched_graph.ndata['feat'].float())
