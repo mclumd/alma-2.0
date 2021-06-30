@@ -44,12 +44,18 @@ class GCN(nn.Module):
         # self.allow_zero_in_degree = True      # does not work as intended??? solved issue with dgl.add_self_loop(g) in dataset process
         super(GCN, self).__init__()
         self.conv1 = GraphConv(in_feats, h_feats)
-        self.conv2 = GraphConv(h_feats, num_classes)
+        self.conv2 = GraphConv(h_feats, h_feats)
+        self.conv3 = GraphConv(h_feats, h_feats)
+        self.conv4 = GraphConv(h_feats, num_classes)
 
     def forward(self, g, in_feat):
         h = self.conv1(g, in_feat)
         h = F.relu(h)
         h = self.conv2(g, h)
+        h = F.relu(h)
+        h = self.conv3(g, h)
+        h = F.relu(h)
+        h = self.conv4(g, h)
         g.ndata['h'] = h
         return dgl.mean_nodes(g, 'h')
 
