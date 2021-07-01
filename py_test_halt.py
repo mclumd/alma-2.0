@@ -15,7 +15,7 @@ import tracemalloc
 
 kb = 'glut_control/qlearning3.pl'
 #gc.set_debug(gc.DEBUG_LEAK)
-gc.disable()
+#gc.disable()
 class PyObject(ctypes.Structure):
     _fields_ = [("refcnt", ctypes.c_long)]
 

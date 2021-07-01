@@ -9,6 +9,7 @@ set(CMAKE_BUILD_TYPE DEBUG)
 include_directories(.)
 include_directories(mpc)
 include_directories(tommyds/tommyds)
+include_directories(/usr/include/python3.8)
 
 add_executable(task_heap_test task_heap_test.c tommyds/tommyds/tommyarray.c res_task_heap.c)
 add_executable(alma.x
@@ -34,6 +35,8 @@ add_executable(alma.x
 		alma_term_search.c
 		)
 
+#add_executable(py_import_call_execute py_import_call_execute.c)
+
 add_library(alma SHARED
 		mpc/mpc.c
 		mpc/mpc.h
@@ -58,3 +61,4 @@ add_library(alma SHARED
 		)
 
 add_library(alma_module almamodule.c)
+
