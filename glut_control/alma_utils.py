@@ -22,6 +22,9 @@ def pr_heap_print(alma_inst, alma_heap_print_size=100):
             break
 
 def heap_size(alma_inst):
+    return alma.res_task_buf_size(alma_inst)
+
+def heap_size_old(alma_inst):
     rth = alma.res_task_buf(alma_inst)
     hs = len(rth[1].split('\n')[:-1])
     del rth
