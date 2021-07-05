@@ -104,12 +104,10 @@ def train_loop(network, num_steps, explosion_steps, kb, train_interval, dgl_data
             res_task_input = [x[:2] for x in res_tasks]
             network.save_batch(res_task_input, res_lits)
             if not new_dgl_dataset:
-                pass
-                #g_data = dgl_dataset.AlmaDataset(network.Xbuffer, network.ybuffer)
-                #dgl_data.append(g_data)
+                g_data = dgl_dataset.AlmaDataset(network.Xbuffer, network.ybuffer)
+                dgl_data.append(g_data)
 
-            #priorities = 1 - network.get_priorities(res_task_input)
-            priorities = np.random.uniform(0,1,len(res_task_input))
+            priorities = 1 - network.get_priorities(res_task_input)
             alma.set_priors_prb(alma_inst, priorities.flatten().tolist())
             alma.prb_to_res_task(alma_inst, 1.0)
             del priorities
@@ -139,9 +137,6 @@ def train_loop(network, num_steps, explosion_steps, kb, train_interval, dgl_data
                         H = network.train_buffered_batch()
                         acc, loss = H.history['accuracy'][0], H.history['loss'][0]
                     
-
-
-                        
             #else:
             #    print("Continuing...")
             #    continue
