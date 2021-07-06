@@ -366,6 +366,8 @@ class res_prebuffer:
 
     def train_buffered_batch(self, sample_ratio=0.5):
         X, y0 = self.get_training_batch(self.batch_size, int(self.batch_size*sample_ratio))
+        XG = X
+        YG = y0
         if self.use_tf:
             y = tf.reshape(y0, (-1, 1))
         else:
@@ -379,10 +381,10 @@ class res_prebuffer:
             self.optimizer.apply_gradients(zip(gradients, self.model.trainable_variables))
             print("y, pred:", y.numpy().T, pred.numpy().T)
             print("loss: {} \t acc: {}\n".format(self.train_loss(loss), self.train_accuracy(y, pred), end='\r'))
-            return pred
+            return pred, XG, YG     #pass out x + y to dgl net
         else:
             # TODO:  make sure this continues training rather than reinitializing
-            return self.model.fit(X, y, batch_size=self.batch_size, verbose=True)
+            return self.model.fit(X, y, batch_size=self.batch_size, verbose=True), XG, YG       #pass out x + y to dgl net
 
     def test_buffered_batch(self, sample_ratio=0.5):
         X, y0 = self.get_training_batch(self.batch_size, int(self.batch_size*sample_ratio))
