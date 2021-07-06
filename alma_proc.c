@@ -376,7 +376,7 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time,
                   }
                 }
                 else if (alma->verbose) {
-                  tee_alt("Processing \"", alma, NULL);
+                  tee_alt("Processing from queue \"", alma, NULL);
                   clause_print(alma, c, NULL);
                   tee_alt("\"\n", alma, NULL);
                 }

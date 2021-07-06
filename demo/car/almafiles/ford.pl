@@ -2,9 +2,8 @@
 obs(quote(rel(gas_tank_car, ford1))).
 obs(quote(not(rel(fueled, ford1)))).
 
-fif(rel(car, X), rel(can_drive, X)).
+fif(rel(car, X), rel(powered, X)).
 rel(is_a, gas_tank_car, car).
 
-fif(not(rel(powered, X)), not(rel(can_drive, X))).
 fif(and(rel(gas_tank_car, X), not(rel(fueled, X))), not(rel(powered, X))).
 

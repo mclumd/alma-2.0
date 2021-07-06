@@ -1,5 +1,5 @@
 rel(car, ford1)
 rel(gas_tank_car, ford1)
-~rel(can_drive, ford1)
+~rel(powered, ford1)
 ~rel(fueled, ford1)
-abnormal(ford1, car, can_drive)
+abnormal(ford1, car, powered)
