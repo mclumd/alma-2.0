@@ -185,7 +185,8 @@ def train(explosion_steps=50, num_steps=500, numeric_bits=3, model_name="test1",
                 network.save_batch(res_task_input, res_lits)
 
                 if not new_dgl_dataset:
-                    g_data = dgl_dataset.AlmaDataset(network.Xbuffer, network.ybuffer)
+                    # g_data = dgl_dataset.AlmaDataset(network.Xbuffer, network.ybuffer)
+                    g_data = dgl_dataset.AlmaDataset(network.get_training_batch(network.batch_size, int(network.batch_size*0.5)))
                     dgl_data.append(g_data)
 
                 if idx >= next_clear:
