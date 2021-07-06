@@ -410,8 +410,8 @@ def main():
     print("Now training GCN:")
     print("-" * 80)
 
-    # gnn = gnn_train(dgl_data)
-    gnn = dgl_network.load_gnn_model("best_gcn_epoch9")
+    gnn = gnn_train(dgl_data)
+    # gnn = dgl_network.load_gnn_model("best_gcn_epoch9")
 
     print("-"*80)
     print("Now testing GCN:")
@@ -453,7 +453,7 @@ def gnn_train(data_list):
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
     model.train()
 
-    for epoch in range(100):
+    for epoch in range(10000):
         minloss = math.inf
         print("="*80)
         print("GCN epoch ", epoch, ":")
@@ -512,7 +512,7 @@ def gnn_train(data_list):
                 print("saving model")
                 dgl_network.save_gnn_model(model, "best_gcn_epoch" + str(epoch))
 
-            if num_correct / num_tests > 0.97 and tloss < 0.001 and epoch > 50000:
+            if num_correct / num_tests > 0.97 and tloss < 0.001 and epoch > 5000000:
                 print("good GCN, returning early")
                 dgl_network.save_gnn_model(model, "returned_gcn")
                 model.eval()
