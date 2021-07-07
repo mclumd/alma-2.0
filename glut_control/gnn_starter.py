@@ -387,7 +387,7 @@ def main():
         assert(args.reload == "NONE")
         print("Using network: {} with expsteps {}   rsteps {}    model_name {}".format(use_net, args.explosion_steps, args.reasoning_steps, model_name))
         print('Training; model name is ', args.train)
-    #    network, dgl_data = train(args.explosion_steps, args.reasoning_steps, args.numeric_bits, model_name, args.gnn, args.num_trainings, args.train_interval, args.kb, gnn_nodes=args.gnn_nodes)
+        network, dgl_data = train(args.explosion_steps, args.reasoning_steps, args.numeric_bits, model_name, args.gnn, args.num_trainings, args.train_interval, args.kb, gnn_nodes=args.gnn_nodes)
     if args.reload != "NONE":
         assert(args.train == "NONE")
         model_name = args.reload
@@ -410,8 +410,8 @@ def main():
     print("Now training GCN:")
     print("-" * 80)
 
-    # gnn = gnn_train(dgl_data)
-    gnn = dgl_network.load_gnn_model("best_gcn_epoch272")
+    gnn = gnn_train(dgl_data)
+    # gnn = dgl_network.load_gnn_model("best_gcn_epoch272")
 
     print("-"*80)
     print("Now testing GCN:")
