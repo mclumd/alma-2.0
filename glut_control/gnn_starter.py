@@ -374,7 +374,7 @@ def main():
     network = None
     args = parser.parse_args()
     print("Run with args:", args)
-    #use_net = True if args.use_network == "True" else False
+    # use_net = True if args.use_network == "True" else False
     use_net = args.use_network
     assert(type(use_net) == type(True))
 
@@ -387,7 +387,7 @@ def main():
         assert(args.reload == "NONE")
         print("Using network: {} with expsteps {}   rsteps {}    model_name {}".format(use_net, args.explosion_steps, args.reasoning_steps, model_name))
         print('Training; model name is ', args.train)
-        network, dgl_data = train(args.explosion_steps, args.reasoning_steps, args.numeric_bits, model_name, args.gnn, args.num_trainings, args.train_interval, args.kb, gnn_nodes=args.gnn_nodes)
+    #    network, dgl_data = train(args.explosion_steps, args.reasoning_steps, args.numeric_bits, model_name, args.gnn, args.num_trainings, args.train_interval, args.kb, gnn_nodes=args.gnn_nodes)
     if args.reload != "NONE":
         assert(args.train == "NONE")
         model_name = args.reload
@@ -410,8 +410,8 @@ def main():
     print("Now training GCN:")
     print("-" * 80)
 
-    gnn = gnn_train(dgl_data)
-    # gnn = dgl_network.load_gnn_model("best_gcn_epoch9")
+    # gnn = gnn_train(dgl_data)
+    gnn = dgl_network.load_gnn_model("best_gcn_epoch272")
 
     print("-"*80)
     print("Now testing GCN:")
@@ -464,12 +464,15 @@ def gnn_train(data_list):
             # if i > 250:
             #     break
             pred = model(batched_graph, batched_graph.ndata['feat'].float())
-            a = np.zeros(batched_graph.batch_size)
+            tensor = torch.tensor((), dtype=torch.float32)
+            mse_labels = tensor.new_zeros((len(labels), 2))
             for j in range(batched_graph.batch_size):
-                a[j] = pred[j][labels[j]]
-            mse_pred = torch.from_numpy(a)
-            # loss = F.binary_cross_entropy(pred, labels)
-            loss = F.mse_loss(mse_pred, labels)
+                mse_labels[j][1] = labels[j]
+                if labels[j] == 1:
+                    mse_labels[j][0] = 0
+                else:
+                    mse_labels[j][0] = 1
+            loss = F.mse_loss(pred, mse_labels)
             # loss = F.cross_entropy(pred, labels)
             optimizer.zero_grad()
             # tloss = loss
@@ -478,14 +481,21 @@ def gnn_train(data_list):
 
             num_correct = 0
             num_tests = 0
-            for batched_graph, labels in test_dataloader:
-                pred = model(batched_graph, batched_graph.ndata['feat'].float())
-                # tloss = F.binary_cross_entropy(pred, labels)
-                tloss = F.mse_loss(pred, labels)
-                # tloss = F.cross_entropy(pred, labels)
+            for batched_graph_test, labels_test in test_dataloader:
+                pred = model(batched_graph_test, batched_graph_test.ndata['feat'].float())
+                tensor = torch.tensor((), dtype=torch.float32)
+                mse_labels_test = tensor.new_zeros((len(labels_test), 2))
+                for j in range(batched_graph_test.batch_size):
+                    mse_labels_test[j][1] = labels_test[j]
+                    if labels_test[j] == 1:
+                        mse_labels_test[j][0] = 0
+                    else:
+                        mse_labels_test[j][0] = 1
+                tloss = F.mse_loss(pred, mse_labels_test)
+                # tloss = F.cross_entropy(pred, labels_test)
                 t1, t2 = torch.max(pred, 1)
-                num_correct += (pred.argmax(1) == labels).sum().item()
-                num_tests += len(labels)
+                num_correct += (pred.argmax(1) == labels_test).sum().item()
+                num_tests += len(labels_test)
 
                 # pred[x] = [confidence class == 0, confidence class == 1] for sample x
                 # t2[x] == binary prediction for sample x, t1[x] == magnitude of confidence value for prediction made in t2 on sample x
@@ -494,13 +504,13 @@ def gnn_train(data_list):
                 # show_errors = True
                 if show_errors and i/len(train_dataloader) > .1 and num_tests < 10:
                     if (pred.argmax(1) == labels).sum().item() != 5:
-                        for a in range(batched_graph.batch_size):
+                        for a in range(batched_graph_test.batch_size):
                             if pred.argmax(1)[a] != labels[a]:
                                 print("*" * 80)
                                 print("INCORRECT PREDICTION " * 4)
                                 print("Predicted:", pred.argmax(1)[a])
                                 print("Actual:", labels[a])
-                                graph_list = dgl.unbatch(batched_graph)
+                                graph_list = dgl.unbatch(batched_graph_test)
                                 print("-" * 80)
                                 torch.set_printoptions(threshold=100_000)  # Want to see it all
                                 print("src/dst lists: ", graph_list[a].adj(True, 'cpu', None, graph_list[a].etypes[0]))
