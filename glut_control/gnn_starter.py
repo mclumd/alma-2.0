@@ -464,8 +464,12 @@ def gnn_train(data_list):
             # if i > 250:
             #     break
             pred = model(batched_graph, batched_graph.ndata['feat'].float())
+            a = np.zeros(batched_graph.batch_size)
+            for j in range(batched_graph.batch_size):
+                a[j] = pred[j][labels[j]]
+            mse_pred = torch.from_numpy(a)
             # loss = F.binary_cross_entropy(pred, labels)
-            loss = F.mse_loss(pred, labels)
+            loss = F.mse_loss(mse_pred, labels)
             # loss = F.cross_entropy(pred, labels)
             optimizer.zero_grad()
             # tloss = loss
