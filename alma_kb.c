@@ -1445,7 +1445,7 @@ static void distrust_recursive(kb *collection, clause *c, clause *contra, kb_str
   // Recursively distrust children
   if (c->children != NULL) {
     for (int i = 0; i < c->children_count; i++) {
-      if (derivations_distrusted(c->children[i])) {
+      if (!c->children[i]->distrusted && derivations_distrusted(c->children[i])) {
         distrust_recursive(collection, c->children[i], contra, buf);
       }
     }
