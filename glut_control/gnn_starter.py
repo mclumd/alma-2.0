@@ -387,7 +387,7 @@ def main():
         assert(args.reload == "NONE")
         print("Using network: {} with expsteps {}   rsteps {}    model_name {}".format(use_net, args.explosion_steps, args.reasoning_steps, model_name))
         print('Training; model name is ', args.train)
-        network, dgl_data = train(args.explosion_steps, args.reasoning_steps, args.numeric_bits, model_name, args.gnn, args.num_trainings, args.train_interval, args.kb, gnn_nodes=args.gnn_nodes)
+    #    network, dgl_data = train(args.explosion_steps, args.reasoning_steps, args.numeric_bits, model_name, args.gnn, args.num_trainings, args.train_interval, args.kb, gnn_nodes=args.gnn_nodes)
     if args.reload != "NONE":
         assert(args.train == "NONE")
         model_name = args.reload
@@ -410,12 +410,13 @@ def main():
     print("Now training GCN:")
     print("-" * 80)
 
-    gnn = gnn_train(dgl_data)
-    # gnn = dgl_network.load_gnn_model("best_gcn_epoch272")
+    # gnn = gnn_train(dgl_data)
+    gnn = dgl_network.load_gnn_model("best_gcn_epoch1890")
 
     print("-"*80)
     print("Now testing GCN:")
     print("-"*80)
+    use_net = False     # for random priors
     res = gnn_test(gnn, use_net, args.explosion_steps, args.testing_reasoning_steps, args.heap_print_size,
                args.prb_print_size, args.numeric_bits,
                heap_print_freq=1, prb_threshold=args.prb_threshold, use_gnn=args.gnn, kb=args.kb,
@@ -599,8 +600,11 @@ def gnn_test(network, network_priors, exp_size=10, num_steps=500, alma_heap_prin
             # t2[x] == binary prediction for sample x, t1[x] == magnitude of confidence value for prediction made in t2 on sample x
             priorities = np.zeros(len(X))
             for i in range(len(priorities)):
-                priorities[i] = pred[i][1]                      # activation val
-                priorities[i] = 1 / (1 + np.exp(priorities[i])) # sigmoid
+                # priorities[i] = pred[i][1]                      # activation val
+                # priorities[i] = 1 / (1 + np.exp(priorities[i]))  # sigmoid for cross entropy
+                p0 = int(pred[i][0])
+                p1 = int(pred[i][1])
+                priorities[i] = 1 - (np.exp(p1)/(np.exp(p1) + np.exp(p0)))
     else:
         priorities = np.random.uniform(size=len(res_task_input))
 
@@ -657,10 +661,13 @@ def gnn_test(network, network_priors, exp_size=10, num_steps=500, alma_heap_prin
                     priorities = np.zeros(len(X))
                     for i in range(len(priorities)):
                         priorities[i] = pred[i][1]  # activation val
-                        priorities[i] = 1 / (1 + np.exp(priorities[i]))  # sigmoid
+                        # priorities[i] = 1 / (1 + np.exp(priorities[i]))  # sigmoid for cross entropy
+                        p0 = int(pred[i][0])
+                        p1 = int(pred[i][1])
+                        priorities[i] = 1 - (np.exp(p1) / (np.exp(p1) + np.exp(p0)))
 
             else:
-                np.random.uniform(size=len(res_task_input))
+                priorities = np.random.uniform(size=len(res_task_input))
 
             alma.set_priors_prb(alma_inst, priorities.flatten().tolist())
             alma.prb_to_res_task(alma_inst, prb_threshold)
