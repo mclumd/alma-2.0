@@ -81,9 +81,9 @@ class GatedGCN(nn.Module):
 # pytorch comes with save/load!
 
 def save_gnn_model(model, model_name):
-    torch.save(model, model_name + ".pt")
+    torch.save(model, "gcndir/" + model_name + ".pt")
 
 def load_gnn_model(model_name):
-    model = torch.load(model_name + ".pt")
-    model.eval()
+    model = torch.load("gcndir/" + model_name + ".pt")
+    # model.eval()
     return model

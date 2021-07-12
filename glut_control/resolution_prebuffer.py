@@ -327,12 +327,14 @@ class res_prebuffer:
         total_samples = 0
         total_pos = 0
         Xres, yres = [], []
+        dbg = []
         num_neg = num_samples - num_pos
         while (total_samples < num_samples):
             #print("Total samples: {} \t Xbuf_len: {}  \t ybuf_len: {}\t\t\t pos: {} \t neg: {}\n".format(total_samples, len(self.Xbuffer), len(self.ybuffer), total_pos, total_samples - total_pos))
             x, y = self.Xbuffer.pop(), self.ybuffer.pop()
             if self.debug:
                 dbg_prb, dbg_input = self.saved_prbs.pop(), self.saved_inputs.pop()
+                dbg.append(dbg_prb)
             total_neg = total_samples - total_pos
             needed_pos = num_pos - total_pos
             needed_neg  = num_neg - total_neg
@@ -360,12 +362,12 @@ class res_prebuffer:
         if self.debug:
             print("-"*80)
         if self.use_gnn:
-            return Xres, yres
+            return Xres, yres, dbg
         else:
-            return np.array(Xres), np.array(yres)
+            return np.array(Xres), np.array(yres), dbg
 
     def train_buffered_batch(self, sample_ratio=0.5):
-        X, y0 = self.get_training_batch(self.batch_size, int(self.batch_size*sample_ratio))
+        X, y0, dbg = self.get_training_batch(self.batch_size, int(self.batch_size*sample_ratio))
         XG = X
         YG = y0
         if self.use_tf:
@@ -384,7 +386,7 @@ class res_prebuffer:
             return pred, XG, YG     #pass out x + y to dgl net
         else:
             # TODO:  make sure this continues training rather than reinitializing
-            return self.model.fit(X, y, batch_size=self.batch_size, verbose=True), XG, YG       #pass out x + y to dgl net
+            return self.model.fit(X, y, batch_size=self.batch_size, verbose=True), XG, YG, dbg       #pass out x + y to dgl net
 
     def test_buffered_batch(self, sample_ratio=0.5):
         X, y0 = self.get_training_batch(self.batch_size, int(self.batch_size*sample_ratio))

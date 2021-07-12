@@ -209,8 +209,9 @@ def train(explosion_steps=50, num_steps=500, numeric_bits=3, model_name="test1",
                     # g_data = dgl_dataset.AlmaDataset(network.Xbuffer, network.ybuffer)
                     # dgl_data.append(g_data)
 
-                    H, XG, YG = network.train_buffered_batch()
+                    H, XG, YG, dbg = network.train_buffered_batch()
                     if not new_dgl_dataset:
+                        print(dbg)
                         g_data = dgl_dataset.AlmaDataset(XG, YG)
                         dgl_data.append(g_data)
 
@@ -387,7 +388,7 @@ def main():
         assert(args.reload == "NONE")
         print("Using network: {} with expsteps {}   rsteps {}    model_name {}".format(use_net, args.explosion_steps, args.reasoning_steps, model_name))
         print('Training; model name is ', args.train)
-    #    network, dgl_data = train(args.explosion_steps, args.reasoning_steps, args.numeric_bits, model_name, args.gnn, args.num_trainings, args.train_interval, args.kb, gnn_nodes=args.gnn_nodes)
+        network, dgl_data = train(args.explosion_steps, args.reasoning_steps, args.numeric_bits, model_name, args.gnn, args.num_trainings, args.train_interval, args.kb, gnn_nodes=args.gnn_nodes)
     if args.reload != "NONE":
         assert(args.train == "NONE")
         model_name = args.reload
@@ -410,13 +411,13 @@ def main():
     print("Now training GCN:")
     print("-" * 80)
 
-    # gnn = gnn_train(dgl_data)
-    gnn = dgl_network.load_gnn_model("best_gcn_epoch1890")
+    gnn = gnn_train(dgl_data)
+    # gnn = dgl_network.load_gnn_model("best_gcn_epoch80")
 
     print("-"*80)
     print("Now testing GCN:")
     print("-"*80)
-    use_net = False     # for random priors
+    # use_net = False     # for random priors
     res = gnn_test(gnn, use_net, args.explosion_steps, args.testing_reasoning_steps, args.heap_print_size,
                args.prb_print_size, args.numeric_bits,
                heap_print_freq=1, prb_threshold=args.prb_threshold, use_gnn=args.gnn, kb=args.kb,
@@ -430,7 +431,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import dgl.data
 from dgl.dataloading import GraphDataLoader
-from torch.utils.data.sampler import SubsetRandomSampler
+from torch.utils.data.sampler import SubsetRandomSampler, SequentialSampler
+
 
 # A lot of this is boilerplate from:
 # https://docs.dgl.ai/tutorials/blitz/5_graph_classification.html#sphx-glr-tutorials-blitz-5-graph-classification-py
@@ -441,20 +443,21 @@ def gnn_train(data_list):
     num_examples = len(dataset)
     num_train = int(num_examples * 0.8)
 
-    train_sampler = SubsetRandomSampler(torch.arange(num_train))
-    test_sampler = SubsetRandomSampler(torch.arange(num_train, num_examples))
+    train_sampler = SequentialSampler(torch.arange(num_train))
+    test_sampler = SequentialSampler(torch.arange(num_train, num_examples))
 
     train_dataloader = GraphDataLoader(
         dataset, sampler=train_sampler, batch_size=32, drop_last=False)
     test_dataloader = GraphDataLoader(
         dataset, sampler=test_sampler, batch_size=100000, drop_last=False)
 
-    model = dgl_network.GCN(dataset.dim_nfeats, 16, dataset.gclasses)
+    model = dgl_network.GCN(dataset.dim_nfeats, 512, dataset.gclasses)
     # model = dgl_network.GatedGCN(dataset.dim_nfeats, 16, dataset.gclasses)
+    # model = dgl_network.load_gnn_model("best_gcn_epoch5")
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
     model.train()
 
-    for epoch in range(10000):
+    for epoch in range(100000):
         minloss = math.inf
         print("="*80)
         print("GCN epoch ", epoch, ":")
@@ -530,7 +533,7 @@ def gnn_train(data_list):
             if num_correct / num_tests > 0.97 and tloss < 0.001 and epoch > 5000000:
                 print("good GCN, returning early")
                 dgl_network.save_gnn_model(model, "returned_gcn")
-                model.eval()
+                # model.eval()
                 return model
 
 
@@ -547,7 +550,7 @@ def gnn_train(data_list):
     # print('GCN accuracy:', num_correct / num_tests)
 
     dgl_network.save_gnn_model(model, "returned_gcn")
-    model.eval()
+    # model.eval()
     return model
 
 
@@ -583,12 +586,24 @@ def gnn_test(network, network_priors, exp_size=10, num_steps=500, alma_heap_prin
         subjects = ['f', 'g', 'a']
     # elif "ps_test_search.pl" in kb:
 
+
+    # network.eval()
     res_task_input = [ x[:2] for x in res_tasks]
     if network_priors:
         temp_network = resolution_prebuffer.res_prebuffer(subjects, [], use_gnn=use_gnn, gnn_nodes=gnn_nodes)
-        X = temp_network.vectorize(res_task_input)
-        Y = np.zeros(len(X)) # filler data, labels don't matter
+
+        prb = alma.prebuf(alma_inst)
+        res_tasks = prb[0]
+        res_lits = res_task_lits(prb[2])
+        res_task_input = [x[:2] for x in res_tasks]
+        temp_network.save_batch(res_task_input, res_lits)
+        X = temp_network.Xbuffer
+        Y = temp_network.ybuffer
         dataset = dgl_dataset.AlmaDataset(X, Y)
+
+        # X = temp_network.vectorize(res_task_input)
+        # Y = np.zeros(len(X)) # filler data, labels don't matter
+        # dataset = dgl_dataset.AlmaDataset(X, Y)
 
         test_sampler = SubsetRandomSampler(torch.arange(0, len(dataset)))
         test_dataloader = GraphDataLoader(
@@ -602,8 +617,8 @@ def gnn_test(network, network_priors, exp_size=10, num_steps=500, alma_heap_prin
             for i in range(len(priorities)):
                 # priorities[i] = pred[i][1]                      # activation val
                 # priorities[i] = 1 / (1 + np.exp(priorities[i]))  # sigmoid for cross entropy
-                p0 = int(pred[i][0])
-                p1 = int(pred[i][1])
+                p0 = float(pred[i][0])
+                p1 = float(pred[i][1])
                 priorities[i] = 1 - (np.exp(p1)/(np.exp(p1) + np.exp(p0)))
     else:
         priorities = np.random.uniform(size=len(res_task_input))
@@ -646,13 +661,25 @@ def gnn_test(network, network_priors, exp_size=10, num_steps=500, alma_heap_prin
 
             if network_priors:
                 temp_network = resolution_prebuffer.res_prebuffer(subjects, [], use_gnn=use_gnn, gnn_nodes=gnn_nodes)
-                X = temp_network.vectorize(res_task_input)
-                Y = np.zeros(len(X))  # filler data, labels don't matter
+
+                prb = alma.prebuf(alma_inst)
+                res_tasks = prb[0]
+                res_lits = res_task_lits(prb[2])
+                res_task_input = [x[:2] for x in res_tasks]
+                temp_network.save_batch(res_task_input, res_lits)
+                X = temp_network.Xbuffer
+                Y = temp_network.ybuffer
                 dataset = dgl_dataset.AlmaDataset(X, Y)
+
+                # X = temp_network.vectorize(res_task_input)
+                # Y = np.zeros(len(X))  # filler data, labels don't matter
+                # dataset = dgl_dataset.AlmaDataset(X, Y)
 
                 test_sampler = SubsetRandomSampler(torch.arange(0, len(dataset)))
                 test_dataloader = GraphDataLoader(
                     dataset, sampler=test_sampler, batch_size=len(dataset), drop_last=False)
+                # test_dataloader = GraphDataLoader(
+                #     dataset, sampler=test_sampler, batch_size=1, drop_last=False)
 
                 for batched_graph, labels in test_dataloader:
                     pred = network(batched_graph, batched_graph.ndata['feat'].float())
@@ -662,8 +689,8 @@ def gnn_test(network, network_priors, exp_size=10, num_steps=500, alma_heap_prin
                     for i in range(len(priorities)):
                         priorities[i] = pred[i][1]  # activation val
                         # priorities[i] = 1 / (1 + np.exp(priorities[i]))  # sigmoid for cross entropy
-                        p0 = int(pred[i][0])
-                        p1 = int(pred[i][1])
+                        p0 = float(pred[i][0])
+                        p1 = float(pred[i][1])
                         priorities[i] = 1 - (np.exp(p1) / (np.exp(p1) + np.exp(p0)))
 
             else:
