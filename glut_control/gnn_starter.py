@@ -455,7 +455,7 @@ def gnn_train(data_list):
     # model = dgl_network.GatedGCN(dataset.dim_nfeats, 16, dataset.gclasses)
     # model = dgl_network.load_gnn_model("best_gcn_epoch5")
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
-    model.train()
+    # optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
 
     for epoch in range(100000):
         minloss = math.inf
