@@ -554,7 +554,7 @@ def gnn_train(data_list):
     return model
 
 
-def gnn_test(network, network_priors, exp_size=10, num_steps=500, alma_heap_print_size=100, prb_print_size=30, numeric_bits=10, heap_print_freq=10, prb_threshold=-1, use_gnn = False, kb='/home/justin/alma-2.0/glut_control/test1_kb.pl', gnn_nodes=2000, initial_test=False):
+def gnn_test(network, network_priors, exp_size=10, num_steps=500, alma_heap_print_size=100, prb_print_size=30, numeric_bits=10, heap_print_freq=10, prb_threshold=1, use_gnn = False, kb='/home/justin/alma-2.0/glut_control/test1_kb.pl', gnn_nodes=2000, initial_test=False):
     global alma_inst,res
     alma_inst,res = alma.init(1,kb, '0', 1, 1000, [], [])
     dbb_instances = []
@@ -612,6 +612,9 @@ def gnn_test(network, network_priors, exp_size=10, num_steps=500, alma_heap_prin
         for batched_graph, labels in test_dataloader:
             pred = network(batched_graph, batched_graph.ndata['feat'].float())
             t1, t2 = torch.max(pred, 1)
+            s = torch.softmax(pred, 1)
+            priorities = (1-s)[:,1].detach().numpy()
+            continue
             # t2[x] == binary prediction for sample x, t1[x] == magnitude of confidence value for prediction made in t2 on sample x
             priorities = np.zeros(len(X))
             for i in range(len(priorities)):
@@ -631,8 +634,10 @@ def gnn_test(network, network_priors, exp_size=10, num_steps=500, alma_heap_prin
     print("kb: ")
     for s in kb.split('\n'):
         print(s)
+
+    alma.astep(alma_inst)
     for idx in range(num_steps):
-        prb = alma.prebuf(alma_inst)[0]
+        prb = alma.prebuf(alma_inst)
         if (idx % heap_print_freq == 0):
             print("Step: ", idx)
             print("prb size: ", len(prb))
@@ -656,13 +661,13 @@ def gnn_test(network, network_priors, exp_size=10, num_steps=500, alma_heap_prin
                     break
             print("-"*80)
 
-        if len(prb) > 0:
+        if len(prb[0]) > 0:
             res_task_input = [x[:2] for x in prb]
 
             if network_priors:
                 temp_network = resolution_prebuffer.res_prebuffer(subjects, [], use_gnn=use_gnn, gnn_nodes=gnn_nodes)
 
-                prb = alma.prebuf(alma_inst)
+                #prb = alma.prebuf(alma_inst)
                 res_tasks = prb[0]
                 res_lits = res_task_lits(prb[2])
                 res_task_input = [x[:2] for x in res_tasks]
@@ -708,5 +713,7 @@ def gnn_test(network, network_priors, exp_size=10, num_steps=500, alma_heap_prin
 
 #main()
 if __name__ == "__main__":
-    main()
+    gnn = dgl_network.load_gnn_model("best_gcn_epoch2")
+    gnn_test(gnn, True, 20, 50, heap_print_freq=1, alma_heap_print_size=1000, use_gnn=True, gnn_nodes=50, initial_test=False)
+    #main()
 
