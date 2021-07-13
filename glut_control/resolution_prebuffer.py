@@ -28,7 +28,12 @@ import pickle
 import alma_functions as aw
 from sklearn.utils import shuffle
 from vectorization import graph_representation, unifies, vectorize_bow1, vectorize_bow2
+#from memory_profiler import profile
 
+import ctypes 
+class PyObject(ctypes.Structure):
+    _fields_ = [("refcnt", ctypes.c_long)]
+    
 def forward_model(use_tf = False, num_subjects=0):
     # TODO:  fix use_tf code to return everything if this ever gets used.
     if use_tf:
@@ -153,7 +158,8 @@ class gnn_model_zero():
 
         """
         return np.hstack([X[0], X[1]]).flatten()
-    
+
+    #@profile
     def fit(self, X, y, batch_size, verbose=True, callbacks=[]):
         X = np.array([self.flatten_input(Xi) for Xi in X])   # TODO:  Make this more efficient
         y = np.array(y)
@@ -297,23 +303,52 @@ class res_prebuffer:
         self.ypos_count += ypos
 
     """  Get rid of excess samples; this should help prevent memory leaks. """
-    def clean(self):
+    def clean(self, deep = False):
         if self.debug:
             self.Xbuffer, self.ybuffer, self.saved_prbs, self.saved_inputs = shuffle(self.Xbuffer, self.ybuffer, self.saved_prbs, self.saved_inputs)
+            xaddr = id(self.Xbuffer)
+            yaddr = id(self.ybuffer)
+            prbaddr = id(self.saved_prbs)
+            inpaddr = id(self.saved_inputs)            
+            print("Clearning references (xbuffer, ybuffer, saved_prbs, saved_inputs):  ",
+                  PyObject.from_address(xaddr).refcnt,
+                  PyObject.from_address(yaddr).refcnt,
+                  PyObject.from_address(prbaddr).refcnt,
+                  PyObject.from_address(inpaddr).refcnt)
         else:
             self.Xbuffer, self.ybuffer = shuffle(self.Xbuffer, self.ybuffer)
 
         pos_floor  = self.batch_size
         neg_floor = self.batch_size
-        while (self.ypos_count > pos_floor) and (self.yneg_count > neg_floor):
-            x, y = self.Xbuffer.pop(), self.ybuffer.pop()
+        if deep:
             if self.debug:
-               self.saved_prbs.pop(), self.saved_inputs.pop()
-            if y == 0:
-                self.yneg_count -= 1
-            else:
-                self.ypos_count -= 1
-            
+                self.saved_prbs = []
+                self.saved_inputs = []
+
+            self.Xbuffer = []
+            self.ybuffer = []
+            self.yneg_count = 0
+            self.ypos_count = 0 
+        else:
+            while (self.ypos_count > pos_floor) and (self.yneg_count > neg_floor):
+                x, y = self.Xbuffer.pop(), self.ybuffer.pop()
+                if self.debug:
+                    self.saved_prbs.pop(), self.saved_inputs.pop()
+                if y == 0:
+                    self.yneg_count -= 1
+                else:
+                    self.ypos_count -= 1
+
+        if self.debug:
+            xaddr = id(self.Xbuffer)
+            yaddr = id(self.ybuffer)
+            prbaddr = id(self.saved_prbs)
+            inpaddr = id(self.saved_inputs)            
+            print("After cleaning references (xbuffer, ybuffer, saved_prbs, saved_inputs):  ",
+                  PyObject.from_address(xaddr).refcnt,
+                  PyObject.from_address(yaddr).refcnt,
+                  PyObject.from_address(prbaddr).refcnt,
+                  PyObject.from_address(inpaddr).refcnt)
 
     # Get a batch (X,y) of num_samples training pairs, 
     # Here X will be a (num_samples, input_size) input array
@@ -366,6 +401,7 @@ class res_prebuffer:
         else:
             return np.array(Xres), np.array(yres), dbg
 
+    #@profile
     def train_buffered_batch(self, sample_ratio=0.5):
         X, y0, dbg = self.get_training_batch(self.batch_size, int(self.batch_size*sample_ratio))
         XG = X
@@ -443,6 +479,8 @@ class res_prebuffer:
             else:
                 self.model.fit(X, y, batch_size=self.batch_size)
 
+#    from memory_profiler import profile
+    #@profile
     def get_priorities(self, inputs, already_vectorized=False):
         X = inputs if already_vectorized else self.vectorize(inputs)
         if self.use_gnn and False:   # TODO:  remove False; check for gnn_zero

@@ -13,7 +13,7 @@ import rl_utils, resolution_prebuffer
 import numpy as np
 import itertools
 import pickle
-import gc
+
 from importlib import reload
 import alma
 from alma_utils import *
@@ -22,6 +22,8 @@ import random
 
 import dgl_dataset
 import dgl_network
+
+#from memory_profiler import profile
 
 #os.environ["LD_LIBRARY_PATH"] = "/home/justin/alma-2.0/"
 test_params = {
@@ -38,17 +40,18 @@ alma_inst,res = alma.init(1,'test1_kb.pl', '0', 1, 1000, [], [])
 # alma_inst,res = alma.init(1,'qlearning3.pl', '0', 1, 1000, [], [])
 # alma_inst,res = alma.init(1,'ps_test_search.pl', '0', 1, 1000, [], [])
 
-
+import gc
+#gc.disable()
+from tensorflow.keras import backend as K
 def res_task_lits(lit_str):
     L = lit_str.split('\n')[:-1]
     return [ x.split('\t') for x in L]
 
-def explosion(size, kb):
+def explosion(size, kb, alma_inst):
     """
     The one axiom we work with:
        if(and(distanceAt(Item1, D1, T), distanceAt(Item2, D2, T)), distanceBetweenBoundedBy(D1, Item1, Item2, T)).
     """
-    global alma_inst,res
     ilist = list(range(size))
     random.shuffle(ilist)
     for i in ilist:
@@ -90,8 +93,71 @@ def generate_epoch(num_steps, network, alma_inst):
                 alma.prb_to_res_task(alma_inst, 1.0)
 
 #@profile
-def train(explosion_steps=50, num_steps=500, numeric_bits=3, model_name="test1", use_gnn = False, num_trainings=1000, train_interval=500, kb='test1_kb.pl', net_clear=1000, gnn_nodes = 50):
-    global alma_inst,res
+def train_loop(network, num_steps, explosion_steps, kb, train_interval, dgl_data, exhaustive):
+    global new_dgl_dataset
+    alma_inst,res = alma.init(1,kb, '0', 1, 1000, [], [])
+    prb = explosion(explosion_steps, kb, alma_inst)
+    for idx in range(num_steps):
+        res_tasks = prb[0]
+        if len(res_tasks) > 0:
+            res_lits = res_task_lits(prb[2])
+            res_task_input = [x[:2] for x in res_tasks]
+            network.save_batch(res_task_input, res_lits)
+            if not new_dgl_dataset:
+                g_data = dgl_dataset.AlmaDataset(network.Xbuffer, network.ybuffer)
+                dgl_data.append(g_data)
+
+            priorities = 1 - network.get_priorities(res_task_input)
+            alma.set_priors_prb(alma_inst, priorities.flatten().tolist())
+            alma.prb_to_res_task(alma_inst, 1.0)
+            del priorities
+
+        if idx > 0 and idx % train_interval == 0:
+            print("At reasoning step {}, network has {} samples, {} of which are positive".format(idx, len(network.ybuffer), network.ypos_count))
+            if (network.ypos_count > (network.batch_size  / 2)) and (network.yneg_count > (network.batch_size  / 2)):
+
+                # dgl_test(network.Xbuffer, network.ybuffer)
+                # build up a list of DGLDatasets
+                # g_data = dgl_dataset.AlmaDataset(network.Xbuffer, network.ybuffer)
+                # dgl_data.append(g_data)
+
+                H = network.train_buffered_batch()
+                acc, loss = H.history['accuracy'][0], H.history['loss'][0]
+                #print("accuracy: {} \t loss: {}\ttacc: {}".format(acc, loss, H.history['tacc'][0]))
+                if acc > 0.8:
+                    print("acc > 0.8")
+                if acc > 0.999 and loss < 1e-5:
+                    print("Good model; ending early")
+                    network.model_save(model_name, numeric_bits)
+                    return
+
+                if exhaustive:   # If exhaustive, try to use up the replay buffer
+                    while  (network.ypos_count > (network.batch_size  / 2)) and (network.yneg_count > (network.batch_size  / 2)):
+                        print("another batch...", end=" ")
+                        H = network.train_buffered_batch()
+                        acc, loss = H.history['accuracy'][0], H.history['loss'][0]
+
+            #else:
+            #    print("Continuing...")
+            #    continue
+            hs = heap_size(alma_inst)
+            if hs < 100:
+                print("Refreshing the heap.")
+                prb = explosion(explosion_steps, kb, alma_inst)
+                continue
+
+        alma.astep(alma_inst)
+        prb = alma.prebuf(alma_inst)
+    network.clean(True)
+    del prb
+    del H
+    alma.halt(alma_inst)
+    gc.collect()
+    K.clear_session()
+
+#@profile
+def train(explosion_steps=50, num_steps=500, numeric_bits=3, model_name="test1", use_gnn = False, num_trainings=1000, train_interval=500, kb='test1_kb.pl', net_clear=1000, gnn_nodes = 50, exhaustive=False):
+    global new_dgl_dataset
     #hp = hpy()
     #hpy_before = hp.heap()
 
@@ -161,85 +227,11 @@ def train(explosion_steps=50, num_steps=500, numeric_bits=3, model_name="test1",
         if b > 0 and (b% 250 == 0):
             print("Saving checkpoint {}".format(b))
             network.model_save(model_name+"ckpt{}".format(b), numeric_bits)
-        alma_inst,res = alma.init(1,kb, '0', 1, 1000, [], [])
-        exp = explosion(explosion_steps, kb)
-        res_tasks = exp[0]
-        res_lits = res_task_lits(exp[2])
-        #res_lits = exp[1]
-        res_task_input = [ x[:2] for x in res_tasks]
-        #network.train_batch(res_task_input, res_lits)
+
         print("Network has {} samples, {} of which are positive".format(len(network.ybuffer), network.ypos_count))
-        print("Cleaning network...")
-        network.clean()
-        print("Network has {} samples, {} of which are positive".format(len(network.ybuffer), network.ypos_count))
-        next_clear = net_clear
-        for idx in range(num_steps):
-            prb = alma.prebuf(alma_inst)
-            res_tasks = prb[0]
-            #print("idx={}\tnum(res_tasks)={}".format(idx, len(prb[0])), end=" ")
-            if len(res_tasks) > 0:
-                #res_lits = prb[1]
-                res_lits = res_task_lits(prb[2])
-                res_task_input = [x[:2] for x in res_tasks]
-                #network.train_batch(res_task_input, res_lits)
-                network.save_batch(res_task_input, res_lits)
 
-                # if not new_dgl_dataset:
-                    # g_data = dgl_dataset.AlmaDataset(network.Xbuffer, network.ybuffer)
-                    # dgl_data.append(g_data)
+        train_loop(network, num_steps, explosion_steps, kb, train_interval, dgl_data, exhaustive)
 
-                if idx >= next_clear:
-                    print("Network has {} samples, {} of which are positive".format(len(network.ybuffer), network.ypos_count))
-                    print("Cleaning network...")
-                    network.clean()
-                    print("Network has {} samples, {} of which are positive".format(len(network.ybuffer), network.ypos_count))
-                    next_clear += net_clear
-                priorities = 1 - network.get_priorities(res_task_input)
-                #print("len(priorirites)={}".format(len(priorities)), end=" ")
-                alma.set_priors_prb(alma_inst, priorities.flatten().tolist())
-                alma.prb_to_res_task(alma_inst, 1.0)
-            #print()
-            #alma.add(alma_inst, "distanceAt(a, {}, {}).".format(idx, idx))
-            if idx > 0 and idx % train_interval == 0:
-                print("Network has {} samples, {} of which are positive".format(len(network.ybuffer), network.ypos_count))
-                if (network.ypos_count > (network.batch_size  / 2)) and (network.yneg_count > (network.batch_size  / 2)):
-
-                    # dgl_test(network.Xbuffer, network.ybuffer)
-                    # build up a list of DGLDatasets
-                    # g_data = dgl_dataset.AlmaDataset(network.Xbuffer, network.ybuffer)
-                    # dgl_data.append(g_data)
-
-                    H, XG, YG, dbg = network.train_buffered_batch()
-                    if not new_dgl_dataset:
-                        print(dbg)
-                        g_data = dgl_dataset.AlmaDataset(XG, YG)
-                        dgl_data.append(g_data)
-
-                    acc, loss = H.history['accuracy'][0], H.history['loss'][0]
-                    #print("accuracy: {} \t loss: {}\ttacc: {}".format(acc, loss, H.history['tacc'][0]))
-                    if acc > 0.8:
-                        print("acc > 0.8")
-                    if acc > 0.999 and loss < 1e-5:
-                        print("Good model; ending early")
-                        network.model_save(model_name, numeric_bits)
-                        return
-                else:
-                    print("Continuing...")
-                    continue
-                hs = heap_size(alma_inst)
-                print("Heap size is: ", hs)
-                if hs < 100:
-                    print("Refreshing the heap.")
-                    _ = explosion(explosion_steps, kb)
-                
-            alma.astep(alma_inst)
-        del alma_inst
-        del prb
-        del exp
-        del res
-        del res_lits
-        del res_tasks
-        del res_task_input
 
     network.model_save(model_name, numeric_bits)
     #hpy_after  = hp.heap()
@@ -371,6 +363,7 @@ def main():
     parser.add_argument("--kb", action='store', required=False, default="test1_kb.pl")
     parser.add_argument("--gnn", action='store_true')
     parser.add_argument("--cpu_only", action='store_true')
+    parser.add_argument("--exhaustive", action='store_true')
 
     network = None
     args = parser.parse_args()
@@ -388,7 +381,7 @@ def main():
         assert(args.reload == "NONE")
         print("Using network: {} with expsteps {}   rsteps {}    model_name {}".format(use_net, args.explosion_steps, args.reasoning_steps, model_name))
         print('Training; model name is ', args.train)
-        network, dgl_data = train(args.explosion_steps, args.reasoning_steps, args.numeric_bits, model_name, args.gnn, args.num_trainings, args.train_interval, args.kb, gnn_nodes=args.gnn_nodes)
+        network, dgl_data = train(args.explosion_steps, args.reasoning_steps, args.numeric_bits, model_name, args.gnn, args.num_trainings, args.train_interval, args.kb, gnn_nodes=args.gnn_nodes, exhaustive=args.exhaustive)
     if args.reload != "NONE":
         assert(args.train == "NONE")
         model_name = args.reload
@@ -417,7 +410,6 @@ def main():
     print("-"*80)
     print("Now testing GCN:")
     print("-"*80)
-    # use_net = False     # for random priors
     res = gnn_test(gnn, use_net, args.explosion_steps, args.testing_reasoning_steps, args.heap_print_size,
                args.prb_print_size, args.numeric_bits,
                heap_print_freq=1, prb_threshold=args.prb_threshold, use_gnn=args.gnn, kb=args.kb,
