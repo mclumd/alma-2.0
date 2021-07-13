@@ -267,7 +267,7 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *alma, intr
 }
 
 // ancestor(A, B) returns true if a A appears as an ancestor in any derivation of B
-static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time, binding_list *bindings, kb *alma, int neg) {
+static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time, binding_list *bindings, kb *alma, int neg, int parent) {
   // Ensure time argument is correctly constructed: either a numeric constant, or a variable bound to one
   binding *res;
   if (time->type == VARIABLE && (res = bindings_contain(bindings, time->variable))) {
@@ -382,10 +382,12 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time,
                 }
                 cleanup_bindings(anc_bindings);
 
-                // Queue parents for expansion
-                for (int j = 0; j < c->parent_set_count; j++)
-                  for (int k = 0; k < c->parents[j].count; k++)
-                    tommy_array_insert(&queue, c->parents[j].clauses[k]);
+                // Queue parents for expansion only when procedure is ancestor/non_ancestor, not parent
+                if (!parent) {
+                  for (int j = 0; j < c->parent_set_count; j++)
+                    for (int k = 0; k < c->parents[j].count; k++)
+                      tommy_array_insert(&queue, c->parents[j].clauses[k]);
+                }
               }
             }
 
@@ -580,12 +582,17 @@ int proc_run(alma_function *proc, binding_list *bindings, kb *alma) {
   else if (strcmp(proc->name, "ancestor") == 0) {
     // Must match (given bindings) the schema ancestor("...", "...", Time)
     if (proc->term_count == 3 || proc->term_count == 4)
-      return ancestor(proc->terms+0, proc->terms+1, proc->terms+2, bindings, alma, 0);
+      return ancestor(proc->terms+0, proc->terms+1, proc->terms+2, bindings, alma, 0, 0);
   }
   else if (strcmp(proc->name, "non_ancestor") == 0) {
     // Must match (given bindings) the schema non_ancestor("...", "...", Time)
     if (proc->term_count == 3 || proc->term_count == 4)
-      return ancestor(proc->terms+0, proc->terms+1, proc->terms+2, bindings, alma, 1);
+      return ancestor(proc->terms+0, proc->terms+1, proc->terms+2, bindings, alma, 1, 0);
+  }
+  else if (strcmp(proc->name, "parent") == 0) {
+    // Must match (given bindings) the schema parent("...", "...", Time)
+    if (proc->term_count == 3 || proc->term_count == 4)
+      return ancestor(proc->terms+0, proc->terms+1, proc->terms+2, bindings, alma, 0, 1);
   }
   else if (strcmp(proc->name, "less_than") == 0) {
     if (proc->term_count == 2 || proc->term_count == 3)

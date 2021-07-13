@@ -84,7 +84,7 @@ typedef struct kb {
   long long variable_id_count;
   long next_index;
 
-  alma_proc procs[12];
+  alma_proc procs[13];
 } kb;
 
 // Map used for entries in index_map
