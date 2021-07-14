@@ -211,10 +211,10 @@ def train(explosion_steps=50, num_steps=500, numeric_bits=3, model_name="test1",
                     # g_data = dgl_dataset.AlmaDataset(network.Xbuffer, network.ybuffer)
                     # dgl_data.append(g_data)
 
-                    # two_stage = True
+                    two_stage = True
                     H, XG, YG, dbg = network.train_buffered_batch()
-                    # if two_stage:
-                    #     two_stg_dataset.two_stg_dataset(XG, YG)
+                    if two_stage:
+                        two_stg_dataset.two_stg_dataset(XG, YG)
 
 
                     if not new_dgl_dataset:
