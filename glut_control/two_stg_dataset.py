@@ -1,5 +1,6 @@
 import numpy as np
 import sys
+import os.path
 
 def two_stg_dataset(X, Y):
     dim_nfeats = len(X[0][1][0])
@@ -11,11 +12,19 @@ def two_stg_dataset(X, Y):
     num_edges = 0
     num_graphs = 0
 
-    edges_file = open('ALMA_A.txt', 'w')                        # STORE EDGES
-    graph_indicator = open('ALMA_graph_indicator.txt', 'w')     # INDEX NODES TO GRAPHS
-    node_labels = open('ALMA_node_labels.txt', 'w')             # ALL ZEROES
-    graph_labels = open('ALMA_graph_labels.txt', 'w')           # GRAPH CLASS LABELS
-    node_attributes = open('ALMA_node_attributes.txt', 'w')     # NODE FEATURES
+    if not os.path.exists('2STG'):
+        os.mkdir('2STG')
+
+    if os.path.exists('2STG/ALMA_meta.txt'):
+        metadata = open('2STG/ALMA_meta.txt', 'r')                   # STORE NUM_XXXXX
+        num_nodes = int(metadata.readline())
+        num_graphs = int(metadata.readline())
+        metadata.close()
+    edges_file = open('2STG/ALMA_A.txt', 'a')                        # STORE EDGES
+    graph_indicator = open('2STG/ALMA_graph_indicator.txt', 'a')     # INDEX NODES TO GRAPHS
+    node_labels = open('2STG/ALMA_node_labels.txt', 'a')             # ALL ZEROES
+    graph_labels = open('2STG/ALMA_graph_labels.txt', 'a')           # GRAPH CLASS LABELS
+    node_attributes = open('2STG/ALMA_node_attributes.txt', 'a')     # NODE FEATURES
 
     for graph in X:
         y = 0 + (num_graphs * NODES_PER_GRAPH)
@@ -34,7 +43,6 @@ def two_stg_dataset(X, Y):
         for i in range(NODES_PER_GRAPH):
             graph_indicator.write(str(num_graphs) + '\n')       # LABEL NODES TO GRAPHS THEY BELONG WITH
             node_labels.write('0\n')                            # FILL NODE LABELS WITH NOTHING (ACTUAL NODE DATA IN NODE_ATTRIBUTES)
-        graph_labels.write(str(Y[num_graphs]) + '\n')           # WRITE GRAPH CLASS LABEL
         for features in graph[1]:
             for element in features:
                 node_attributes.write(str(element) + ', ')      # WRITE NODE FEATURES
@@ -44,10 +52,17 @@ def two_stg_dataset(X, Y):
 
         # sys.exit()                                            # TEST ON ONE GRAPH
 
+    for label in Y:
+        graph_labels.write(str(label) + '\n')  # WRITE GRAPH CLASS LABEL
+
     edges_file.close()
     graph_indicator.close()
     node_labels.close()
     graph_labels.close()
     node_attributes.close()
+
+    metadata = open('2STG/ALMA_meta.txt', 'w')
+    metadata.write(str(num_nodes) + '\n' + str(num_graphs))
+    metadata.close()
 
     sys.exit()
