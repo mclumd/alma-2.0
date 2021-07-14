@@ -29,6 +29,7 @@ import alma_functions as aw
 from sklearn.utils import shuffle
 from vectorization import graph_representation, unifies, vectorize_bow1, vectorize_bow2
 #from memory_profiler import profile
+import dgl_network
 
 import ctypes 
 class PyObject(ctypes.Structure):
@@ -226,6 +227,7 @@ class res_prebuffer:
             self.graph_rep = graph_representation(self.subjects_dict, self.max_gnn_nodes)
 
         self.model = forward_model(use_tf, len(self.subjects_dict)+1) if not use_gnn else gnn_model_zero(self.max_gnn_nodes,self.graph_rep.feature_len)
+        self.dgl_gnn = False # Overridden in dgl_heuristic
     
 
 
@@ -517,26 +519,31 @@ class res_prebuffer:
         return preds
 
     def model_save(self, id_str, numeric_bits):
-        pkl_file = open("rl_model_{}.pkl".format(id_str), "wb")
+        pkl_file = open("model_{}.pkl".format(id_str), "wb")
         pickle.dump((self.subjects, self.words, self.num_subjects, self.num_words, self.subjects_dict, self.words_dict, self.batch_size, self.use_tf, numeric_bits, self.use_gnn, self.max_gnn_nodes, self.vectorize_alg), pkl_file)
         if self.use_gnn and False:
-            self.model.graph_net.save("rl_model_{}".format(id_str))
+            self.model.graph_net.save("model_{}".format(id_str))
             print("GNN trainable weights:")
             print(self.model.graph_net.trainable_weights)
+        elif self.dgl_gnn:
+            dgl_network.save_gnn_model(self.model, "model_{}".format(id_str))
         else:
-            self.model.save("rl_model_{}".format(id_str))
+            self.model.save("model_{}".format(id_str))
 
     def model_load(self, id_str):
         if self.use_gnn:
             # print("Model loading not yet implemented.")
             # raise NotImplementedError
             # TODO:  test the following code
-            pkl_file = open("rl_model_{}.pkl".format(id_str), "rb")
+            pkl_file = open("model_{}.pkl".format(id_str), "rb")
             (self.subjects, self.words, self.num_subjects, self.num_words, self.subjects_dict, self.words_dict, self.batch_size, self.use_tf, numeric_bits, self.use_gnn, self.max_gnn_nodes,self.vectorize_alg ) = pickle.load(pkl_file)
             #self.model.graph_net = keras.models.load_model("rl_model_{}".format(id_str))   #TODO:  Handle both types of gnn
-            self.model.load(id_str)
+            if self.dgl_gnn:
+                self.model = dgl_network.load_gnn_model("model_{}".format(id_str))
+            else:
+                self.model.load(id_str)
         else:
-            self.model = keras.models.load_model("rl_model_{}".format(id_str))
+            self.model = keras.models.load_model("model_{}".format(id_str))
 
     def unify_likelihood(self, inputs):
         X = self.vectorize(inputs)

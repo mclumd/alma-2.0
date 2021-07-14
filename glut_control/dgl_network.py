@@ -59,6 +59,9 @@ class GCN(nn.Module):
         g.ndata['h'] = h
         return dgl.mean_nodes(g, 'h')
 
+    def save(filename):
+        torch.save(self, "gcndir/" + filename + ".pt")        
+
 class GatedGCN(nn.Module):
     def __init__(self, in_feats, h_feats, num_classes):
         super(GatedGCN, self).__init__()

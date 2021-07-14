@@ -22,6 +22,7 @@ import random
 
 import dgl_dataset
 import dgl_network
+from dgl_heuristic import dgl_heuristic
 
 #from memory_profiler import profile
 
@@ -103,9 +104,9 @@ def train_loop(network, num_steps, explosion_steps, kb, train_interval, dgl_data
             res_lits = res_task_lits(prb[2])
             res_task_input = [x[:2] for x in res_tasks]
             network.save_batch(res_task_input, res_lits)
-            if not new_dgl_dataset:
-                g_data = dgl_dataset.AlmaDataset(network.Xbuffer, network.ybuffer)
-                dgl_data.append(g_data)
+            # if not new_dgl_dataset:
+            #     g_data = dgl_dataset.AlmaDataset(network.Xbuffer, network.ybuffer)
+            #     dgl_data.append(g_data)
 
             priorities = 1 - network.get_priorities(res_task_input)
             alma.set_priors_prb(alma_inst, priorities.flatten().tolist())
@@ -122,14 +123,15 @@ def train_loop(network, num_steps, explosion_steps, kb, train_interval, dgl_data
                 # dgl_data.append(g_data)
 
                 H = network.train_buffered_batch()
-                acc, loss = H.history['accuracy'][0], H.history['loss'][0]
-                #print("accuracy: {} \t loss: {}\ttacc: {}".format(acc, loss, H.history['tacc'][0]))
-                if acc > 0.8:
-                    print("acc > 0.8")
-                if acc > 0.999 and loss < 1e-5:
-                    print("Good model; ending early")
-                    network.model_save(model_name, numeric_bits)
-                    return
+                if H is not None:
+                    acc, loss = H.history['accuracy'][0], H.history['loss'][0]
+                    #print("accuracy: {} \t loss: {}\ttacc: {}".format(acc, loss, H.history['tacc'][0]))
+                    if acc > 0.8:
+                        print("acc > 0.8")
+                    if acc > 0.999 and loss < 1e-5:
+                        print("Good model; ending early")
+                        network.model_save(model_name, numeric_bits)
+                        return
 
                 if exhaustive:   # If exhaustive, try to use up the replay buffer
                     while  (network.ypos_count > (network.batch_size  / 2)) and (network.yneg_count > (network.batch_size  / 2)):
@@ -150,13 +152,12 @@ def train_loop(network, num_steps, explosion_steps, kb, train_interval, dgl_data
         prb = alma.prebuf(alma_inst)
     network.clean(True)
     del prb
-    del H
     alma.halt(alma_inst)
     gc.collect()
     K.clear_session()
 
 #@profile
-def train(explosion_steps=50, num_steps=500, numeric_bits=3, model_name="test1", use_gnn = False, num_trainings=1000, train_interval=500, kb='test1_kb.pl', net_clear=1000, gnn_nodes = 50, exhaustive=False):
+def train(explosion_steps=50, num_steps=500, numeric_bits=3, model_name="test1", use_gnn = False, num_trainings=1000, train_interval=500, kb='test1_kb.pl', net_clear=1000, gnn_nodes = 50, exhaustive=False, dgl_gnn=False):
     global new_dgl_dataset
     #hp = hpy()
     #hpy_before = hp.heap()
@@ -166,8 +167,8 @@ def train(explosion_steps=50, num_steps=500, numeric_bits=3, model_name="test1",
     # ***************** #
 
     dgl_data = []
-    new_dgl_dataset = False
-    # new_dgl_dataset = True
+    #new_dgl_dataset = False
+    new_dgl_dataset = True
     if new_dgl_dataset:
         if "test1_kb.pl" in kb:
             subjects = ['a', 'b', 'distanceAt', 'distanceBetweenBoundedBy']
@@ -187,7 +188,7 @@ def train(explosion_steps=50, num_steps=500, numeric_bits=3, model_name="test1",
         network = resolution_prebuffer.res_prebuffer(subjects, [], use_gnn=use_gnn, gnn_nodes=gnn_nodes)
 
         alma_inst, res = alma.init(1, kb, '0', 1, 1000, [], [])
-        exp = explosion(explosion_steps * 20, kb)       # making a big but less redundant dataset
+        exp = explosion(explosion_steps, kb, alma_inst)       # making a big but less redundant dataset
         res_tasks = exp[0]
         res_lits = res_task_lits(exp[2])
         res_task_input = [x[:2] for x in res_tasks]
@@ -221,7 +222,10 @@ def train(explosion_steps=50, num_steps=500, numeric_bits=3, model_name="test1",
                 subjects.append("{}/{}".format(cat_subj, place))
             for num_subj in range(2**numeric_bits):
                 subjects.append("{}/{}".format(num_subj, place))
-    network = resolution_prebuffer.res_prebuffer(subjects, [], use_gnn=use_gnn, gnn_nodes = gnn_nodes)
+    if dgl_gnn:
+        network = dgl_heuristic(g_data.dim_nfeats, subjects, [], use_gnn=True, gnn_nodes = gnn_nodes)
+    else:
+        network = resolution_prebuffer.res_prebuffer(subjects, [], use_gnn=use_gnn, gnn_nodes = gnn_nodes)
     for b in range(num_trainings):
         print("Starting round ", b)
         if b > 0 and (b% 250 == 0):
@@ -364,7 +368,8 @@ def main():
     parser.add_argument("--gnn", action='store_true')
     parser.add_argument("--cpu_only", action='store_true')
     parser.add_argument("--exhaustive", action='store_true')
-
+    parser.add_argument("--dgl_gnn", action='store_true')
+    
     network = None
     args = parser.parse_args()
     print("Run with args:", args)
@@ -376,18 +381,27 @@ def main():
         # TODO:  This may need to be done before any tensorflow imports
         os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
+    if args.dgl_gnn:
+        assert(args.gnn)
+
     if args.train != "NONE":
         model_name = args.train
         assert(args.reload == "NONE")
         print("Using network: {} with expsteps {}   rsteps {}    model_name {}".format(use_net, args.explosion_steps, args.reasoning_steps, model_name))
         print('Training; model name is ', args.train)
-        network, dgl_data = train(args.explosion_steps, args.reasoning_steps, args.numeric_bits, model_name, args.gnn, args.num_trainings, args.train_interval, args.kb, gnn_nodes=args.gnn_nodes, exhaustive=args.exhaustive)
+        network = train(args.explosion_steps, args.reasoning_steps, args.numeric_bits, model_name, args.gnn, args.num_trainings, args.train_interval, args.kb, gnn_nodes=args.gnn_nodes, exhaustive=args.exhaustive, dgl_gnn=args.dgl_gnn)
     if args.reload != "NONE":
         assert(args.train == "NONE")
         model_name = args.reload
         print("Using network: {}, expsteps {}   rsteps {}    model_name {}".format(use_net, args.explosion_steps, args.reasoning_steps, model_name))
         network = resolution_prebuffer.rpf_load(model_name, True)
 
+
+    return
+
+
+
+        
     #res = test(use_net, args.explosion_steps, args.reasoning_steps, args.heap_print_size, args.prb_print_size, args.numeric_bits, heap_print_freq=10, model_name = model_name, prb_threshold=0.25)
     print("-"*80)
     print("BEGIN TESTING")
@@ -400,11 +414,11 @@ def main():
     # ************** #
     # GNN TRAIN/TEST #
     # ************** #
-    print("-"*80)
-    print("Now training GCN:")
-    print("-" * 80)
+    # print("-"*80)
+    # print("Now training GCN:")
+    # print("-" * 80)
 
-    gnn = gnn_train(dgl_data)
+    # gnn = gnn_train(dgl_data)
     # gnn = dgl_network.load_gnn_model("best_gcn_epoch80")
 
     print("-"*80)
@@ -604,8 +618,8 @@ def gnn_test(network, network_priors, exp_size=10, num_steps=500, alma_heap_prin
         for batched_graph, labels in test_dataloader:
             pred = network(batched_graph, batched_graph.ndata['feat'].float())
             t1, t2 = torch.max(pred, 1)
-            s = torch.softmax(pred, 1)
-            priorities = (1-s)[:,1].detach().numpy()
+            #s = torch.softmax(pred, 1)
+            priorities = (1-pred)[:,1].detach().numpy()
             continue
             # t2[x] == binary prediction for sample x, t1[x] == magnitude of confidence value for prediction made in t2 on sample x
             priorities = np.zeros(len(X))
@@ -705,7 +719,7 @@ def gnn_test(network, network_priors, exp_size=10, num_steps=500, alma_heap_prin
 
 #main()
 if __name__ == "__main__":
-    gnn = dgl_network.load_gnn_model("best_gcn_epoch2")
-    gnn_test(gnn, True, 20, 50, heap_print_freq=1, alma_heap_print_size=1000, use_gnn=True, gnn_nodes=50, initial_test=False)
-    #main()
+    #gnn = dgl_network.load_gnn_model("best_gcn_epoch2")
+    #gnn_test(gnn, True, 20, 50, heap_print_freq=1, alma_heap_print_size=1000, use_gnn=True, gnn_nodes=50, initial_test=False)
+    main()
 
