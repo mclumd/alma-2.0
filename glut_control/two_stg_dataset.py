@@ -32,8 +32,8 @@ def two_stg_dataset(X, Y):
             x = 0 + (num_graphs * NODES_PER_GRAPH)
             for column in row:
                 if column == 1.0:
-                    edges_file.write(str(x) + ', ' + str(y) + '\n')  # WRITE THE EDGES
-                    edges_file.write(str(y) + ', ' + str(x) + '\n')
+                    edges_file.write(str(y) + ', ' + str(x) + '\n')  # WRITE THE EDGES
+                    edges_file.write(str(x) + ', ' + str(y) + '\n')
                     num_edges += 2
                 x += 1
             y += 1
