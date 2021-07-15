@@ -27,9 +27,9 @@ def two_stg_dataset(X, Y):
     node_attributes = open('2STG/ALMA_node_attributes.txt', 'a')     # NODE FEATURES
 
     for graph in X:
-        y = 0 + (num_graphs * NODES_PER_GRAPH)
+        y = 1 + (num_graphs * NODES_PER_GRAPH)                       # 1, NOT 0, THAT'S HOW DATA_LOAD EXPECTS
         for row in graph[0]:
-            x = 0 + (num_graphs * NODES_PER_GRAPH)
+            x = 1 + (num_graphs * NODES_PER_GRAPH)
             for column in row:
                 if column == 1.0:
                     edges_file.write(str(y) + ', ' + str(x) + '\n')  # WRITE THE EDGES
@@ -37,15 +37,17 @@ def two_stg_dataset(X, Y):
                     num_edges += 2
                 x += 1
             y += 1
-        edges_file.write(str(num_graphs * NODES_PER_GRAPH) + ', ' + str(50 + (num_graphs * NODES_PER_GRAPH)) + '\n')
-        edges_file.write(str(50 + (num_graphs * NODES_PER_GRAPH)) + ', ' + str(num_graphs * NODES_PER_GRAPH) + '\n')
+        edges_file.write(str(1 + (num_graphs * NODES_PER_GRAPH)) + ', ' + str(51 + (num_graphs * NODES_PER_GRAPH)) + '\n')
+        edges_file.write(str(51 + (num_graphs * NODES_PER_GRAPH)) + ', ' + str(1 + (num_graphs * NODES_PER_GRAPH)) + '\n')
         num_edges += 2                                          # LINK THE TREES
         for i in range(NODES_PER_GRAPH):
             graph_indicator.write(str(num_graphs) + '\n')       # LABEL NODES TO GRAPHS THEY BELONG WITH
             node_labels.write('0\n')                            # FILL NODE LABELS WITH NOTHING (ACTUAL NODE DATA IN NODE_ATTRIBUTES)
         for features in graph[1]:
-            for element in features:
-                node_attributes.write(str(element) + ', ')      # WRITE NODE FEATURES
+            ei = 0
+            for ei in range(len(features) - 1):
+                node_attributes.write(str(int(features[ei])) + ', ')      # WRITE NODE FEATURES
+            node_attributes.write(str(int(features[ei + 1])))       # NO TRAILING COMMA
             node_attributes.write('\n')
         num_graphs += 1                                         # ITERATE NUM_GRAPHS AND NUM_NODES
         num_nodes += NODES_PER_GRAPH
@@ -53,7 +55,7 @@ def two_stg_dataset(X, Y):
         # sys.exit()                                            # TEST ON ONE GRAPH
 
     for label in Y:
-        graph_labels.write(str(label) + '\n')  # WRITE GRAPH CLASS LABEL
+        graph_labels.write(str(int(label)) + '\n')  # WRITE GRAPH CLASS LABEL
 
     edges_file.close()
     graph_indicator.close()
