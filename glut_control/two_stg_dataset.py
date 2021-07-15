@@ -42,7 +42,7 @@ def two_stg_dataset(X, Y):
         num_edges += 2                                          # LINK THE TREES
         for i in range(NODES_PER_GRAPH):
             graph_indicator.write(str(num_graphs + 1) + '\n')       # LABEL NODES TO GRAPHS THEY BELONG WITH
-            node_labels.write('0\n')                            # FILL NODE LABELS WITH NOTHING (ACTUAL NODE DATA IN NODE_ATTRIBUTES)
+            node_labels.write('1\n')                            # FILL NODE LABELS WITH NOTHING (ACTUAL NODE DATA IN NODE_ATTRIBUTES)
         for features in graph[1]:
             ei = 0
             for ei in range(len(features) - 1):
