@@ -269,7 +269,7 @@ def test(network, network_priors, exp_size=10, num_steps=500, alma_heap_print_si
     global alma_inst,res
     alma_inst,res = alma.init(1,kb, '0', 1, 1000, [], [])
     dbb_instances = []
-    exp = explosion(exp_size, kb)
+    exp = explosion(exp_size, kb, alma_inst)
     res_tasks = exp[0]
     if len(res_tasks) == 0:
         return []
