@@ -147,11 +147,11 @@ def train_loop(network, num_steps, explosion_steps, kb, train_interval, dgl_data
             #else:
             #    print("Continuing...")
             #    continue
-            hs = heap_size(alma_inst)
-            if hs < 100:
-                print("Refreshing the heap.")
-                prb = explosion(explosion_steps, kb, alma_inst)
-                continue
+            #hs = heap_size(alma_inst)
+            #if hs < 100:
+            #    print("Refreshing the heap.")
+            #    prb = explosion(explosion_steps, kb, alma_inst)
+            #    continue
 
         alma.astep(alma_inst)
         prb = alma.prebuf(alma_inst)
@@ -233,7 +233,7 @@ def train(explosion_steps=50, num_steps=500, numeric_bits=3, model_name="test1",
         network = resolution_prebuffer.res_prebuffer(subjects, [], use_gnn=use_gnn, gnn_nodes = gnn_nodes)
     for b in range(num_trainings):
         print("Starting round ", b)
-        if b > 0 and (b% 250 == 0):
+        if b > 0 and (b% 25 == 0):
             print("Saving checkpoint {}".format(b))
             network.model_save(model_name+"ckpt{}".format(b), numeric_bits)
 
@@ -254,7 +254,7 @@ def train(explosion_steps=50, num_steps=500, numeric_bits=3, model_name="test1",
     #     test_network(network, num_steps, kb)
 
     # slightly hacky, return dgl_data here for the dgl train/test loops
-    return network, dgl_data
+    return network
 
 def test_network(network, num_steps, kb):
     global alma_inst
@@ -404,7 +404,7 @@ def main():
         network = resolution_prebuffer.rpf_load(model_name, True)
 
 
-    return
+
 
 
 
@@ -413,10 +413,12 @@ def main():
     print("-"*80)
     print("BEGIN TESTING")
     print("-"*80)
-    # res = test(network, use_net, args.explosion_steps, args.testing_reasoning_steps, args.heap_print_size, args.prb_print_size, args.numeric_bits,
-    #            heap_print_freq=1, prb_threshold=args.prb_threshold, use_gnn=args.gnn, kb=args.kb, gnn_nodes=args.gnn_nodes, initial_test=False)
-    # print("Final result is", res)
-    # print("Final number is", len(res))
+    res = test(network, use_net, args.explosion_steps, args.testing_reasoning_steps, args.heap_print_size, args.prb_print_size, args.numeric_bits,
+               heap_print_freq=1, prb_threshold=args.prb_threshold, use_gnn=args.gnn, kb=args.kb, gnn_nodes=args.gnn_nodes, initial_test=False)
+    print("Final result is", res)
+    print("Final number is", len(res))
+
+    return
 
     # ************** #
     # GNN TRAIN/TEST #

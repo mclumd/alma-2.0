@@ -32,6 +32,7 @@ class AlmaDataset(DGLDataset):
         self.gclasses = len(np.unique(self.Y))  # doesn't work, why?
 
         self.gclasses = 2
+        self.device = torch.device("cuda")
 
         # self.dim_nfeats = 11    # hardcoded for now, can work on this later
         # self.gclasses = 2       # hardcoded for now, can work on this later
@@ -79,7 +80,8 @@ class AlmaDataset(DGLDataset):
             # Grab features for g from X[i][1]
             # Convert to tensor via torch to avoid the "numpy.ndarray has no attribute 'device'" error
             # https://discuss.dgl.ai/t/attributeerror-numpy-ndarray-object-has-no-attribute-device/241
-            g.ndata['feat'] = torch.LongTensor(graph[1]).cuda()
+            g.ndata['feat'] = torch.LongTensor(graph[1])
+            #g.ndata['feat'] = torch.LongTensor(graph[1]).to(self.device)
             self.graphs.append(dgl.add_self_loop(g))        #stops the zero-in-degree issue with GCN
             self.labels.append(label)
             i += 1
