@@ -5,9 +5,14 @@ _CPU_ONLY=False
 
 import random
 import os
+import sys
+import torch
 
 if _CPU_ONLY:
     os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+else:
+    os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+    torch.cuda.is_available()
 
 import rl_utils, resolution_prebuffer
 import numpy as np
