@@ -14,6 +14,7 @@ class dgl_heuristic(res_prebuffer):
         self.model = dgl_network.GCN(input_size, 512, 2)
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.01)
         self.dgl_gnn = True
+        
 
 
     def train_buffered_batch(self, sample_ratio=0.5):
@@ -63,9 +64,11 @@ class dgl_heuristic(res_prebuffer):
         Y = np.zeros(len(X)) # filler data, labels don't matter
         dataset = dgl_dataset.AlmaDataset(X, Y)
         sampler = SequentialSampler(torch.arange(len(X)))
+        #sampler = SequentialSampler(torch.arange(1))
         test_dataloader = GraphDataLoader(
             dataset, sampler=sampler, batch_size=1, drop_last=False)
+#            dataset, sampler=sampler, batch_size=len(X), drop_last=False)
         preds = []
         for batched_graph, labels in test_dataloader:
-            preds.append(torch.softmax(self.model(batched_graph, batched_graph.ndata['feat'].float()),1).detach().numpy())
+            preds.append(torch.softmax(self.model(batched_graph, batched_graph.ndata['feat'].float()),1).detach().cpu().numpy())
         return np.array(preds).reshape(-1,2)[:,1]

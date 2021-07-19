@@ -8,12 +8,17 @@ Currently, the following are planned:
 """
 
 import tensorflow as tf
+
+#tf.config.gpu.set_per_process_memory_fraction(0.25)
+#tf.config.gpu.set_per_process_memory_growth(True)
+
 from tensorflow import keras
 from tensorflow.keras.models import Model
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.losses import BinaryCrossentropy
 from tensorflow.keras.metrics import BinaryAccuracy
 from tensorflow.keras.layers import Dense, Dropout
+
 #from spektral.layers import GCNConv, GlobalSumPool
 #from spektral.data.graph import Graph
 #from spektral.data import DisjointLoader
@@ -38,7 +43,6 @@ class PyObject(ctypes.Structure):
 def forward_model(use_tf = False, num_subjects=0):
     # TODO:  fix use_tf code to return everything if this ever gets used.
     if use_tf:
-        import tensorflow as tf
         model  = tf.keras.models.Sequential([
             tf.keras.Input(shape=( (  2*num_subjects,)) ),    # One input for each term
             tf.keras.layers.Dense(32, activation='relu'),
@@ -66,63 +70,63 @@ class history_struct:
     def __init__(self, d):
         self.history = d
         
-class gnn_model(Model):
-    def __init__(self, max_nodes=20):
-        super().__init__()
-        # TODO:  See if tanh works better as a hidden activation function
-        self.graph_net = spektral.models.general_gnn.GeneralGNN(1, activation='sigmoid', hidden=16, message_passing=4,
-                                                                 pre_process=2, post_process=2, connectivity='cat', batch_norm=True,
-                                                                 dropout=0.2, aggregate='sum', pool='sum', hidden_activation='sigmoid')
-        #self.graph_net = spektral.models.gcn.GCN(1)
-        self.graph_net.compile('adam', 'binary_crossentropy')
-        self.optimizer = Adam(learning_rate=0.00025, clipnorm=1.0)
-        #self.loss_fn = BinaryCrossentropy()
-        self.loss_fn = keras.losses.Huber()
-        self.acc_fn = BinaryAccuracy()
+# class gnn_model(Model):
+#     def __init__(self, max_nodes=20):
+#         super().__init__()
+#         # TODO:  See if tanh works better as a hidden activation function
+#         self.graph_net = spektral.models.general_gnn.GeneralGNN(1, activation='sigmoid', hidden=16, message_passing=4,
+#                                                                  pre_process=2, post_process=2, connectivity='cat', batch_norm=True,
+#                                                                  dropout=0.2, aggregate='sum', pool='sum', hidden_activation='sigmoid')
+#         #self.graph_net = spektral.models.gcn.GCN(1)
+#         self.graph_net.compile('adam', 'binary_crossentropy')
+#         self.optimizer = Adam(learning_rate=0.00025, clipnorm=1.0)
+#         #self.loss_fn = BinaryCrossentropy()
+#         self.loss_fn = keras.losses.Huber()
+#         self.acc_fn = BinaryAccuracy()
 
-    def call(self, inputs):
-        return self.graph_net(inputs)
+#     def call(self, inputs):
+#         return self.graph_net(inputs)
 
-    # Training function
-    #@tf.function(input_signature=loader_tr.tf_signature(), experimental_relax_shapes=True)
-    def train_on_batch(self, inputs, target):
-        with tf.GradientTape() as tape:
-            predictions = self.graph_net(inputs, training=True)
-            loss = self.loss_fn(target, predictions) + sum(self.graph_net.losses)
-            acc = self.acc_fn(target, predictions)
-            preds_01 = np.array([ 0.0 if p <= 0.5 else 1 for p in predictions])
-            #tacc = np.square(preds_01 - target.T).mean()
-            tacc = (1 - abs(preds_01 - target.T)).mean()
-            gradients = tape.gradient(loss, self.graph_net.trainable_variables)
-            self.optimizer.apply_gradients(zip(gradients, self.graph_net.trainable_variables))
-        return loss, acc, tacc
+#     # Training function
+#     #@tf.function(input_signature=loader_tr.tf_signature(), experimental_relax_shapes=True)
+#     def train_on_batch(self, inputs, target):
+#         with tf.GradientTape() as tape:
+#             predictions = self.graph_net(inputs, training=True)
+#             loss = self.loss_fn(target, predictions) + sum(self.graph_net.losses)
+#             acc = self.acc_fn(target, predictions)
+#             preds_01 = np.array([ 0.0 if p <= 0.5 else 1 for p in predictions])
+#             #tacc = np.square(preds_01 - target.T).mean()
+#             tacc = (1 - abs(preds_01 - target.T)).mean()
+#             gradients = tape.gradient(loss, self.graph_net.trainable_variables)
+#             self.optimizer.apply_gradients(zip(gradients, self.graph_net.trainable_variables))
+#         return loss, acc, tacc
 
-    def fit(self, X, y, batch_size=16, verbose=True):
-        dataset = simple_graph_dataset(X,y)
-        loader = DisjointLoader(dataset, batch_size = batch_size)
-        preds = []
-        #results = []
-        total_loss = 0
-        total_acc = 0
-        total_tacc = 0
-        num_epochs = len(X) // batch_size
-        if len(X) % batch_size != 0:
-            num_epochs += 1    # Extra batch for remainder
-        for i in range(num_epochs):
-            b = loader.__next__()
-            #b[0] looks like features, b[1] looks like graph, b[2] is targets, b[3] is some kind of large index array
-            inputs = (b[0], b[1], b[3])
-            target = b[2]
-            loss, acc, tacc = self.train_on_batch(inputs, target )
-            total_loss += loss
-            total_acc += acc
-            total_tacc += tacc
-            #results.append((loss, acc))
-            #preds.append(batch_preds.numpy())
-        return history_struct({'accuracy': [(total_acc / num_epochs)],
-                               'loss': [(total_loss / num_epochs)],
-                               'tacc': [(total_tacc / num_epochs)]
-                               })
+#     def fit(self, X, y, batch_size=16, verbose=True):
+#         dataset = simple_graph_dataset(X,y)
+#         loader = DisjointLoader(dataset, batch_size = batch_size)
+#         preds = []
+#         #results = []
+#         total_loss = 0
+#         total_acc = 0
+#         total_tacc = 0
+#         num_epochs = len(X) // batch_size
+#         if len(X) % batch_size != 0:
+#             num_epochs += 1    # Extra batch for remainder
+#         for i in range(num_epochs):
+#             b = loader.__next__()
+#             #b[0] looks like features, b[1] looks like graph, b[2] is targets, b[3] is some kind of large index array
+#             inputs = (b[0], b[1], b[3])
+#             target = b[2]
+#             loss, acc, tacc = self.train_on_batch(inputs, target )
+#             total_loss += loss
+#             total_acc += acc
+#             total_tacc += tacc
+#             #results.append((loss, acc))
+#             #preds.append(batch_preds.numpy())
+#         return history_struct({'accuracy': [(total_acc / num_epochs)],
+#                                'loss': [(total_loss / num_epochs)],
+#                                'tacc': [(total_tacc / num_epochs)]
+#                                })
 
 
 class gnn_model_zero():
@@ -187,7 +191,7 @@ class gnn_model_zero():
 
 
 class res_prebuffer:
-    def __init__(self, subjects, words, use_tf=False, debug=True, use_gnn=False, gnn_nodes = 2000, bow_algorithm='bow1'):
+    def __init__(self, subjects, words, use_tf=False, debug=True, use_gnn=False, gnn_nodes = 2000, bow_algorithm='bow1', use_gpu = False):
         self.use_tf = use_tf
 
         self.subjects = subjects
@@ -228,6 +232,7 @@ class res_prebuffer:
 
         self.model = forward_model(use_tf, len(self.subjects_dict)+1) if not use_gnn else gnn_model_zero(self.max_gnn_nodes,self.graph_rep.feature_len)
         self.dgl_gnn = False # Overridden in dgl_heuristic
+        self.use_gpu = use_gpu
     
 
 

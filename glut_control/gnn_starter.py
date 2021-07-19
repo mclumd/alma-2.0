@@ -1,14 +1,14 @@
 """
 Start experimenting with graph representations.  
 """
-_CPU_ONLY=True
+_CPU_ONLY=False
 
 import random
 import os
 
 if _CPU_ONLY:
     os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
-        
+
 import rl_utils, resolution_prebuffer
 import numpy as np
 import itertools
@@ -350,6 +350,8 @@ def test(network, network_priors, exp_size=10, num_steps=500, alma_heap_print_si
     return dbb_instances
 
 def main():
+    print("Command line: ", ''.join(sys.argv))
+    
     parser = argparse.ArgumentParser(description="Run test with specified parameters.")
     parser.add_argument("explosion_steps", type=int, default=10)
     parser.add_argument("reasoning_steps", type=int, default=500)

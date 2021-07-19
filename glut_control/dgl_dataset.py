@@ -79,7 +79,7 @@ class AlmaDataset(DGLDataset):
             # Grab features for g from X[i][1]
             # Convert to tensor via torch to avoid the "numpy.ndarray has no attribute 'device'" error
             # https://discuss.dgl.ai/t/attributeerror-numpy-ndarray-object-has-no-attribute-device/241
-            g.ndata['feat'] = torch.LongTensor(graph[1])
+            g.ndata['feat'] = torch.LongTensor(graph[1]).cuda()
             self.graphs.append(dgl.add_self_loop(g))        #stops the zero-in-degree issue with GCN
             self.labels.append(label)
             i += 1
