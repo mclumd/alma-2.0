@@ -67,5 +67,5 @@ def two_stg_dataset(X, Y):
     metadata.write(str(num_nodes) + '\n' + str(num_graphs))
     metadata.close()
 
-    if num_graphs > 999:
+    if num_graphs > 200:
         sys.exit()

@@ -212,6 +212,7 @@ def train(explosion_steps=50, num_steps=500, numeric_bits=3, model_name="test1",
                     # dgl_data.append(g_data)
 
                     two_stage = True
+                    # two_stage = False
                     H, XG, YG, dbg = network.train_buffered_batch()
                     if two_stage:
                         two_stg_dataset.two_stg_dataset(XG, YG)
