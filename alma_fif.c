@@ -153,11 +153,11 @@ static void fif_task_unify_loop(kb *collection, tommy_list *tasks, tommy_list *s
     // Proc case
     if (next_task->proc_next) {
       if (collection->verbose)
-        print_bindings(collection, next_task->bindings, 1, 0, NULL);
+        print_bindings(collection, next_task->bindings, 1, 0, buf);
 
       if (proc_bound_check(next_func, next_task->bindings, collection) && proc_run(next_func, next_task->bindings, collection)) {
         if (collection->verbose)
-          print_bindings(collection, next_task->bindings, 1, 1, NULL);
+          print_bindings(collection, next_task->bindings, 1, 1, buf);
 
         next_task->premises_done++;
         if (next_task->premises_done == next_task->fif->fif->premise_count) {
@@ -195,13 +195,14 @@ static void fif_task_unify_loop(kb *collection, tommy_list *tasks, tommy_list *s
             binding_list *copy = malloc(sizeof(*copy));
             copy_bindings(copy, next_task->bindings);
             if (collection->verbose) {
-              print_bindings(collection, copy, 1, 0, NULL);
+              print_bindings(collection, copy, 1, 0, buf);
               print_unify(collection, next_func, next_task->fif->index, to_unify, jth->index, buf);
             }
 
             if (pred_unify(next_func, to_unify, copy, collection->verbose)) {
-              if (collection->verbose)
-                print_bindings(collection, copy, 1, 1, NULL);
+              if (collection->verbose) {
+                print_bindings(collection, copy, 1, 1, buf);
+              }
 
               // If task is now completed, obtain resulting clause and insert to new_clauses
               if (next_task->premises_done + 1 == next_task->fif->fif->premise_count) {
@@ -239,8 +240,10 @@ static void fif_task_unify_loop(kb *collection, tommy_list *tasks, tommy_list *s
               }
             }
             else {
-              if (collection->verbose)
-                print_bindings(collection, copy, 1, 1, NULL);
+              if (collection->verbose) {
+                tee_alt("Unification failed\n", collection, buf);
+                print_bindings(collection, copy, 1, 1, buf);
+              }
 
               // Unification failure
               cleanup_bindings(copy);
@@ -288,12 +291,15 @@ static void process_fif_task_mapping(kb *collection, fif_task_mapping *entry, to
             if (flags_negative(unify_target)) {
               alma_function *to_unify_func = (unify_target->pos_count > 0) ? unify_target->pos_lits[0] : unify_target->neg_lits[0];
 
-              if (collection->verbose)
+              if (collection->verbose) {
+                print_bindings(collection, f->bindings, 1, 0, buf);
                 print_unify(collection, to_unify_func, unify_target->index, fif_access(f->fif, f->premises_done), f->fif->index, buf);
+              }
 
               if (pred_unify(fif_access(f->fif, f->premises_done), to_unify_func, f->bindings, collection->verbose)) {
-                if (collection->verbose)
-                  print_bindings(collection, f->bindings, 1, 1, NULL);
+                if (collection->verbose) {
+                  print_bindings(collection, f->bindings, 1, 1, buf);
+                }
 
                 // If task is now completed, obtain resulting clause and insert to new_clauses
                 if (f->premises_done + 1 == f->fif->fif->premise_count) {
@@ -327,8 +333,9 @@ static void process_fif_task_mapping(kb *collection, fif_task_mapping *entry, to
                 copy_bindings(f->bindings, copy);
               }
               else {
-                if (collection->verbose)
-                  print_bindings(collection, f->bindings, 1, 1, NULL);
+                if (collection->verbose) {
+                  print_bindings(collection, f->bindings, 1, 1, buf);
+                }
 
                 cleanup_bindings(f->bindings);
                 f->bindings = malloc(sizeof(*f->bindings));
@@ -347,7 +354,7 @@ static void process_fif_task_mapping(kb *collection, fif_task_mapping *entry, to
         alma_function *proc = fif_access(f->fif, f->premises_done);
         if (proc_bound_check(proc, f->bindings, collection) && proc_run(proc, f->bindings, collection)) {
           if (collection->verbose)
-            print_bindings(collection, f->bindings, 1, 1, NULL);
+            print_bindings(collection, f->bindings, 1, 1, buf);
 
           // If task is now completed, obtain resulting clause and insert to new_clauses
           if (f->premises_done + 1 == f->fif->fif->premise_count) {

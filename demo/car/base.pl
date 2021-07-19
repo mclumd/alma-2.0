@@ -67,117 +67,15 @@ reinstate(quote(rel(`Pred, `Obj)), T)).
 
 
 % Formulas for resolving contradictions where one contradictand is descended from a default, and the other is not
-% Alternative variations below for when default has 1 or 2 premises before abnormality check; for when the second premise checking a property is positive/negative ; and for when default has positive/negative conclusion
 
-% A —> P and B /\ neg_int —> ~P; reinstate P
+% ~P from defaults and P not from defaults; reinstate P
 fif(and(contradicting(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
-    and(parent(quote(fif(and(rel(`Kind_b, Obj), neg_int(quote(abnormal(`Obj, ``Kind_b, quote(rel(```Pred, ``Obj)))))), not(rel(`Pred, Obj)))), quote(not(rel(`Pred, `Obj))), T),
-    parent(quote(fif(rel(`Kind_a, Obj), rel(`Pred, Obj))), quote(rel(`Pred, `Obj)), T))),
+    and(parents_defaults(quote(not(rel(`Pred, `Obj))), T),
+    parent_non_default(quote(rel(`Pred, `Obj)), T))),
 reinstate(quote(rel(`Pred, `Obj)), T)).
 
-% A —> ~P and B /\ neg_int —> P; reinstate ~P
+% P from defaults and ~P not from defaults; reinstate ~P
 fif(and(contradicting(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
-    and(parent(quote(fif(and(rel(`Kind_b, Obj), neg_int(quote(abnormal(`Obj, ``Kind_b, quote(not(rel(```Pred, ``Obj))))))), rel(`Pred, Obj))), quote(rel(`Pred, `Obj)), T),
-    parent(quote(fif(rel(`Kind_a, Obj), not(rel(`Pred, Obj)))), quote(not(rel(`Pred, `Obj))), T))),
-reinstate(quote(not(rel(`Pred, `Obj))), T)).
-
-% A —> P and B /\ D /\ neg_int —> ~P; reinstate P
-fif(and(contradicting(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
-    and(parent(quote(fif(rel(`Kind_a, Obj), rel(`Pred, Obj))), quote(rel(`Pred, `Obj)), T),
-    parent(quote(fif(and(rel(`Kind_b, Obj), and(rel(`Prop_d, Obj), neg_int(quote(abnormal(`Obj, ``Kind_b, quote(rel(```Pred, ``Obj))))))), not(rel(`Pred, Obj)))), quote(not(rel(`Pred, `Obj))), T))),
-reinstate(quote(rel(`Pred, `Obj)), T)).
-
-% A —> ~P and B /\ D /\ neg_int —> P; reinstate ~P
-fif(and(contradicting(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
-    and(parent(quote(fif(rel(`Kind_a, Obj), not(rel(`Pred, Obj)))), quote(not(rel(`Pred, `Obj))), T),
-    parent(quote(fif(and(rel(`Kind_b, Obj), and(rel(`Prop_d, Obj), neg_int(quote(abnormal(`Obj, ``Kind_b, quote(not(rel(```Pred, ``Obj)))))))), rel(`Pred, Obj))), quote(rel(`Pred, `Obj)), T))),
-reinstate(quote(not(rel(`Pred, `Obj))), T)).
-
-% A —> P and B /\ ~D /\ neg_int —> ~P; reinstate P
-fif(and(contradicting(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
-    and(parent(quote(fif(rel(`Kind_a, Obj), rel(`Pred, Obj))), quote(rel(`Pred, `Obj)), T),
-    parent(quote(fif(and(rel(`Kind_b, Obj), and(not(rel(`Prop_d, Obj)), neg_int(quote(abnormal(`Obj, ``Kind_b, quote(rel(```Pred, ``Obj))))))), not(rel(`Pred, Obj)))), quote(not(rel(`Pred, `Obj))), T))),
-reinstate(quote(rel(`Pred, `Obj)), T)).
-
-% A —> ~P and B /\ ~D /\ neg_int —> P; reinstate ~P
-fif(and(contradicting(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
-    and(parent(quote(fif(rel(`Kind_a, Obj), rel(`Pred, Obj))), quote(not(rel(`Pred, `Obj))), T),
-    parent(quote(fif(and(rel(`Kind_b, Obj), and(not(rel(`Prop_d, Obj)), neg_int(quote(abnormal(`Obj, ``Kind_b, quote(not(rel(```Pred, ``Obj)))))))), rel(`Pred, Obj))), quote(rel(`Pred, `Obj)), T))),
-reinstate(quote(not(rel(`Pred, `Obj))), T)).
-
-% Two premises to non-default, second positive
-
-% A /\ E —> P and B /\ neg_int —> ~P; reinstate P
-fif(and(contradicting(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
-    and(parent(quote(fif(and(rel(`Kind_b, Obj), neg_int(quote(abnormal(`Obj, ``Kind_b, quote(rel(```Pred, ``Obj)))))), not(rel(`Pred, Obj)))), quote(not(rel(`Pred, `Obj))), T),
-    parent(quote(fif(and(rel(`Kind_a, Obj), rel(`Prop_e, Obj)), rel(`Pred, Obj))), quote(rel(`Pred, `Obj)), T))),
-reinstate(quote(rel(`Pred, `Obj)), T)).
-
-% A /\ E —> ~P and B /\ neg_int —> P; reinstate ~P
-fif(and(contradicting(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
-    and(parent(quote(fif(and(rel(`Kind_b, Obj), neg_int(quote(abnormal(`Obj, ``Kind_b, quote(not(rel(```Pred, ``Obj))))))), rel(`Pred, Obj))), quote(rel(`Pred, `Obj)), T),
-    parent(quote(fif(and(rel(`Kind_a, Obj), rel(`Prop_e, Obj)), not(rel(`Pred, Obj)))), quote(not(rel(`Pred, `Obj))), T))),
-reinstate(quote(not(rel(`Pred, `Obj))), T)).
-
-% A /\ E —> P and B /\ D /\ neg_int —> ~P; reinstate P
-fif(and(contradicting(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
-    and(parent(quote(fif(and(rel(`Kind_a, Obj), rel(`Prop_e, Obj)), rel(`Pred, Obj))), quote(rel(`Pred, `Obj)), T),
-    parent(quote(fif(and(rel(`Kind_b, Obj), and(rel(`Prop_d, Obj), neg_int(quote(abnormal(`Obj, ``Kind_b, quote(rel(```Pred, ``Obj))))))), not(rel(`Pred, Obj)))), quote(not(rel(`Pred, `Obj))), T))),
-reinstate(quote(rel(`Pred, `Obj)), T)).
-
-% A /\ E —> ~P and B /\ D /\ neg_int —> P; reinstate ~P
-fif(and(contradicting(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
-    and(parent(quote(fif(and(rel(`Kind_a, Obj), rel(`Prop_e, Obj)), not(rel(`Pred, Obj)))), quote(not(rel(`Pred, `Obj))), T),
-    parent(quote(fif(and(rel(`Kind_b, Obj), and(rel(`Prop_d, Obj), neg_int(quote(abnormal(`Obj, ``Kind_b, quote(not(rel(```Pred, ``Obj)))))))), rel(`Pred, Obj))), quote(rel(`Pred, `Obj)), T))),
-reinstate(quote(not(rel(`Pred, `Obj))), T)).
-
-% A /\ E —> P and B /\ ~D /\ neg_int —> ~P; reinstate P
-fif(and(contradicting(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
-    and(parent(quote(fif(and(rel(`Kind_a, Obj), rel(`Prop_e, Obj)), rel(`Pred, Obj))), quote(rel(`Pred, `Obj)), T),
-    parent(quote(fif(and(rel(`Kind_b, Obj), and(not(rel(`Prop_d, Obj)), neg_int(quote(abnormal(`Obj, ``Kind_b, quote(rel(```Pred, ``Obj))))))), not(rel(`Pred, Obj)))), quote(not(rel(`Pred, `Obj))), T))),
-reinstate(quote(rel(`Pred, `Obj)), T)).
-
-% A /\ E —> ~P and B /\ ~D /\ neg_int —> P; reinstate ~P
-fif(and(contradicting(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
-    and(parent(quote(fif(and(rel(`Kind_a, Obj), rel(`Prop_e, Obj)), rel(`Pred, Obj))), quote(not(rel(`Pred, `Obj))), T),
-    parent(quote(fif(and(rel(`Kind_b, Obj), and(not(rel(`Prop_d, Obj)), neg_int(quote(abnormal(`Obj, ``Kind_b, quote(not(rel(```Pred, ``Obj)))))))), rel(`Pred, Obj))), quote(rel(`Pred, `Obj)), T))),
-reinstate(quote(not(rel(`Pred, `Obj))), T)).
-
-
-% Two premises to non-default, second negative
-
-% A /\ ~E —> P and B /\ neg_int —> ~P; reinstate P
-fif(and(contradicting(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
-    and(parent(quote(fif(and(rel(`Kind_b, Obj), neg_int(quote(abnormal(`Obj, ``Kind_b, quote(rel(```Pred, ``Obj)))))), not(rel(`Pred, Obj)))), quote(not(rel(`Pred, `Obj))), T),
-    parent(quote(fif(and(rel(`Kind_a, Obj), not(rel(`Prop_e, Obj))), rel(`Pred, Obj))), quote(rel(`Pred, `Obj)), T))),
-reinstate(quote(rel(`Pred, `Obj)), T)).
-
-% A /\ ~E —> ~P and B /\ neg_int —> P; reinstate ~P
-fif(and(contradicting(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
-    and(parent(quote(fif(and(rel(`Kind_b, Obj), neg_int(quote(abnormal(`Obj, ``Kind_b, quote(not(rel(```Pred, ``Obj))))))), rel(`Pred, Obj))), quote(rel(`Pred, `Obj)), T),
-    parent(quote(fif(and(rel(`Kind_a, Obj), not(rel(`Prop_e, Obj))), not(rel(`Pred, Obj)))), quote(not(rel(`Pred, `Obj))), T))),
-reinstate(quote(not(rel(`Pred, `Obj))), T)).
-
-% A /\ ~E —> P and B /\ D /\ neg_int —> ~P; reinstate P
-fif(and(contradicting(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
-    and(parent(quote(fif(and(rel(`Kind_a, Obj), not(rel(`Prop_e, Obj))), rel(`Pred, Obj))), quote(rel(`Pred, `Obj)), T),
-    parent(quote(fif(and(rel(`Kind_b, Obj), and(rel(`Prop_d, Obj), neg_int(quote(abnormal(`Obj, ``Kind_b, quote(rel(```Pred, ``Obj))))))), not(rel(`Pred, Obj)))), quote(not(rel(`Pred, `Obj))), T))),
-reinstate(quote(rel(`Pred, `Obj)), T)).
-
-% A /\ ~E —> ~P and B /\ D /\ neg_int —> P; reinstate ~P
-fif(and(contradicting(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
-    and(parent(quote(fif(and(rel(`Kind_a, Obj), not(rel(`Prop_e, Obj))), not(rel(`Pred, Obj)))), quote(not(rel(`Pred, `Obj))), T),
-    parent(quote(fif(and(rel(`Kind_b, Obj), and(rel(`Prop_d, Obj), neg_int(quote(abnormal(`Obj, ``Kind_b, quote(not(rel(```Pred, ``Obj)))))))), rel(`Pred, Obj))), quote(rel(`Pred, `Obj)), T))),
-reinstate(quote(not(rel(`Pred, `Obj))), T)).
-
-% A /\ ~E —> P and B /\ ~D /\ neg_int —> ~P; reinstate P
-fif(and(contradicting(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
-    and(parent(quote(fif(and(rel(`Kind_a, Obj), not(rel(`Prop_e, Obj))), rel(`Pred, Obj))), quote(rel(`Pred, `Obj)), T),
-    parent(quote(fif(and(rel(`Kind_b, Obj), and(not(rel(`Prop_d, Obj)), neg_int(quote(abnormal(`Obj, ``Kind_b, quote(rel(```Pred, ``Obj))))))), not(rel(`Pred, Obj)))), quote(not(rel(`Pred, `Obj))), T))),
-reinstate(quote(rel(`Pred, `Obj)), T)).
-
-% A /\ ~E —> ~P and B /\ ~D /\ neg_int —> P; reinstate ~P
-fif(and(contradicting(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
-    and(parent(quote(fif(and(rel(`Kind_a, Obj), not(rel(`Prop_e, Obj))), rel(`Pred, Obj))), quote(not(rel(`Pred, `Obj))), T),
-    parent(quote(fif(and(rel(`Kind_b, Obj), and(not(rel(`Prop_d, Obj)), neg_int(quote(abnormal(`Obj, ``Kind_b, quote(not(rel(```Pred, ``Obj)))))))), rel(`Pred, Obj))), quote(rel(`Pred, `Obj)), T))),
+    and(parents_defaults(quote(rel(`Pred, `Obj)), T),
+    parent_non_default(quote(not(rel(`Pred, `Obj))), T))),
 reinstate(quote(not(rel(`Pred, `Obj))), T)).
