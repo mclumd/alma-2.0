@@ -69,6 +69,10 @@ class dgl_heuristic(res_prebuffer):
             dataset, sampler=sampler, batch_size=1, drop_last=False)
 #            dataset, sampler=sampler, batch_size=len(X), drop_last=False)
         preds = []
+        i=0
         for batched_graph, labels in test_dataloader:
+            print(i, '/', len(X))
+            i+=1
             preds.append(torch.softmax(self.model(batched_graph, batched_graph.ndata['feat'].float()),1).detach().cpu().numpy())
+        print('done')
         return np.array(preds).reshape(-1,2)[:,1]

@@ -1,7 +1,7 @@
 """
 Start experimenting with graph representations.  
 """
-_CPU_ONLY=False
+_CPU_ONLY=True
 
 import random
 import os
@@ -36,7 +36,7 @@ test_params = {
     'explosion_size': 1000,
     'alma_heap_print_size': 100
 }
-alma_inst,res = alma.init(1,'test1_kb.pl', '0', 1, 1000, [], [])
+#alma_inst,res = alma.init(1,'test1_kb.pl', '0', 1, 1000, [], [])
 # alma_inst,res = alma.init(1,'test2.pl', '0', 1, 1000, [], [])
 # alma_inst,res = alma.init(1,'test3.pl', '0', 1, 1000, [], [])
 # alma_inst,res = alma.init(1,'test4.pl', '0', 1, 1000, [], [])
@@ -100,9 +100,9 @@ def generate_epoch(num_steps, network, alma_inst):
 
 #@profile
 def train_loop(network, num_steps, explosion_steps, kb, train_interval, dgl_data, exhaustive):
-    global new_dgl_dataset
     alma_inst,res = alma.init(1,kb, '0', 1, 1000, [], [])
     prb = explosion(explosion_steps, kb, alma_inst)
+    print('prb_size', len(prb[0]))
     for idx in range(num_steps):
         res_tasks = prb[0]
         if len(res_tasks) > 0:
@@ -113,6 +113,9 @@ def train_loop(network, num_steps, explosion_steps, kb, train_interval, dgl_data
             #     g_data = dgl_dataset.AlmaDataset(network.Xbuffer, network.ybuffer)
             #     dgl_data.append(g_data)
 
+            print("rti len is", len(res_task_input))
+            if len(res_task_input) > 1000:
+                print("that's a lot!!")
             priorities = 1 - network.get_priorities(res_task_input)
             alma.set_priors_prb(alma_inst, priorities.flatten().tolist())
             alma.prb_to_res_task(alma_inst, 1.0)
