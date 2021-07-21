@@ -76,8 +76,8 @@ def explosion(size, kb, alma_inst):
             # alma.add(alma_inst, obs_fmla_a)
             alma.add(alma_inst, obs_fmla_b)
         # elif "ps_test_search.pl" in kb:
-        r = alma.prebuf(alma_inst)
         alma.astep(alma_inst)
+    r = alma.prebuf(alma_inst)
     print("Explosion done.")
     print("="*80)
     return r
