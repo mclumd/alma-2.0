@@ -15,8 +15,7 @@ fif(and(contradicting(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
     and(rel(is_a, Kind_spec, Kind),
     parent(quote(rel(`Kind_spec, `Obj)), quote(not(rel(`Pred, `Obj))), T))))),
 and(update(quote(fif(rel(`Kind, Obj), rel(`Pred, Obj))), quote(fif(and(rel(`Kind, Obj), neg_int(quote(abnormal(`Obj, ``Kind, quote(not(rel(```Pred, ``Obj))))))), rel(`Pred, Obj)))),
-and(reinstate(quote(not(rel(`Pred, `Obj))), T),
-fif(and(rel(Kind, Ab_Obj), not(rel(Pred, Ab_Obj))), abnormal(Ab_Obj, Kind, quote(not(rel(`Pred, `Ab_Obj)))))))).
+fif(and(rel(Kind, Ab_Obj), not(rel(Pred, Ab_Obj))), abnormal(Ab_Obj, Kind, quote(not(rel(`Pred, `Ab_Obj))))))).
 
 % Contradiction response for when both contradictands are inferred, ancestors have is-a relationship, and more specific case is negative
 fif(and(contradicting(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
@@ -25,8 +24,7 @@ fif(and(contradicting(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
     and(rel(is_a, Kind_spec, Kind),
     parent(quote(rel(`Kind_spec, `Obj)), quote(rel(`Pred, `Obj)), T))))),
 and(update(quote(fif(rel(`Kind, Obj), not(rel(`Pred, Obj)))), quote(fif(and(rel(`Kind, Obj), neg_int(quote(abnormal(`Obj, ``Kind, quote(rel(```Pred, ``Obj)))))), not(rel(`Pred, Obj))))),
-and(reinstate(quote(rel(`Pred, `Obj)), T),
-fif(and(rel(Kind, Ab_Obj), rel(Pred, Ab_Obj)), abnormal(Ab_Obj, Kind, quote(rel(`Pred, `Ab_Obj))))))).
+fif(and(rel(Kind, Ab_Obj), rel(Pred, Ab_Obj)), abnormal(Ab_Obj, Kind, quote(rel(`Pred, `Ab_Obj)))))).
 
 
 % Formula for resolving a class of contradiction without hierarchy, or observation
@@ -47,14 +45,14 @@ fif(and(rel(Kind_a, Ab_Obj), and(not(rel(Prop_a, Ab_Obj)), rel(Pred, Ab_Obj))), 
 
 % Reinstatement of narrowest ontology category, as found by the lack of a more-specific is-a instance to be the parent
 % Also checks that other contradictand was derived from more general case
-%fif(and(contradicting(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
-%    and(neg_int(quote(obs(quote(rel(``Pred, ``Obj))))),
-%    and(rel(Kind, Obj),
-%    and(rel(is_a, Kind, Kind_gen),
-%    and(parent(quote(rel(`Kind, `Obj)), quote(not(rel(`Pred, `Obj))), T),
-%    and(parent(quote(rel(`Kind_gen, `Obj)), quote(rel(`Pred, `Obj)), T),
-%    non_ancestor(quote(rel(is_a, `Kind_spec, `Kind)), quote(rel(`Kind, `Obj)), T))))))),
-%reinstate(quote(not(rel(`Pred, `Obj))), T)).
+fif(and(contradicting(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
+    and(neg_int(quote(obs(quote(rel(``Pred, ``Obj))))),
+    and(rel(Kind, Obj),
+    and(rel(is_a, Kind, Kind_gen),
+    and(parent(quote(rel(`Kind, `Obj)), quote(not(rel(`Pred, `Obj))), T),
+    and(parent(quote(rel(`Kind_gen, `Obj)), quote(rel(`Pred, `Obj)), T),
+    non_ancestor(quote(rel(is_a, `Kind_spec, `Kind)), quote(rel(`Kind, `Obj)), T))))))),
+reinstate(quote(not(rel(`Pred, `Obj))), T)).
 
 fif(and(contradicting(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
     and(neg_int(quote(obs(quote(not(rel(``Pred, ``Obj)))))),

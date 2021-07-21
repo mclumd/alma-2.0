@@ -842,49 +842,6 @@ clause* duplicate_check(kb *collection, clause *c, int check_distrusted) {
   return NULL;
 }
 
-// Given a new clause, add to the KB and maps
-void add_clause(kb *collection, clause *c) {
-  // Add clause to overall clause list and index map
-  index_mapping *ientry = malloc(sizeof(*ientry));
-  c->index = ientry->key = collection->next_index++;
-  c->acquired = collection->time;
-  c->distrusted = 0;
-  c->retired = 0;
-  c->handled = 0;
-  c->dirty_bit = (char) 1;
-  c->pyobject_bit = (char) 1;
-  ientry->value = c;
-  tommy_list_insert_tail(&collection->clauses, &ientry->list_node, ientry);
-  tommy_hashlin_insert(&collection->index_map, &ientry->hash_node, ientry, tommy_hash_u64(0, &ientry->key, sizeof(ientry->key)));
-
-  if (c->tag == FIF) {
-    char *name = c->fif->indexing_conc->name;
-    // Index into fif hashmap
-    fif_mapping *result = tommy_hashlin_search(&collection->fif_map, fifm_compare, name, tommy_hash_u64(0, name, strlen(name)));
-    if (result != NULL) {
-      result->num_clauses++;
-      result->clauses = realloc(result->clauses, sizeof(*result->clauses)*result->num_clauses);
-      result->clauses[result->num_clauses-1] = c;
-    }
-    else {
-      fif_mapping *entry = malloc(sizeof(*entry));
-      entry->indexing_conc_name = malloc(strlen(name)+1);
-      strcpy(entry->indexing_conc_name, name);
-      entry->num_clauses = 1;
-      entry->clauses = malloc(sizeof(*entry->clauses));
-      entry->clauses[0] = c;
-      tommy_hashlin_insert(&collection->fif_map, &entry->node, entry, tommy_hash_u64(0, entry->indexing_conc_name, strlen(entry->indexing_conc_name)));
-    }
-  }
-  else {
-    // If non-fif, indexes clause into pos/neg hashmaps/lists
-    for (int j = 0; j < c->pos_count; j++)
-      map_add_clause(&collection->pos_map, &collection->pos_list, c->pos_lits[j], c);
-    for (int j = 0; j < c->neg_count; j++)
-      map_add_clause(&collection->neg_map, &collection->neg_list, c->neg_lits[j], c);
-  }
-}
-
 // Remove res tasks using clause
 static void remove_res_tasks(kb *collection, clause *c) {
   for (tommy_size_t i = 0; i < tommy_array_size(&collection->res_tasks); i++) {
@@ -939,9 +896,79 @@ static void remove_fif_tasks(kb *collection, clause *c) {
   }
 }
 
+void make_single_task(kb *collection, clause *c, alma_function *c_lit, clause *other, tommy_array *tasks, int use_bif, int pos) {
+  if (c != other && (other->tag != BIF || use_bif) && other->tag != FIF) {
+    alma_function *other_lit = literal_by_name(other, c_lit->name, pos);
+    if (other_lit != NULL && other_lit != c_lit) {
+      res_task *t = malloc(sizeof(*t));
+      if (!pos) {
+        t->x = c;
+        t->pos = c_lit;
+        t->y = other;
+        t->neg = other_lit;
+      }
+      else {
+        t->x = other;
+        t->pos = other_lit;
+        t->y = c;
+        t->neg = c_lit;
+      }
+
+      tommy_array_insert(tasks, t);
+    }
+  }
+}
+
+// Helper of res_tasks_from_clause
+void make_res_tasks(kb *collection, clause *c, int count, alma_function **c_lits, tommy_hashlin *map, tommy_array *tasks, int use_bif, int pos) {
+  for (int i = 0; i < count; i++) {
+    char *name = name_with_arity(c_lits[i]->name, c_lits[i]->term_count);
+    predname_mapping *result = tommy_hashlin_search(map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
+
+    // New tasks are from Cartesian product of result's clauses with clauses' ith
+    if (result != NULL)
+      for (int j = 0; j < result->num_clauses; j++)
+        if (flags_negative(result->clauses[j]))
+          make_single_task(collection, c, c_lits[i], result->clauses[j], tasks, use_bif, pos);
+
+    free(name);
+  }
+}
+
+// Finds new res tasks based on matching pos/neg predicate pairs, where one is from the KB and the other from arg
+// Tasks are added into the res_tasks of collection
+// Used only for non-bif resolution tasks; hence checks tag of c
+void res_tasks_from_clause(kb *collection, clause *c, int process_negatives) {
+  if (c->tag != BIF && c->tag != FIF) {
+    make_res_tasks(collection, c, c->pos_count, c->pos_lits, &collection->neg_map, &collection->res_tasks, 0, 0);
+    // Only done if clauses differ from KB's clauses (i.e. after first task generation)
+    if (process_negatives)
+      make_res_tasks(collection, c, c->neg_count, c->neg_lits, &collection->pos_map, &collection->res_tasks, 0, 1);
+  }
+}
+
+// Returns boolean based on success of string parse
+// If parses successfully, adds to collection's new_clauses
+// Returns pointer to first clause asserted, if any
+clause* assert_formula(kb *collection, char *string, int print, kb_str *buf) {
+  alma_node *formulas;
+  int formula_count;
+  if (formulas_from_source(string, 0, &formula_count, &formulas, collection, buf)) {
+    tommy_array temp;
+    tommy_array_init(&temp);
+    nodes_to_clauses(collection, formulas, formula_count, &temp, print, buf);
+    clause *ret = tommy_array_size(&temp) > 0 ? tommy_array_get(&temp, 0) : NULL;
+    for (tommy_size_t i = 0; i < tommy_array_size(&temp); i++)
+      tommy_array_insert(&collection->new_clauses, tommy_array_get(&temp, i));
+    tommy_array_done(&temp);
+    return ret;
+  }
+  return NULL;
+}
+
 // Given a clause already existing in KB, remove from data structures
 // Note that fif removal, or removal of a singleton clause used in a fif rule, may be very expensive
-void remove_clause(kb *collection, clause *c, kb_str *buf) {
+static void remove_clause(kb *collection, clause *c, kb_str *buf) {
   if (c->tag == FIF) {
     char *name = c->fif->indexing_conc->name;
     fif_mapping *fifm = tommy_hashlin_search(&collection->fif_map, fifm_compare, name, tommy_hash_u64(0, name, strlen(name)));
@@ -1063,76 +1090,6 @@ void remove_clause(kb *collection, clause *c, kb_str *buf) {
       remove_child(c->parents[i].clauses[j], c);
 
   free_clause(c);
-}
-
-void make_single_task(kb *collection, clause *c, alma_function *c_lit, clause *other, tommy_array *tasks, int use_bif, int pos) {
-  if (c != other && (other->tag != BIF || use_bif) && other->tag != FIF) {
-    alma_function *other_lit = literal_by_name(other, c_lit->name, pos);
-    if (other_lit != NULL && other_lit != c_lit) {
-      res_task *t = malloc(sizeof(*t));
-      if (!pos) {
-        t->x = c;
-        t->pos = c_lit;
-        t->y = other;
-        t->neg = other_lit;
-      }
-      else {
-        t->x = other;
-        t->pos = other_lit;
-        t->y = c;
-        t->neg = c_lit;
-      }
-
-      tommy_array_insert(tasks, t);
-    }
-  }
-}
-
-// Helper of res_tasks_from_clause
-void make_res_tasks(kb *collection, clause *c, int count, alma_function **c_lits, tommy_hashlin *map, tommy_array *tasks, int use_bif, int pos) {
-  for (int i = 0; i < count; i++) {
-    char *name = name_with_arity(c_lits[i]->name, c_lits[i]->term_count);
-    predname_mapping *result = tommy_hashlin_search(map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
-
-    // New tasks are from Cartesian product of result's clauses with clauses' ith
-    if (result != NULL)
-      for (int j = 0; j < result->num_clauses; j++)
-        if (flags_negative(result->clauses[j]))
-          make_single_task(collection, c, c_lits[i], result->clauses[j], tasks, use_bif, pos);
-
-    free(name);
-  }
-}
-
-// Finds new res tasks based on matching pos/neg predicate pairs, where one is from the KB and the other from arg
-// Tasks are added into the res_tasks of collection
-// Used only for non-bif resolution tasks; hence checks tag of c
-void res_tasks_from_clause(kb *collection, clause *c, int process_negatives) {
-  if (c->tag != BIF && c->tag != FIF) {
-    make_res_tasks(collection, c, c->pos_count, c->pos_lits, &collection->neg_map, &collection->res_tasks, 0, 0);
-    // Only done if clauses differ from KB's clauses (i.e. after first task generation)
-    if (process_negatives)
-      make_res_tasks(collection, c, c->neg_count, c->neg_lits, &collection->pos_map, &collection->res_tasks, 0, 1);
-  }
-}
-
-// Returns boolean based on success of string parse
-// If parses successfully, adds to collection's new_clauses
-// Returns pointer to first clause asserted, if any
-clause* assert_formula(kb *collection, char *string, int print, kb_str *buf) {
-  alma_node *formulas;
-  int formula_count;
-  if (formulas_from_source(string, 0, &formula_count, &formulas, collection, buf)) {
-    tommy_array temp;
-    tommy_array_init(&temp);
-    nodes_to_clauses(collection, formulas, formula_count, &temp, print, buf);
-    clause *ret = tommy_array_size(&temp) > 0 ? tommy_array_get(&temp, 0) : NULL;
-    for (tommy_size_t i = 0; i < tommy_array_size(&temp); i++)
-      tommy_array_insert(&collection->new_clauses, tommy_array_get(&temp, i));
-    tommy_array_done(&temp);
-    return ret;
-  }
-  return NULL;
 }
 
 int delete_formula(kb *collection, char *string, int print, kb_str *buf) {
@@ -1478,6 +1435,42 @@ static binding_list* parent_binding_prepare(backsearch_task *bs, long parent_ind
     return NULL;
 }
 
+static void make_contra(kb *collection, clause *contradictand_pos, clause *contradictand_neg) {
+  clause *contra = malloc(sizeof(*contra));
+  contra->pos_count = 1;
+  contra->neg_count = 0;
+  contra->pos_lits = malloc(sizeof(*contra->pos_lits));
+  contra->pos_lits[0] = malloc(sizeof(*contra->pos_lits[0]));
+  contra->pos_lits[0]->name = malloc(strlen("contra_event")+1);
+  strcpy(contra->pos_lits[0]->name, "contra_event");
+  contra->pos_lits[0]->term_count = 3;
+  contra->pos_lits[0]->terms = malloc(sizeof(*contra->pos_lits[0]->terms) * 3);
+  quote_from_clause(contra->pos_lits[0]->terms+0, contradictand_pos);
+  quote_from_clause(contra->pos_lits[0]->terms+1, contradictand_neg);
+  func_from_long(contra->pos_lits[0]->terms+2, collection->time);
+  contra->neg_lits = NULL;
+  contra->parent_set_count = contra->children_count = 0;
+  contra->parents = NULL;
+  contra->children = NULL;
+  contra->tag = NONE;
+  contra->fif = NULL;
+  set_variable_ids(contra, 1, 0, NULL, collection);
+  tommy_array_insert(&collection->new_clauses, contra);
+
+  clause *contradicting = malloc(sizeof(*contradicting));
+  copy_clause_structure(contra, contradicting);
+  contradicting->pos_lits[0]->name = realloc(contradicting->pos_lits[0]->name, strlen("contradicting")+1);
+  strcpy(contradicting->pos_lits[0]->name, "contradicting");
+  init_single_parent(contradicting, contra);
+  set_variable_ids(contradicting, 1, 0, NULL, collection);
+  tommy_array_insert(&collection->new_clauses, contradicting);
+
+  tommy_array_insert(&collection->distrust_set, contradictand_pos);
+  tommy_array_insert(&collection->distrust_parents, contra);
+  tommy_array_insert(&collection->distrust_set, contradictand_neg);
+  tommy_array_insert(&collection->distrust_parents, contra);
+}
+
 // Process resolution tasks from argument and place results in new_arr
 void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr, backsearch_task *bs, kb_str *buf) {
   for (tommy_size_t i = 0; i < tommy_array_size(tasks); i++) {
@@ -1585,46 +1578,13 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
               }
               set_variable_ids(answer, 0, 0, NULL, collection);
 
-              // TODO: parent setup for answer?
+              // TODO: parent setup for backsearch answer?
               tommy_array_insert(&collection->new_clauses, answer);
               cleanup_bindings(x_bindings);
             }
-            else {
-              // If not a backward search, empty resolution result indicates a contradiction between clauses
-              clause *contra = malloc(sizeof(*contra));
-              contra->pos_count = 1;
-              contra->neg_count = 0;
-              contra->pos_lits = malloc(sizeof(*contra->pos_lits));
-              contra->pos_lits[0] = malloc(sizeof(*contra->pos_lits[0]));
-              contra->pos_lits[0]->name = malloc(strlen("contra_event")+1);
-              strcpy(contra->pos_lits[0]->name, "contra_event");
-              contra->pos_lits[0]->term_count = 3;
-              contra->pos_lits[0]->terms = malloc(sizeof(*contra->pos_lits[0]->terms) * 3);
-              quote_from_clause(contra->pos_lits[0]->terms+0, current_task->x);
-              quote_from_clause(contra->pos_lits[0]->terms+1, current_task->y);
-              func_from_long(contra->pos_lits[0]->terms+2, collection->time);
-              contra->neg_lits = NULL;
-              contra->parent_set_count = contra->children_count = 0;
-              contra->parents = NULL;
-              contra->children = NULL;
-              contra->tag = NONE;
-              contra->fif = NULL;
-              set_variable_ids(contra, 1, 0, NULL, collection);
-              tommy_array_insert(&collection->new_clauses, contra);
-
-              clause *contradicting = malloc(sizeof(*contradicting));
-              copy_clause_structure(contra, contradicting);
-              contradicting->pos_lits[0]->name = realloc(contradicting->pos_lits[0]->name, strlen("contradicting")+1);
-              strcpy(contradicting->pos_lits[0]->name, "contradicting");
-              init_single_parent(contradicting, contra);
-              set_variable_ids(contradicting, 1, 0, NULL, collection);
-              tommy_array_insert(&collection->new_clauses, contradicting);
-
-              tommy_array_insert(&collection->distrust_set, current_task->x);
-              tommy_array_insert(&collection->distrust_parents, contra);
-              tommy_array_insert(&collection->distrust_set, current_task->y);
-              tommy_array_insert(&collection->distrust_parents, contra);
-            }
+            // If not a backward search, empty resolution result indicates a contradiction between clauses
+            else
+              make_contra(collection, current_task->x, current_task->y);
           }
         }
         if (collection->verbose)
@@ -1641,6 +1601,49 @@ void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr,
   tommy_array_init(tasks);
 }
 
+
+// Given a new clause, add to the KB and maps
+static void add_clause(kb *collection, clause *c) {
+  // Add clause to overall clause list and index map
+  index_mapping *ientry = malloc(sizeof(*ientry));
+  c->index = ientry->key = collection->next_index++;
+  c->acquired = collection->time;
+  c->distrusted = 0;
+  c->retired = 0;
+  c->handled = 0;
+  c->dirty_bit = (char) 1;
+  c->pyobject_bit = (char) 1;
+  ientry->value = c;
+  tommy_list_insert_tail(&collection->clauses, &ientry->list_node, ientry);
+  tommy_hashlin_insert(&collection->index_map, &ientry->hash_node, ientry, tommy_hash_u64(0, &ientry->key, sizeof(ientry->key)));
+
+  if (c->tag == FIF) {
+    char *name = c->fif->indexing_conc->name;
+    // Index into fif hashmap
+    fif_mapping *result = tommy_hashlin_search(&collection->fif_map, fifm_compare, name, tommy_hash_u64(0, name, strlen(name)));
+    if (result != NULL) {
+      result->num_clauses++;
+      result->clauses = realloc(result->clauses, sizeof(*result->clauses)*result->num_clauses);
+      result->clauses[result->num_clauses-1] = c;
+    }
+    else {
+      fif_mapping *entry = malloc(sizeof(*entry));
+      entry->indexing_conc_name = malloc(strlen(name)+1);
+      strcpy(entry->indexing_conc_name, name);
+      entry->num_clauses = 1;
+      entry->clauses = malloc(sizeof(*entry->clauses));
+      entry->clauses[0] = c;
+      tommy_hashlin_insert(&collection->fif_map, &entry->node, entry, tommy_hash_u64(0, entry->indexing_conc_name, strlen(entry->indexing_conc_name)));
+    }
+  }
+  else {
+    // If non-fif, indexes clause into pos/neg hashmaps/lists
+    for (int j = 0; j < c->pos_count; j++)
+      map_add_clause(&collection->pos_map, &collection->pos_list, c->pos_lits[j], c);
+    for (int j = 0; j < c->neg_count; j++)
+      map_add_clause(&collection->neg_map, &collection->neg_list, c->neg_lits[j], c);
+  }
+}
 
 // Special semantic operator: true
 // Must be a singleton positive literal with unary quote arg
@@ -1722,9 +1725,116 @@ static int all_digits(char *str) {
   return 1;
 }
 
-// Processing of new clauses: inserts non-duplicates derived, makes new tasks from
+// Special semantic operator: reinstate
+// Reinstate() be a singleton positive literal with binary args
+// Reinstatement succeeds if given args of a quote matching distrusted formula(s) and a matching timestep for when distrusted
+static void handle_reinstate(kb *collection, clause *reinstate, kb_str *buf) {
+  alma_term *arg1 = reinstate->pos_lits[0]->terms+0;
+  alma_term *arg2 = reinstate->pos_lits[0]->terms+1;
+
+  void *mapping = clause_lookup(collection, arg1->quote->clause_quote);
+  if (mapping != NULL) {
+    alma_quote *q = malloc(sizeof(*q));
+    q->type = CLAUSE;
+
+    for (int j = mapping_num_clauses(mapping, arg1->quote->clause_quote->tag)-1; j >= 0; j--) {
+      clause *jth = mapping_access(mapping, arg1->quote->clause_quote->tag, j);
+      if (jth->distrusted == atol(arg2->function->name) && counts_match(jth, arg1->quote->clause_quote)) {
+        q->clause_quote = jth;
+        binding_list *theta = malloc(sizeof(*theta));
+        init_bindings(theta);
+
+        // Unification succeeded, create and add the reinstatement clause
+        if (quote_term_unify(arg1->quote, q, theta)) {
+          clause *reinstatement = malloc(sizeof(*reinstatement));
+          copy_clause_structure(jth, reinstatement);
+          copy_parents(jth, reinstatement);
+          subst_clause(theta, reinstatement, 0);
+          set_variable_ids(reinstatement, 1, 0, NULL, collection);
+          tommy_array_insert(&collection->new_clauses, reinstatement);
+
+          if (reinstatement->pos_count + reinstatement->neg_count == 1 && reinstatement->fif == NULL) {
+            // Look for contradicting() instances with reinstate target as a contradictand, to be handled()
+            char *name = name_with_arity("contradicting", 3);
+            predname_mapping *result = tommy_hashlin_search(&collection->pos_map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
+            if (result != NULL) {
+              // Select argument to match reinstated literal
+              int contra_arg = (reinstatement->neg_count == 1);
+
+              for (int k = 0; k < result->num_clauses; k++) {
+                clause *con = result->clauses[k];
+                if (con->pos_count == 1 && con->neg_count == 0 && con->fif == NULL &&
+                    (flags_negative(con) || flag_active_at_least(con, collection->time)) &&
+                    con->pos_lits[0]->term_count == 3 && con->pos_lits[0]->terms[contra_arg].type == QUOTE) {
+
+                  binding_list *contra_theta = malloc(sizeof(*contra_theta));
+                  init_bindings(contra_theta);
+
+                  // Contradicting() formula found with argument matching reinstate arg; mark this contradiction as handled
+                  if (quote_term_unify(con->pos_lits[0]->terms[contra_arg].quote, q, contra_theta)) {
+                    tommy_array_insert(&collection->handle_set, con);
+                    tommy_array_insert(&collection->handle_parents, reinstate);
+                  }
+                  cleanup_bindings(contra_theta);
+                }
+              }
+            }
+            free(name);
+
+            // Look for distrusted() instances with reinstate target, to be retired (??)
+            // TODO
+          }
+        }
+        cleanup_bindings(theta);
+      }
+    }
+    free(q);
+  }
+
+}
+
+// Special semantic operator: update
+// Must be a singleton positive literal with binary args
+// Updating succeeds if given a quote matching KB formula(s) and a quote for the updated clause
+static void handle_update(kb *collection, clause *update, kb_str *buf) {
+  alma_term *arg1 = update->pos_lits[0]->terms+0;
+  alma_term *arg2 = update->pos_lits[0]->terms+1;
+
+  void *mapping = clause_lookup(collection, arg1->quote->clause_quote);
+  if (mapping != NULL) {
+    alma_quote *q = malloc(sizeof(*q));
+    q->type = CLAUSE;
+
+    for (int j = mapping_num_clauses(mapping, arg1->quote->clause_quote->tag)-1; j >= 0; j--) {
+      clause *jth = mapping_access(mapping, arg1->quote->clause_quote->tag, j);
+      if (!jth->distrusted && counts_match(jth, arg1->quote->clause_quote)) {
+        q->clause_quote = jth;
+        binding_list *theta = malloc(sizeof(*theta));
+        init_bindings(theta);
+
+        // Unification succeeded, create and add the updated clause and distrust original
+        if (quote_term_unify(arg1->quote, q, theta)) {
+          clause *update_clause = malloc(sizeof(*update_clause));
+          copy_clause_structure(arg2->quote->clause_quote, update_clause);
+          init_single_parent(update_clause, update);
+
+          subst_clause(theta, update_clause, 0);
+          set_variable_ids(update_clause, 1, 0, NULL, collection);
+          tommy_array_insert(&collection->new_clauses, update_clause);
+
+          tommy_array_insert(&collection->distrust_set, jth);
+          tommy_array_insert(&collection->distrust_parents, update);
+        }
+        cleanup_bindings(theta);
+      }
+    }
+    free(q);
+  }
+}
+
+// Processing of new clauses: inserts non-duplicates derived, makes new tasks from if flag is active
 // Special handling for true, reinstate, distrust, update
-void process_new_clauses(kb *collection, kb_str *buf) {
+void process_new_clauses(kb *collection, kb_str *buf, int make_tasks) {
   fif_to_front(&collection->new_clauses);
 
   for (tommy_size_t i = 0; i < tommy_array_size(&collection->new_clauses); i++) {
@@ -1732,124 +1842,43 @@ void process_new_clauses(kb *collection, kb_str *buf) {
     clause *dupe;
     if ((dupe = duplicate_check(collection, c, 0)) == NULL) {
       //c->dirty_bit = 1;
+      add_clause(collection, c);
+
       if (c->pos_count == 1 && c->neg_count == 0) {
         if (strcmp(c->pos_lits[0]->name, "true") == 0)
           handle_true(collection, c, buf);
         else if (strcmp(c->pos_lits[0]->name, "distrust") == 0)
           handle_distrust(collection, c, buf);
       }
-      add_clause(collection, c);
 
-      // Special semantic operator: reinstate
-      // Must be a singleton positive literal with binary args
-      // Reinstatement succeeds if given a quote matching distrusted formula(s) and matching timestep for when distrusted
-      if (c->pos_count == 1 && c->neg_count == 0 && strcmp(c->pos_lits[0]->name, "reinstate") == 0 && c->tag == NONE && c->pos_lits[0]->term_count == 2) {
-        alma_term *arg1 = c->pos_lits[0]->terms+0;
-        alma_term *arg2 = c->pos_lits[0]->terms+1;
-
-        if (arg1->type == QUOTE && arg1->quote->type == CLAUSE &&
-            arg2->type == FUNCTION && arg2->function->term_count == 0 && all_digits(arg2->function->name)) {
-          void *mapping = clause_lookup(collection, arg1->quote->clause_quote);
-          if (mapping != NULL) {
-            alma_quote *q = malloc(sizeof(*q));
-            q->type = CLAUSE;
-
-            for (int j = mapping_num_clauses(mapping, arg1->quote->clause_quote->tag)-1; j >= 0; j--) {
-              clause *jth = mapping_access(mapping, arg1->quote->clause_quote->tag, j);
-              if (jth->distrusted == atol(arg2->function->name) && counts_match(jth, arg1->quote->clause_quote)) {
-                q->clause_quote = jth;
-                binding_list *theta = malloc(sizeof(*theta));
-                init_bindings(theta);
-
-                // Unification succeeded, create and add the reinstatement clause
-                if (quote_term_unify(arg1->quote, q, theta)) {
-                  clause *reinstatement = malloc(sizeof(*reinstatement));
-                  copy_clause_structure(jth, reinstatement);
-                  copy_parents(jth, reinstatement);
-                  subst_clause(theta, reinstatement, 0);
-                  set_variable_ids(reinstatement, 1, 0, NULL, collection);
-                  tommy_array_insert(&collection->new_clauses, reinstatement);
-
-                  if (reinstatement->pos_count + reinstatement->neg_count == 1 && reinstatement->fif == NULL) {
-                    // Look for contradicting() instances with reinstate target as a contradictand, to be handled()
-                    char *name = name_with_arity("contradicting", 3);
-                    predname_mapping *result = tommy_hashlin_search(&collection->pos_map, pm_compare, name, tommy_hash_u64(0, name, strlen(name)));
-                    if (result != NULL) {
-                      // Select argument to match reinstated literal
-                      int contra_arg = (reinstatement->neg_count == 1);
-
-                      for (int k = 0; k < result->num_clauses; k++) {
-                        clause *con = result->clauses[k];
-                        if (con->pos_count == 1 && con->neg_count == 0 && con->fif == NULL &&
-                            (flags_negative(con) || flag_active_at_least(con, collection->time)) &&
-                            con->pos_lits[0]->term_count == 3 && con->pos_lits[0]->terms[contra_arg].type == QUOTE) {
-
-                          binding_list *contra_theta = malloc(sizeof(*contra_theta));
-                          init_bindings(contra_theta);
-
-                          // Contradicting() formula found with argument matching reinstate arg; mark this contradiction as handled
-                          if (quote_term_unify(con->pos_lits[0]->terms[contra_arg].quote, q, contra_theta)) {
-                            tommy_array_insert(&collection->handle_set, con);
-                            tommy_array_insert(&collection->handle_parents, c);
-                          }
-                          cleanup_bindings(contra_theta);
-                        }
-                      }
-                    }
-                    free(name);
-
-                    // Look for distrusted() instances with reinstate target, to be retired (??)
-                  }
-                }
-                cleanup_bindings(theta);
-              }
-            }
-            free(q);
+      // Case for reinstate
+      if (c->pos_count == 1 && c->neg_count == 0 && strcmp(c->pos_lits[0]->name, "reinstate") == 0) {
+        if (c->tag == NONE && c->pos_lits[0]->term_count == 2 && c->pos_lits[0]->terms[0].type == QUOTE &&
+            c->pos_lits[0]->terms[0].quote->type == CLAUSE && c->pos_lits[0]->terms[1].type == FUNCTION &&
+            c->pos_lits[0]->terms[1].function->term_count == 0 && all_digits(c->pos_lits[0]->terms[1].function->name)) {
+          if (c->pos_lits[0]->terms[0].quote->clause_quote->pos_count == 1 &&
+              c->pos_lits[0]->terms[0].quote->clause_quote->neg_count == 0) {
+            tommy_array_insert(&collection->pos_lit_reinstates, c);
+            tommy_array_set(&collection->new_clauses, i, NULL);
           }
+          else if (c->pos_lits[0]->terms[0].quote->clause_quote->neg_count == 1 &&
+              c->pos_lits[0]->terms[0].quote->clause_quote->pos_count == 0) {
+            tommy_array_insert(&collection->neg_lit_reinstates, c);
+            tommy_array_set(&collection->new_clauses, i, NULL);
+          }
+          else
+            handle_reinstate(collection, c, buf);
         }
       }
-      // Special semantic operator: update
-      // Must be a singleton positive literal with binary args
-      // Updating succeeds if given a quote matching KB formula(s) and a quote to update to
-      else if (c->pos_count == 1 && c->neg_count == 0 && strcmp(c->pos_lits[0]->name, "update") == 0 && c->tag == NONE && c->pos_lits[0]->term_count == 2) {
-        alma_term *arg1 = c->pos_lits[0]->terms+0;
-        alma_term *arg2 = c->pos_lits[0]->terms+1;
-
-        if (arg1->type == QUOTE && arg1->quote->type == CLAUSE &&
-            arg2->type == QUOTE && arg2->quote->type == CLAUSE) {
-          void *mapping = clause_lookup(collection, arg1->quote->clause_quote);
-          if (mapping != NULL) {
-            alma_quote *q = malloc(sizeof(*q));
-            q->type = CLAUSE;
-
-            for (int j = mapping_num_clauses(mapping, arg1->quote->clause_quote->tag)-1; j >= 0; j--) {
-              clause *jth = mapping_access(mapping, arg1->quote->clause_quote->tag, j);
-              if (!jth->distrusted && counts_match(jth, arg1->quote->clause_quote)) {
-                q->clause_quote = jth;
-                binding_list *theta = malloc(sizeof(*theta));
-                init_bindings(theta);
-
-                // Unification succeeded, create and add the updated clause and distrust original
-                if (quote_term_unify(arg1->quote, q, theta)) {
-                  clause *update_clause = malloc(sizeof(*update_clause));
-                  copy_clause_structure(arg2->quote->clause_quote, update_clause);
-                  init_single_parent(update_clause, c);
-
-                  subst_clause(theta, update_clause, 0);
-                  set_variable_ids(update_clause, 1, 0, NULL, collection);
-                  tommy_array_insert(&collection->new_clauses, update_clause);
-
-                  tommy_array_insert(&collection->distrust_set, jth);
-                  tommy_array_insert(&collection->distrust_parents, c);
-                }
-                cleanup_bindings(theta);
-              }
-            }
-            free(q);
-          }
+      // Case for update
+      else if (c->pos_count == 1 && c->neg_count == 0 && strcmp(c->pos_lits[0]->name, "update") == 0) {
+        if (c->tag == NONE && c->pos_lits[0]->term_count == 2 && c->pos_lits[0]->terms[0].type == QUOTE &&
+            c->pos_lits[0]->terms[0].quote->type == CLAUSE && c->pos_lits[0]->terms[1].type == QUOTE &&
+            c->pos_lits[0]->terms[1].quote->type == CLAUSE) {
+          handle_update(collection, c, buf);
         }
       }
-      // Non-reinstate sentences generate tasks
+      // Non-reinstate/non-update sentences generate tasks
       else {
         // Update child info for parents of new clause
         if (c->parents != NULL) {
@@ -1857,25 +1886,27 @@ void process_new_clauses(kb *collection, kb_str *buf) {
             add_child(c->parents[0].clauses[j], c);
         }
 
-        if (c->tag == FIF) {
-          fif_task_map_init(collection, c, 1);
-        }
-        else {
-          res_tasks_from_clause(collection, c, 1);
-          fif_tasks_from_clause(collection, c);
+        if (make_tasks) {
+          if (c->tag == FIF) {
+            fif_task_map_init(collection, c, 1);
+          }
+          else {
+            res_tasks_from_clause(collection, c, 1);
+            fif_tasks_from_clause(collection, c);
 
-          // Get tasks between new KB clauses and all bs clauses
-          tommy_node *curr = tommy_list_head(&collection->backsearch_tasks);
-          while (curr) {
-            backsearch_task *t = curr->data;
-            for (int j = 0; j < tommy_array_size(&t->clauses); j++) {
-              clause *bt_c = tommy_array_get(&t->clauses, j);
-              for (int k = 0; k < bt_c->pos_count; k++)
-                make_single_task(collection, bt_c, bt_c->pos_lits[k], c, &t->to_resolve, 1, 0);
-              for (int k = 0; k < bt_c->neg_count; k++)
-                make_single_task(collection, bt_c, bt_c->neg_lits[k], c, &t->to_resolve, 1, 1);
+            // Get tasks between new KB clauses and all bs clauses
+            tommy_node *curr = tommy_list_head(&collection->backsearch_tasks);
+            while (curr) {
+              backsearch_task *t = curr->data;
+              for (int j = 0; j < tommy_array_size(&t->clauses); j++) {
+                clause *bt_c = tommy_array_get(&t->clauses, j);
+                for (int k = 0; k < bt_c->pos_count; k++)
+                  make_single_task(collection, bt_c, bt_c->pos_lits[k], c, &t->to_resolve, 1, 0);
+                for (int k = 0; k < bt_c->neg_count; k++)
+                  make_single_task(collection, bt_c, bt_c->neg_lits[k], c, &t->to_resolve, 1, 1);
+              }
+              curr = curr->next;
             }
-            curr = curr->next;
           }
         }
       }
@@ -1898,6 +1929,52 @@ void process_new_clauses(kb *collection, kb_str *buf) {
   }
   tommy_array_done(&collection->new_clauses);
   tommy_array_init(&collection->new_clauses);
+
+  // Process reinstatements of literals to look for contradictory reinstatements between them
+  for (tommy_size_t i = 0; i < tommy_array_size(&collection->pos_lit_reinstates); i++) {
+    clause *reinstate = tommy_array_get(&collection->pos_lit_reinstates, i);
+    int contradictory = 0;
+    for (tommy_size_t j = 0; j < tommy_array_size(&collection->neg_lit_reinstates); j++) {
+      clause *reinstate_neg = tommy_array_get(&collection->neg_lit_reinstates, j);
+      // Proceed if reinstates' target literals have same predicate name
+      alma_function *pos = reinstate->pos_lits[0]->terms[0].quote->clause_quote->pos_lits[0];
+      alma_function *neg = reinstate_neg->pos_lits[0]->terms[0].quote->clause_quote->neg_lits[0];
+      if (strcmp(pos->name, neg->name) == 0) {
+        binding_list *theta = malloc(sizeof(*theta));
+        init_bindings(theta);
+
+        // If unification succeeds, then they're contradictory reinstatement targets
+        if (pred_unify(pos, neg, theta, 0)) {
+          make_contra(collection, reinstate, reinstate_neg);
+          contradictory = 1;
+        }
+        cleanup_bindings(theta);
+      }
+    }
+    // If found no contra iterating the negative reinstate literals, handle to fully reinstate
+    if (!contradictory)
+      handle_reinstate(collection, reinstate, buf);
+  }
+  for (tommy_size_t i = 0; i < tommy_array_size(&collection->neg_lit_reinstates); i++) {
+    clause *reinstate = tommy_array_get(&collection->neg_lit_reinstates, i);
+    int contradictory = 0;
+
+    for (tommy_size_t j = 0; j < tommy_array_size(&collection->distrust_set); j++) {
+      clause *distrusted = tommy_array_get(&collection->distrust_set, j);
+      if (distrusted->index == reinstate->index) {
+        contradictory = 1;
+        break;
+      }
+    }
+
+    // If negative reinstate literal is not distrusted from earlier contra, handle to fully reinstate
+    if (!contradictory)
+      handle_reinstate(collection, reinstate, buf);
+  }
+  tommy_array_done(&collection->pos_lit_reinstates);
+  tommy_array_init(&collection->pos_lit_reinstates);
+  tommy_array_done(&collection->neg_lit_reinstates);
+  tommy_array_init(&collection->neg_lit_reinstates);
 
   // Alter flag and make distrusted() formula for those newly distrusted, as well as distrusted descendants
   for (tommy_size_t i = 0; i < tommy_array_size(&collection->distrust_set); i++) {

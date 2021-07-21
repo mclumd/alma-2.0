@@ -71,6 +71,9 @@ void kb_init(kb **collection, char **files, int file_count, char *agent, char *t
   tommy_array_init(&collec->retire_set);
   tommy_array_init(&collec->retire_parents);
 
+  tommy_array_init(&collec->pos_lit_reinstates);
+  tommy_array_init(&collec->neg_lit_reinstates);
+
   const alma_proc procs[15] = {{"neg_int", 1}, {"neg_int_spec", 1}, {"neg_int_gen", 1}, {"pos_int", 1}, {"pos_int_spec", 1},
                    {"pos_int_gen", 1}, {"acquired", 2}, {"ancestor", 3}, {"non_ancestor", 3}, {"parent", 3}, {"parents_defaults", 2},
                    {"parent_non_default", 2}, {"less_than", 2}, {"quote_cons", 2}, {"not_equal", 2}};
@@ -144,18 +147,9 @@ void kb_init(kb **collection, char **files, int file_count, char *agent, char *t
   //assert_formula(collec, collec->wallprev, 0, buf);
 
   // Insert starting clauses
-  for (tommy_size_t i = 0; i < tommy_array_size(&collec->new_clauses); i++) {
-    clause *c = tommy_array_get(&collec->new_clauses, i);
-    // Insert into KB if not duplicate
-    if (duplicate_check(collec, c, 0) == NULL)
-      add_clause(collec, c);
-    else
-      free_clause(c);
-  }
-  tommy_array_done(&collec->new_clauses);
-  tommy_array_init(&collec->new_clauses);
+  process_new_clauses(collec, buf, 0);
 
-  // Generate starting resolution tasks
+  // Generate starting tasks
   tommy_node *i = tommy_list_head(&collec->clauses);
   while (i) {
     clause *c = ((index_mapping*)i->data)->value;
@@ -194,7 +188,7 @@ void kb_step(kb *collection, kb_str *buf) {
   process_backsearch_tasks(collection, buf);
 
   int newc = tommy_array_size(&collection->new_clauses) > 0;
-  process_new_clauses(collection, buf);
+  process_new_clauses(collection, buf, 1);
 
   // New clock rules go last
   collection->now = now(collection->time);
@@ -207,7 +201,9 @@ void kb_step(kb *collection, kb_str *buf) {
   //delete_formula(collection, collection->wallprev, 0, buf);
   //free(collection->wallprev);
   //collection->wallprev = collection->wallnow;
-  process_new_clauses(collection, buf);
+
+  // Second pass of process_new_clauses covers clock rules as well as late-added meta-formulas like contra from end of first pass
+  process_new_clauses(collection, buf, 1);
 
   tommy_node *i = tommy_list_head(&collection->backsearch_tasks);
   while (i) {
@@ -283,6 +279,9 @@ void kb_halt(kb *collection) {
   tommy_array_done(&collection->handle_parents);
   tommy_array_done(&collection->retire_set);
   tommy_array_done(&collection->retire_parents);
+
+  tommy_array_done(&collection->pos_lit_reinstates);
+  tommy_array_done(&collection->neg_lit_reinstates);
 
   tommy_node *curr = tommy_list_head(&collection->clauses);
   while (curr) {

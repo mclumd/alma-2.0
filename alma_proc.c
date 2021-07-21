@@ -423,9 +423,11 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time,
 // Helper function to check a specific clause
 // Returns 1 if each derivation has default parent out of the parent set
 // Parent set must all be current beliefs to count toward result
-static int check_default_parents(clause *c) {
+static int check_default_parents(clause *c, kb *alma) {
   for (int i = 0; i < c->parent_set_count; i++) {
-    // Determine flags are neegative for parent set first
+    if (alma->verbose)
+      tee_alt("Processing parent set %d\n", alma, NULL, i);
+    // Determine flags are negative for parent set first
     int flags_neg = 1;
     for (int j = 0; j < c->parents[i].count; j++) {
       if (!flags_negative(c->parents[i].clauses[j])) {
@@ -434,9 +436,13 @@ static int check_default_parents(clause *c) {
       }
     }
     if (flags_neg) {
+      if (alma->verbose)
+        tee_alt("Flags negative\n", alma, NULL);
       // Then check for presence of default
       int default_fif = 0;
       for (int j = 0; j < c->parents[i].count; j++) {
+        if (alma->verbose)
+          tee_alt(" Processing parent index %ld\n", alma, NULL, c->parents[i].clauses[j]->index);
         if (c->parents[i].clauses[j]->tag == FIF) {
           for (int k = 0; k < c->parents[i].clauses[j]->fif->premise_count; k++) {
             alma_function *premise = fif_access(c->parents[i].clauses[j], k);
@@ -448,13 +454,18 @@ static int check_default_parents(clause *c) {
                 && strcmp(premise->terms->quote->clause_quote->pos_lits[0]->name, "abnormal") == 0
                 && premise->terms->quote->clause_quote->pos_lits[0]->term_count == 3) {
               default_fif = 1;
+              if (alma->verbose)
+                tee_alt(" Default parent found\n", alma, NULL);
               break;
             }
           }
         }
       }
-      if (!default_fif)
+      if (!default_fif) {
         return 0;
+        if (alma->verbose)
+          tee_alt(" No default parent found; failing\n", alma, NULL);
+      }
     }
   }
   return 1;
@@ -499,13 +510,6 @@ static int parents_defaults(alma_term *arg, alma_term *time, binding_list *bindi
 
       for (int i = mapping_num_clauses(mapping, arg_copy->quote->clause_quote->tag)-1; i >= 0; i--) {
         clause *ith = mapping_access(mapping, arg_copy->quote->clause_quote->tag, i);
-
-        if (alma->verbose) {
-          tee_alt("Processing \"", alma, NULL);
-          clause_print(alma, ith, NULL);
-          tee_alt("\"\n", alma, NULL);
-        }
-
         if (counts_match(ith, arg_copy->quote->clause_quote) && ith->acquired <= query_time
             && (flags_negative(ith) || flag_active_at_least(ith, query_time))) {
           // Create copy as either empty list or copy of arg
@@ -515,7 +519,13 @@ static int parents_defaults(alma_term *arg, alma_term *time, binding_list *bindi
 
           // If unification followed by parents checking succeeds, cleans up and returns true
           if (quote_term_unify(arg_copy->quote, quote_holder, arg_bindings)) {
-            int check = check_default_parents(ith);
+            if (alma->verbose) {
+              tee_alt("Processing \"", alma, NULL);
+              clause_print(alma, ith, NULL);
+              tee_alt("\"\n", alma, NULL);
+            }
+
+            int check = check_default_parents(ith, alma);
             if ((check && !invert) || (!check && invert)) {
               swap_bindings(arg_bindings, bindings);
               cleanup_bindings(arg_bindings);

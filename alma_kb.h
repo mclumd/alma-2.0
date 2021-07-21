@@ -62,6 +62,8 @@ typedef struct kb {
   tommy_array retire_set; // Root clauses retired when stepping in last step
   tommy_array retire_parents; // Formulas as parents to use for retired() instance created from corresponding clauses
 
+  tommy_array pos_lit_reinstates; // Holds positive literal reinstatements, for contradiction checking
+  tommy_array neg_lit_reinstates; // Holds negative literal reinstatements, for contradiction checking
 
   tommy_list clauses; // Linked list storing index_mappings, keeps track of all clauses
   tommy_hashlin index_map; // Maps index value to a clause
@@ -115,8 +117,6 @@ int formulas_from_source(char *source, int file_src, int *formula_count, alma_no
 void make_clause(alma_node *node, clause *c);
 int clauses_differ(clause *x, clause *y);
 clause* duplicate_check(kb *collection, clause *c, int check_distrusted);
-void add_clause(kb *collection, clause *curr);
-void remove_clause(kb *collection, clause *c, kb_str *buf);
 void free_clause(clause *c);
 void copy_clause_structure(clause *orignal, clause *copy);
 void set_variable_ids(clause *c, int id_from_name, int non_escaping_only, binding_list *bs_bindings, kb *collection);
@@ -129,7 +129,7 @@ int counts_match(clause *x, clause *y);
 
 struct backsearch_task;
 void process_res_tasks(kb *collection, tommy_array *tasks, tommy_array *new_arr, struct backsearch_task *bs, kb_str *buf);
-void process_new_clauses(kb *collection, kb_str *buf);
+void process_new_clauses(kb *collection, kb_str *buf, int make_tasks);
 void make_single_task(kb *collection, clause *c, alma_function *c_lit, clause *other, tommy_array *tasks, int use_bif, int pos);
 void make_res_tasks(kb *collection, clause *c, int count, alma_function **c_lits, tommy_hashlin *map, tommy_array *tasks, int use_bif, int pos);
 void res_tasks_from_clause(kb *collection, clause *c, int process_negatives);
