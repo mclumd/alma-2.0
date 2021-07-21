@@ -274,7 +274,6 @@ def test_network(network, num_steps, kb):
 
 
 def test(network, network_priors, exp_size=10, num_steps=500, alma_heap_print_size=100, prb_print_size=30, numeric_bits=10, heap_print_freq=10, prb_threshold=-1, use_gnn = False, kb='/home/justin/alma-2.0/glut_control/test1_kb.pl', gnn_nodes=2000, initial_test=False):
-    global alma_inst,res
     alma_inst,res = alma.init(1,kb, '0', 1, 1000, [], [])
     dbb_instances = []
     exp = explosion(exp_size, kb, alma_inst)
