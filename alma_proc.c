@@ -134,7 +134,7 @@ static int str_to_long(char *str, long *res) {
 
 // For now, introspect fails on flagged formulas
 // It seems intuitive to reject them, since introspection is based on current knowledge
-static int introspect(alma_function *arg, binding_list *bindings, kb *alma, introspect_kind kind) {
+static int introspect(alma_function *arg, binding_list *bindings, kb *alma, introspect_kind kind, fif_task *task) {
   alma_term *query = arg->terms+0;
   binding *res;
   // Argument must be a clause quote or variable bound to one
@@ -224,6 +224,13 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *alma, intr
         if (quote_term_unify(search_term->quote, q, copy)) {
           if (alma->verbose)
             tee_alt("Unification succeeded\n", alma, NULL);
+
+          // If an introspect call which passes in task info, add unified clause to the task
+          if (task != NULL) {
+            task->num_unified++;
+            task->unified_clauses = realloc(task->unified_clauses, sizeof(*task->unified_clauses)*task->num_unified);
+            task->unified_clauses[task->num_unified-1] = ith;
+          }
 
           if (kind != NEG_INT_SPEC && kind != NEG_INT && kind != NEG_INT_GEN)
             swap_bindings(bindings, copy);
@@ -691,7 +698,7 @@ static int not_equal(alma_term *arg1, alma_term *arg2, binding_list *bindings, k
 
 
 // If proc is a valid procedure, runs and returns truth value
-int proc_run(alma_function *proc, binding_list *bindings, kb *alma) {
+int proc_run(alma_function *proc, binding_list *bindings, fif_task *task, kb *alma) {
   // Each procedure has optional extra argument for bound constraint
   if (strstr(proc->name, "neg_int") == proc->name) {
     // Must match (given bindings) the schema neg_int("...") / neg_int_gen("...") / neg_int_spec("...")
@@ -701,7 +708,7 @@ int proc_run(alma_function *proc, binding_list *bindings, kb *alma) {
         type = NEG_INT_SPEC;
       else if (strcmp(proc->name, "neg_int_gen") == 0)
         type = NEG_INT_GEN;
-      return introspect(proc, bindings, alma, type);
+      return introspect(proc, bindings, alma, type, NULL);
     }
   }
   else if (strstr(proc->name, "pos_int") == proc->name) {
@@ -712,13 +719,13 @@ int proc_run(alma_function *proc, binding_list *bindings, kb *alma) {
         type = POS_INT_SPEC;
       else if (strcmp(proc->name, "pos_int_gen") == 0)
         type = POS_INT_GEN;
-      return introspect(proc, bindings, alma, type);
+      return introspect(proc, bindings, alma, type, task);
     }
   }
   else if (strcmp(proc->name, "acquired") == 0) {
     // Must match (given bindings) the schema acquired("...", Var)
     if ((proc->term_count == 2 || proc->term_count == 3) && proc->terms[1].type == VARIABLE)
-      return introspect(proc, bindings, alma, ACQUIRED);
+      return introspect(proc, bindings, alma, ACQUIRED, NULL);
   }
   else if (strcmp(proc->name, "ancestor") == 0) {
     // Must match (given bindings) the schema ancestor("...", "...", Time)

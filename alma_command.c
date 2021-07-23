@@ -124,8 +124,9 @@ void kb_init(kb **collection, char **files, int file_count, char *agent, char *t
         nodes_to_clauses(collec, trees, num_trees, &collec->new_clauses, 0, buf);
         fif_to_front(&collec->new_clauses);
       }
-      // If file cannot parse, cleanup and exit
+      // If any file cannot parse, cleanup and exit
       else {
+        free(files);
         kb_halt(collec);
         exit(0);
       }

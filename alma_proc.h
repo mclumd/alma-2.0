@@ -5,6 +5,7 @@
 #include "alma_unify.h"
 
 struct kb;
+struct fif_task;
 
 typedef struct alma_proc {
   char *name;
@@ -13,6 +14,6 @@ typedef struct alma_proc {
 
 int is_proc(alma_function *proc, struct kb *alma);
 int proc_bound_check(alma_function *proc, binding_list *bindings, struct kb *alma);
-int proc_run(alma_function *proc, binding_list *bindings, struct kb *alma);
+int proc_run(alma_function *proc, binding_list *bindings, struct fif_task *task, struct kb *alma);
 
 #endif
