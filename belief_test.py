@@ -110,6 +110,7 @@ def timesteps(almalog):
 def main():
   ap = argparse.ArgumentParser()
   ap.add_argument('-b', '--base', required=True, help='Base axiom file', type=str)
+  ap.add_argument('-t', '--topic', required=True, help='Axioms for specific topic', type=str)
   ap.add_argument('-d', '--dir', required=True, help='.pl and .txt directory', type=str)
   ap.add_argument('-a', '--axiom_count', required=True, help='Base axiom count', type=int)
   args = vars(ap.parse_args())
@@ -129,7 +130,7 @@ def main():
     print("Running " + prefix)
 
     with open(os.devnull, 'w') as devnull:
-      subprocess.call(["./alma.x", "-f" , args['base'], "-f", os.path.join(pl_dir, prefix + ".pl"), "-r"], stdout = devnull, stderr = devnull)
+      subprocess.call(["./alma.x", "-f" , args['base'], "-f", args['topic'], "-f", os.path.join(pl_dir, prefix + ".pl"), "-r"], stdout = devnull, stderr = devnull)
 
     # Parse timesteps structure from ALMA log
     log = max(os.listdir("."), key=os.path.getctime)

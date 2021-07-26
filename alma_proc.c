@@ -330,6 +330,9 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time,
           quote_holder->clause_quote = ith;
 
           if (quote_term_unify(descendant_copy->quote, quote_holder, desc_bindings)) {
+            if (alma->verbose)
+              tee_alt("Descendant unification succeeded\n", alma, NULL);
+
             // Frontier of parents to expand
             tommy_array queue;
             tommy_array_init(&queue);
