@@ -22,19 +22,6 @@ static char* now(long t) {
   return str;
 }
 
-/*static char* walltime() {
-  struct timeval tval;
-  gettimeofday(&tval, NULL);
-  int sec_len = snprintf(NULL, 0, "%ld", (long int)tval.tv_sec);
-  char *str = malloc(8 + sec_len + 10 + 1);
-  strcpy(str, "wallnow(");
-  snprintf(str+8, sec_len+1, "%ld", (long int)tval.tv_sec);
-  strcpy(str+8+sec_len, ", ");
-  snprintf(str+8+sec_len+2, 6+1, "%06ld", (long int)tval.tv_usec);
-  strcpy(str+8+sec_len+8, ").");
-  return str;
-}*/
-
 // Caller will need to free collection with kb_halt
 void kb_init(kb **collection, char **files, int file_count, char *agent, char *trialnum, char *log_dir,  int verbose, kb_str *buf, int logon) {
   // Allocate and initialize
@@ -46,12 +33,12 @@ void kb_init(kb **collection, char **files, int file_count, char *agent, char *t
   collec->size = 0;
   collec->time = 0;
   collec->prev = collec->now = NULL;
-  collec->wallnow = collec->wallprev = NULL;
   collec->idling = 0;
   collec->variable_id_count = 0;
   collec->next_index = 0;
 
   tommy_array_init(&collec->new_clauses);
+  tommy_array_init(&collec->timestep_delay_clauses);
   tommy_list_init(&collec->clauses);
   tommy_hashlin_init(&collec->index_map);
   tommy_hashlin_init(&collec->pos_map);
@@ -144,10 +131,10 @@ void kb_init(kb **collection, char **files, int file_count, char *agent, char *t
 
   collec->prev = now(collec->time);
   assert_formula(collec, collec->prev, 0, buf);
-  //collec->wallprev = walltime();
-  //assert_formula(collec, collec->wallprev, 0, buf);
 
   // Insert starting clauses
+  process_new_clauses(collec, buf, 0);
+  // Second pass of process_new_clauses for late-added meta-formulas like contra from end of first pass
   process_new_clauses(collec, buf, 0);
 
   // Generate starting tasks
@@ -184,6 +171,14 @@ static int idling_check(kb *collection, int new_clauses) {
 void kb_step(kb *collection, kb_str *buf) {
   collection->time++;
 
+  // Move delayed clauses into new_clauses
+  for (tommy_size_t i = 0; i < tommy_array_size(&collection->timestep_delay_clauses); i++) {
+    clause *c = tommy_array_get(&collection->timestep_delay_clauses, i);
+    tommy_array_insert(&collection->new_clauses, c);
+  }
+  tommy_array_done(&collection->timestep_delay_clauses);
+  tommy_array_init(&collection->timestep_delay_clauses);
+
   process_res_tasks(collection, &collection->res_tasks, &collection->new_clauses, NULL, buf);
   process_fif_tasks(collection, buf);
   process_backsearch_tasks(collection, buf);
@@ -194,14 +189,9 @@ void kb_step(kb *collection, kb_str *buf) {
   // New clock rules go last
   collection->now = now(collection->time);
   assert_formula(collection, collection->now, 0, buf);
-  //collection->wallnow = walltime();
-  //assert_formula(collection, collection->wallnow, 0, buf);
   delete_formula(collection, collection->prev, 0, buf);
   free(collection->prev);
   collection->prev = collection->now;
-  //delete_formula(collection, collection->wallprev, 0, buf);
-  //free(collection->wallprev);
-  //collection->wallprev = collection->wallnow;
 
   // Second pass of process_new_clauses covers clock rules as well as late-added meta-formulas like contra from end of first pass
   process_new_clauses(collection, buf, 1);
@@ -266,13 +256,11 @@ void kb_halt(kb *collection) {
   free(collection->now);
   if (collection->now == NULL)
     free(collection->prev);
-  free(collection->wallnow);
-  if (collection->wallnow == NULL)
-    free(collection->wallprev);
 
   for (tommy_size_t i = 0; i < tommy_array_size(&collection->new_clauses); i++)
     free_clause(tommy_array_get(&collection->new_clauses, i));
   tommy_array_done(&collection->new_clauses);
+  tommy_array_done(&collection->timestep_delay_clauses);
 
   tommy_array_done(&collection->distrust_set);
   tommy_array_done(&collection->distrust_parents);

@@ -523,7 +523,7 @@ int pm_compare(const void *arg, const void *obj) {
 
 // Returns true if clause is not distrusted, retired, or handled
 int flags_negative(clause *c) {
-  return c->distrusted == 0 && c->retired == 0 && c->handled == 0;
+  return c->distrusted < 0 && c->retired == 0 && c->handled == 0;
 }
 
 // Returns true if clause has become distrusted/retired/handled at or after
@@ -1341,7 +1341,7 @@ static int derivations_distrusted(clause *c) {
   for (int i = 0; i < c->parent_set_count; i++) {
     int parent_distrusted = 0;
     for (int j = 0; j < c->parents[i].count; j++) {
-      if (c->parents[i].clauses[j]->distrusted) {
+      if (c->parents[i].clauses[j]->distrusted >= 0) {
         parent_distrusted = 1;
         break;
       }
@@ -1402,7 +1402,7 @@ static void distrust_recursive(kb *collection, clause *c, clause *contra, kb_str
   // Recursively distrust children
   if (c->children != NULL) {
     for (int i = 0; i < c->children_count; i++) {
-      if (!c->children[i]->distrusted && derivations_distrusted(c->children[i])) {
+      if (c->children[i]->distrusted < 0 && derivations_distrusted(c->children[i])) {
         distrust_recursive(collection, c->children[i], contra, buf);
       }
     }
@@ -1608,7 +1608,7 @@ static void add_clause(kb *collection, clause *c) {
   index_mapping *ientry = malloc(sizeof(*ientry));
   c->index = ientry->key = collection->next_index++;
   c->acquired = collection->time;
-  c->distrusted = 0;
+  c->distrusted = -1;
   c->retired = 0;
   c->handled = 0;
   c->dirty_bit = (char) 1;
@@ -1680,7 +1680,7 @@ static void handle_true(kb *collection, clause *truth, kb_str *buf) {
       init_single_parent(curr, truth);
 
       // Inserted same timestep
-      tommy_array_insert(&collection->new_clauses, curr);
+      tommy_array_insert(&collection->timestep_delay_clauses, curr);
     }
     tommy_array_done(&unquoted);
   }
@@ -1751,7 +1751,7 @@ static void handle_reinstate(kb *collection, clause *reinstate, kb_str *buf) {
           copy_parents(jth, reinstatement);
           subst_clause(theta, reinstatement, 0);
           set_variable_ids(reinstatement, 1, 0, NULL, collection);
-          tommy_array_insert(&collection->new_clauses, reinstatement);
+          tommy_array_insert(&collection->timestep_delay_clauses, reinstatement);
 
           if (reinstatement->pos_count + reinstatement->neg_count == 1 && reinstatement->fif == NULL) {
             // Look for contradicting() instances with reinstate target as a contradictand, to be handled()
@@ -1807,7 +1807,7 @@ static void handle_update(kb *collection, clause *update, kb_str *buf) {
 
     for (int j = mapping_num_clauses(mapping, arg1->quote->clause_quote->tag)-1; j >= 0; j--) {
       clause *jth = mapping_access(mapping, arg1->quote->clause_quote->tag, j);
-      if (!jth->distrusted && counts_match(jth, arg1->quote->clause_quote)) {
+      if (jth->distrusted < 0 && counts_match(jth, arg1->quote->clause_quote)) {
         q->clause_quote = jth;
         binding_list *theta = malloc(sizeof(*theta));
         init_bindings(theta);

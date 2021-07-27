@@ -49,11 +49,10 @@ typedef struct kb {
   long time;
   char *now; // String representation of now(time).
   char *prev; // String representation of now(time-1).
-  char *wallnow;
-  char *wallprev;
 
   int idling; // Boolean for idle KB state, from lack of tasks to advance
-  tommy_array new_clauses; // Clauses to be permanently added when next step
+  tommy_array new_clauses; // Clauses to be permanently added when next stepping
+  tommy_array timestep_delay_clauses; // Clauses to be added a timestep after new_clauses
 
   tommy_array distrust_set; // Root clauses distrusted when stepping in last step
   tommy_array distrust_parents; // Formulas as parents to use for distrusted() instances created from corresponding clauses
