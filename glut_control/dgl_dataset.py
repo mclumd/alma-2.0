@@ -25,7 +25,7 @@ import os
 # save_batch calls vectorize, this built and tested on data from the vectorize_alg = gnn1 mode
 
 class AlmaDataset(DGLDataset):
-    def __init__(self, Xbuffer, ybuffer):
+    def __init__(self, Xbuffer, ybuffer, debug=True):
         self.X = Xbuffer
         self.Y = ybuffer
         self.dim_nfeats = len(self.X[0][1][0])
@@ -36,6 +36,8 @@ class AlmaDataset(DGLDataset):
 
         # self.dim_nfeats = 11    # hardcoded for now, can work on this later
         # self.gclasses = 2       # hardcoded for now, can work on this later
+
+        self.debug = debug
 
         # The overridden process function is automatically called after construction
         # https://docs.dgl.ai/api/python/dgl.data.html
@@ -95,6 +97,77 @@ class AlmaDataset(DGLDataset):
 
     def __len__(self):
         return len(self.graphs)
+
+
+class PotentialInferenceDataSet(AlmaDataset):
+    def __init__(self, Xbuffer, ybuffer, debug=True):
+        super().__init__(Xbuffer, ybuffer, debug=True)
+
+    def PIgraph(self, X, label, features):
+        """
+
+
+        Inputs: 
+           X0, X1: incidence graphs (with features) for formulae corresponding to a potential inference.  
+        
+
+        Returns: A DGL graph with edges pointing "up" the syntax tree.
+        We introduce a supernode (with label -1) that will have the
+        roots of X0, X1 as children.
+
+        """
+        src_lst = []
+        dst_lst = []
+        label = None
+        num_nodes = len(X)
+        num_per_graph = num_nodes // 2
+
+        # Iterate over list of graphs
+        # For each adjacency, store a bidirectional edge between lowercase x and y,                                                         # Potential different architectures include no backwards edges,
+        # this ensures no node is isolated from message passing                                                                             # a standard edge feature to identify backwards edges, and a
+        # Then store the graph label from y                                                                                                 # new "supernode" that has bidirectional edges connecting to
+        # Last, grab num_nodes from size of adjacency matrix                                                                                # and from each existing node. 1 and 3 are common standards,
+        i = 0                                                                                                                               # 2 is not but could be helpful nonetheless.
+        y = 0
+        for row in X:
+            x = 0
+            for column in row:
+                if column == 1.0:
+                    # Reverse the src, dst order so that nodes point up
+                    src_lst.append(y)
+                    dst_lst.append(x)
+                    #src.append(x)
+                    #src = np.append(src, [y])
+                    #dst.append(y)
+                    #dst = np.append(dst, [x])
+                x += 1
+            y += 1
+        # Add a final super-root
+        dst_lst.extend([0, num_per_graph ])
+        src_lst.extend([num_nodes, num_nodes])
+        src = np.array(src_lst)
+        dst = np.array(dst_lst)
+        g = dgl.graph((src, dst), num_nodes=num_nodes + 1)
+        # Grab features for g from X[i][1]
+        # Convert to tensor via torch to avoid the "numpy.ndarray has no attribute 'device'" error
+        # https://discuss.dgl.ai/t/attributeerror-numpy-ndarray-object-has-no-attribute-device/241
+        g.ndata['feat'] = torch.LongTensor(features)
+        #g.ndata['feat'] = torch.LongTensor(graph[1]).to(self.device)
+        return g
+
+def process(self):
+    self.graphs = []
+    self.labels = []
+    for i in len(self.Xbuffers):
+        X, features = self.Xbuffers[i]
+        y = self.Y[i]
+        g = self.PIgraph(X, y, features)
+        self.graphs.append(dgl.add_self_loop(g))        #stops the zero-in-degree issue with GCN
+        self.labels.append(label)
+
+
+    # Convert the label list to tensor for saving.
+    self.labels = torch.LongTensor(self.labels)
 
 
 # Constructor takes a list of AlmaDatasets and mashes them together into one big dataset

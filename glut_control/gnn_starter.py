@@ -24,6 +24,7 @@ import alma
 from alma_utils import *
 import argparse
 import random
+from sklearn.utils import shuffle
 
 import dgl_dataset
 import dgl_network
@@ -163,6 +164,57 @@ def train_loop(network, num_steps, explosion_steps, kb, train_interval, dgl_data
     alma.halt(alma_inst)
     gc.collect()
     K.clear_session()
+
+def train_offline(datafilename, kb,  gnn_nodes, model_name="offline"):
+    with open(datafilename, "rb") as datafile:
+        data = pickle.load(datafile)
+
+    training_set_incidence_graph = data['training_set_ig']
+    training_set_y = data['training_set_y']
+    training_set_str = data['training_set_str']
+    training_set_tree = data['training_set_tree']
+
+    # Split the data into positive and negative sets
+    pos_igs, neg_igs = [], []
+    pos_str, neg_str = [], []
+    pos_tree, neg_tree = [], []
+    for i in range(len(training_set_y)):
+        ig, y, string, tree = training_set_incidence_graph.pop(), training_set_y.pop(), training_set_str.pop(), training_set_tree.pop()
+        if y == 0:
+            neg_igs.append(ig); neg_str.append(string); neg_tree.append(tree)
+        else:
+            pos_igs.append(ig); pos_str.append(string); pos_tree.append(tree)
+
+    neg_igs, neg_str, neg_tree = shuffle(neg_igs, neg_str, neg_tree)
+    pos_igs, pos_str, pos_tree = shuffle(pos_igs, pos_str, pos_tree)
+
+    # Initialize the network
+    if "test1_kb.pl" in kb:
+        subjects = ['a', 'b', 'distanceAt', 'distanceBetweenBoundedBy']
+
+    num_features = pos_igs[0][1].shape[1]   # Length of a single feature vector
+    network = dgl_heuristic(num_features, True, True, subjects, [], use_gnn=True, gnn_nodes = gnn_nodes)
+    # Train
+    batch_size = 16
+    while len(pos_igs) >= batch_size:
+        pos_batch, neg_batch = pos_igs[:batch_size], neg_igs[:batch_size]
+        pos_str, neg_str = pos_str[:batch_size], neg_str[:batch_size]
+        pos_tree, neg_tree = pos_tree[:batch_size], neg_tree[:batch_size]
+        
+        pos_igs, neg_igs = pos_igs[batch_size:], neg_igs[batch_size:]
+        pos_str, neg_str = pos_str[batch_size:], neg_str[batch_size:]
+        pos_tree, neg_tree = pos_tree[batch_size:], neg_tree[batch_size:]
+        
+        given_batch = {'posig': pos_batch, 'negig': neg_batch,
+                       'pos_str': pos_str, 'neg_str': neg_str}
+        H = network.train_buffered_batch(given_batch=given_batch)
+        if H is not None:
+            acc, loss = H.history['accuracy'][0], H.history['loss'][0]
+            print("accuracy: {} \t loss: {}".format(acc, loss))
+
+    # Cleanup and return
+    network.model_save(model_name, numeric_bits)
+    return network
 
 #@profile
 def train(explosion_steps=50, num_steps=500, numeric_bits=3, model_name="test1", use_gnn = False, num_trainings=1000, train_interval=500, kb='test1_kb.pl', net_clear=1000, gnn_nodes = 50, exhaustive=False, dgl_gnn=False):
@@ -356,6 +408,8 @@ def test(network, network_priors, exp_size=10, num_steps=500, alma_heap_print_si
         alma.astep(alma_inst)
     return dbb_instances
 
+
+
 def main():
     print("Command line: ", ''.join(sys.argv))
     
@@ -378,6 +432,7 @@ def main():
     parser.add_argument("--cpu_only", action='store_true')
     parser.add_argument("--exhaustive", action='store_true')
     parser.add_argument("--dgl_gnn", action='store_true')
+    parser.add_argument("--offline_train", required=False, default="NONE")
     
     network = None
     args = parser.parse_args()
@@ -385,6 +440,9 @@ def main():
     # use_net = True if args.use_network == "True" else False
     use_net = args.use_network
     assert(type(use_net) == type(True))
+
+    if args.offline_train != "NONE":
+        network = train_offline(args.offline_train, args.kb,  args.gnn_nodes)
 
     if args.cpu_only:
         # TODO:  This may need to be done before any tensorflow imports

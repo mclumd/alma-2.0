@@ -9,18 +9,27 @@ from torch.utils.data.sampler import SubsetRandomSampler, SequentialSampler
 from dgl.dataloading import GraphDataLoader
 
 class dgl_heuristic(res_prebuffer):
-    def __init__(self, input_size, *args, **kwargs):
+    def __init__(self, input_size, pi_dataset=False, gat_network=False, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.model = dgl_network.GCN(input_size, 512, 2)
+        self.model = dgl_network.simpleGAT(input_size, 512, 2, 16, 1) if gat_network else dgl_network.GCN(input_size, 512, 2)
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.01)
         self.dgl_gnn = True
+        self.pi_dataset = pi_dataset
+        self.gat_network = gat_network
         
 
 
-    def train_buffered_batch(self, sample_ratio=0.5):
+    def train_buffered_batch(self, sample_ratio=0.5, given_batch=None):
         self.model.train()
-        X, y, dbg = self.get_training_batch(self.batch_size, int(self.batch_size*sample_ratio))
-        dataset = dgl_dataset.AlmaDataset(X, y)
+        if given_batch is None:
+            X, y, dbg = self.get_training_batch(self.batch_size, int(self.batch_size*sample_ratio))
+        else:
+            xp, xn = given_batch['posig'], given_batch['negig']
+            X = xp + xn
+            y = [0]*len(xp) + [1]*len(xn)
+            
+        
+        dataset = dgl_dataset.PotentialInferenceDataSet(X, y)  if self.pi_dataset else dgl_dataset.AlmaDataset(X, y)
 
         # X = temp_network.vectorize(res_task_input)
         # Y = np.zeros(len(X)) # filler data, labels don't matter
@@ -39,7 +48,7 @@ class dgl_heuristic(res_prebuffer):
             #i += 1
             # if i > 250:
             #     break
-            pred = self.model(batched_graph, batched_graph.ndata['feat'].float())
+            pred = self.model(batched_graph, batched_graph.ndata['feat'].float() ) if self.gat_network else self.model(batched_graph, batched_graph.ndata['feat'].float())
             pred = torch.softmax(pred,1)
             tensor = torch.tensor((), dtype=torch.float32)
             mse_labels = tensor.new_zeros((len(labels), 2))
@@ -57,12 +66,11 @@ class dgl_heuristic(res_prebuffer):
             self.optimizer.step()
             print('loss: %.3f' % loss.item())
         return history_struct({'accuracy': [np.nan], 'loss': [loss.item()]})
-        return None
 
     def get_priorities(self, inputs, already_vectorized=False):
         X = inputs if already_vectorized else self.vectorize(inputs)
         Y = np.zeros(len(X)) # filler data, labels don't matter
-        dataset = dgl_dataset.AlmaDataset(X, Y)
+        dataset = dgl_dataset.PotentialInferenceDataSet(X, y)  if self.pi_dataset else dgl_dataset.AlmaDataset(X, y)
         sampler = SequentialSampler(torch.arange(len(X)))
         #sampler = SequentialSampler(torch.arange(1))
         test_dataloader = GraphDataLoader(
@@ -70,9 +78,11 @@ class dgl_heuristic(res_prebuffer):
 #            dataset, sampler=sampler, batch_size=len(X), drop_last=False)
         preds = []
         i=0
+        self.model.eval()
         for batched_graph, labels in test_dataloader:
             print(i, '/', len(X))
             i+=1
             preds.append(torch.softmax(self.model(batched_graph, batched_graph.ndata['feat'].float()),1).detach().cpu().numpy())
         print('done')
+        self.model.train()
         return np.array(preds).reshape(-1,2)[:,1]

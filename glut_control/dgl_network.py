@@ -2,6 +2,8 @@ import dgl
 import torch.nn as nn
 from dgl.nn import GraphConv
 from dgl.nn import GatedGraphConv
+from dgl.nn.pytorch import GATConv
+
 import torch
 import torch.nn.functional as F
 import dgl.data
@@ -59,6 +61,16 @@ class GCN(nn.Module):
         g.ndata['h'] = h
         return dgl.mean_nodes(g, 'h')
 
+    def readout(self, g, in_feat):
+        h = self.conv1(g, in_feat)
+        h = F.relu(h)
+        h = self.conv2(g, h)
+        h = F.relu(h)
+        h = self.conv3(g, h)
+        g.ndata['r'] = h
+        return dgl.mean_nodes(g, 'r')
+        
+
     def save(filename):
         torch.save(self, "gcndir/" + filename + ".pt")        
 
@@ -80,6 +92,51 @@ class GatedGCN(nn.Module):
         g.ndata['h'] = h
         return dgl.mean_nodes(g, 'h')
 
+
+class MultiHeadGATLayer(nn.Module):
+    def __init__(self, g, in_dim, out_dim, num_heads, merge='cat'):
+        super(MultiHeadGATLayer, self).__init__()
+        self.heads = nn.ModuleList()
+        for i in range(num_heads):
+            self.heads.append(GATLayer(g, in_dim, out_dim))
+        self.merge = merge
+
+    def forward(self, h):
+        head_outs = [attn_head(h) for attn_head in self.heads]
+        if self.merge == 'cat':
+            # concat on the output feature dimension (dim=1)
+            return torch.cat(head_outs, dim=1)
+        else:
+            # merge using average
+            return torch.mean(torch.stack(head_outs))  
+
+class simpleGAT(nn.Module):
+    def  __init__(self, in_feats, h_feats, num_classes, out_dim, num_heads):
+        super().__init__()
+        #self.layer1 = MultiHeadGATLayer(in_dim, hidden_dim, num_heads)
+        # Be aware that the input dimension is hidden_dim*num_heads since
+        # multiple head outputs are concatenated together. Also, only
+        # one attention head in the output layer.
+        #self.layer2 = MultiHeadGATLayer(hidden_dim * num_heads, out_dim, 1)
+        self.layer1 = GATConv(in_feats, h_feats, num_heads)
+        #self.layer2 = GATConv(num_heads*h_feats, h_feats, num_heads)
+        self.layer3 = nn.Linear(h_feats*num_heads, num_classes)
+        
+
+    def forward(self, g, feat):
+        h = self.layer1(g, feat)
+        h = F.elu(h)
+        #h = self.layer2(g, h)
+        #h = F.elu(h)
+        h = self.layer3(h)
+        return h
+
+    def readout(self,h):
+        h = self.layer1(h)
+        h = F.elu(h)
+        #h = self.layer2(h)
+        #h = F.elu(h)
+        return h
 # https://pytorch.org/tutorials/beginner/saving_loading_models.html
 # pytorch comes with save/load!
 
