@@ -76,7 +76,6 @@ fif(and(contradicting(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
 reinstate(quote(rel(`Pred, `Obj)), T)).
 
 
-
 % Formula for resolving a class of contradiction without hierarchy, or observation
 % When we have a contradiction between contradictands obtained from rules of the form Kind /\ Prop --> Pred, and when one contradictand has ancestor A /\ B --> C while we also know A /\ ~B --> ~C, and we know another derivation for C, then weaken the latter's premises into a default and reinstate C
 fif(and(contradicting(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
@@ -91,6 +90,20 @@ fif(and(contradicting(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
 and(update(quote(fif(and(rel(`Kind_a, Obj), not(rel(`Prop_a, Obj))), not(rel(`Pred, Obj)))), quote(fif(and(rel(`Kind_a, Obj), and(not(rel(`Prop_a, Obj)), neg_int(quote(abnormal(`Obj, ``Kind_a, quote(rel(```Pred, ``Obj))))))), not(rel(`Pred, Obj))))),
 and(reinstate(quote(rel(`Pred, `Obj)), T),
 fif(and(rel(Kind_a, Ab_Obj), and(not(rel(Prop_a, Ab_Obj)), rel(Pred, Ab_Obj))), abnormal(Ab_Obj, Kind_a, quote(rel(`Pred, `Ab_Obj))))))).
+
+fif(and(contradicting(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
+    and(rel(Kind_a, Obj),
+    and(rel(Prop_a, Obj),
+    and(parent(quote(fif(and(rel(`Kind_a, Obj), rel(`Prop_a, Obj)), rel(`Pred, Obj))), quote(rel(`Pred, `Obj)), T),
+    and(pos_int(quote(fif(and(rel(`Kind_a, Obj), not(rel(`Prop_a, Obj))), not(rel(`Pred, Obj))))),
+    and(rel(Kind_b, Obj),
+    and(not(rel(Prop_b, Obj)),
+    and(parent(quote(fif(and(rel(`Kind_b, Obj), not(rel(`Prop_b, Obj))), not(rel(`Pred, Obj)))), quote(not(rel(`Pred, `Obj))), T),
+    not_equal(quote(fif(and(rel(`Kind_a, Obj), not(rel(`Prop_a, Obj))), not(rel(`Pred, Obj)))), quote(fif(and(rel(`Kind_b, Obj), not(rel(`Prop_b, Obj))), not(rel(`Pred, Obj))))))))))))),
+and(update(quote(fif(and(rel(`Kind_a, Obj), rel(`Prop_a, Obj)), rel(`Pred, Obj))), quote(fif(and(rel(`Kind_a, Obj), and(rel(`Prop_a, Obj), neg_int(quote(abnormal(`Obj, ``Kind_a, quote(rel(```Pred, ``Obj))))))), rel(`Pred, Obj)))),
+and(reinstate(quote(not(rel(`Pred, `Obj))), T),
+fif(and(rel(Kind_a, Ab_Obj), and(rel(Prop_a, Ab_Obj), rel(Pred, Ab_Obj))), abnormal(Ab_Obj, Kind_a, quote(rel(`Pred, `Ab_Obj))))))).
+
 
 % Formulas for resolving contradictions where one contradictand is descended from a default, and the other is not
 
@@ -108,16 +121,7 @@ reinstate(quote(not(rel(`Pred, `Obj))), T)).
 
 
 % Formulas for resolving contradictions between reinstatements
-% First pair: reinstate where a reinstatement was derived from an absolute fif
-fif(and(contradicting(quote(reinstate(`X, `Time)), quote(reinstate(`Y, `Time)), T),
-    parent(quote(fif(and(rel(`Kind, Obj), rel(`Prop, Obj)), rel(`Pred, Obj))), quote(reinstate(`X, `Time)), T)),
-reinstate(quote(reinstate(`X, `Time)), T)).
-
-fif(and(contradicting(quote(reinstate(`X, `Time)), quote(reinstate(`Y, `Time)), T),
-    parent(quote(fif(and(rel(`Kind, Obj), rel(`Prop, Obj)), rel(`Pred, Obj))), quote(reinstate(`Y, `Time)), T)),
-reinstate(quote(reinstate(`Y, `Time)), T)).
-
-% Second pair: reinstate the the other reinstatement was derived from is-a ontology
+% When we find a reinstatement was derived from is-a ontology, reinstate the other
 fif(and(contradicting(quote(reinstate(`X, `Time)), quote(reinstate(`Y, `Time)), T),
     parent(quote(rel(is_a, `Kind, `Kind_gen)), quote(reinstate(`X, `Time)), T)),
 reinstate(quote(reinstate(`Y, `Time)), T)).

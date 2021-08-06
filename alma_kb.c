@@ -7,6 +7,7 @@
 #include "alma_fif.h"
 #include "alma_proc.h"
 #include "alma_print.h"
+#include "limits.h"
 
 static void add_lit(int *count, alma_function ***lits, alma_function *new_lit) {
   (*count)++;
@@ -523,12 +524,19 @@ int pm_compare(const void *arg, const void *obj) {
 
 // Returns true if clause is not distrusted, retired, or handled
 int flags_negative(clause *c) {
-  return c->distrusted < 0 && c->retired == 0 && c->handled == 0;
+  return c->distrusted < 0 && c->retired < 0 && c->handled < 0;
 }
 
-// Returns true if clause has become distrusted/retired/handled at or after
-int flag_active_at_least(clause *c, long time) {
-  return c->distrusted >= time || c->retired >= time || c->handled >= time;
+// Returns minimum among the flags of value >= 0
+long flag_min(clause *c) {
+  long min = LONG_MAX;
+  if (c->distrusted >= 0)
+    min = c->distrusted;
+  if (c->retired >= 0 && c->retired < min)
+    min = c->retired;
+  if (c->handled >= 0 && c->handled < min)
+    min = c->handled;
+  return min;
 }
 
 // Given "name" and integer arity, returns "name/arity"
@@ -833,7 +841,7 @@ clause* duplicate_check(kb *collection, clause *c, int check_distrusted) {
     if (result != NULL) {
       for (int i = 0; i < result->num_clauses; i++) {
         // A clause distrusted this timestep is still checked against
-        if ((check_distrusted || flags_negative(result->clauses[i]) || flag_active_at_least(result->clauses[i], collection->time)) &&
+        if ((check_distrusted || flags_negative(result->clauses[i]) || flag_min(result->clauses[i]) == collection->time) &&
             c->tag == result->clauses[i]->tag && !clauses_differ(c, result->clauses[i]))
           return result->clauses[i];
       }
@@ -1609,8 +1617,8 @@ static void add_clause(kb *collection, clause *c) {
   c->index = ientry->key = collection->next_index++;
   c->acquired = collection->time;
   c->distrusted = -1;
-  c->retired = 0;
-  c->handled = 0;
+  c->retired = -1;
+  c->handled = -1;
   c->dirty_bit = (char) 1;
   c->pyobject_bit = (char) 1;
   ientry->value = c;
@@ -1726,7 +1734,6 @@ static int all_digits(char *str) {
 }
 
 // Special semantic operator: reinstate
-// Reinstate() be a singleton positive literal with binary args
 // Reinstatement succeeds if given args of a quote matching distrusted formula(s) and a matching timestep for when distrusted
 static void handle_reinstate(kb *collection, clause *reinstate, kb_str *buf) {
   alma_term *arg1 = reinstate->pos_lits[0]->terms+0;
@@ -1764,7 +1771,7 @@ static void handle_reinstate(kb *collection, clause *reinstate, kb_str *buf) {
               for (int k = 0; k < result->num_clauses; k++) {
                 clause *con = result->clauses[k];
                 if (con->pos_count == 1 && con->neg_count == 0 && con->fif == NULL &&
-                    (flags_negative(con) || flag_active_at_least(con, collection->time)) &&
+                    (flags_negative(con) || flag_min(con) == collection->time) &&
                     con->pos_lits[0]->term_count == 3 && con->pos_lits[0]->terms[contra_arg].type == QUOTE) {
 
                   binding_list *contra_theta = malloc(sizeof(*contra_theta));
@@ -1794,7 +1801,6 @@ static void handle_reinstate(kb *collection, clause *reinstate, kb_str *buf) {
 }
 
 // Special semantic operator: update
-// Must be a singleton positive literal with binary args
 // Updating succeeds if given a quote matching KB formula(s) and a quote for the updated clause
 static void handle_update(kb *collection, clause *update, kb_str *buf) {
   alma_term *arg1 = update->pos_lits[0]->terms+0;
@@ -1852,6 +1858,7 @@ void process_new_clauses(kb *collection, kb_str *buf, int make_tasks) {
       }
 
       // Case for reinstate
+      // Reinstate() be a singleton positive literal with binary args, former as quotation term
       if (c->pos_count == 1 && c->neg_count == 0 && strcmp(c->pos_lits[0]->name, "reinstate") == 0) {
         if (c->tag == NONE && c->pos_lits[0]->term_count == 2 && c->pos_lits[0]->terms[0].type == QUOTE &&
             c->pos_lits[0]->terms[0].quote->type == CLAUSE && c->pos_lits[0]->terms[1].type == FUNCTION &&
@@ -1871,6 +1878,7 @@ void process_new_clauses(kb *collection, kb_str *buf, int make_tasks) {
         }
       }
       // Case for update
+      // Must be a singleton positive literal with binary args, both as quotation terms
       else if (c->pos_count == 1 && c->neg_count == 0 && strcmp(c->pos_lits[0]->name, "update") == 0) {
         if (c->tag == NONE && c->pos_lits[0]->term_count == 2 && c->pos_lits[0]->terms[0].type == QUOTE &&
             c->pos_lits[0]->terms[0].quote->type == CLAUSE && c->pos_lits[0]->terms[1].type == QUOTE &&

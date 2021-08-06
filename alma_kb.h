@@ -85,7 +85,7 @@ typedef struct kb {
   long long variable_id_count;
   long next_index;
 
-  alma_proc procs[15];
+  alma_proc procs[17];
 } kb;
 
 // Map used for entries in index_map
@@ -140,7 +140,7 @@ void transfer_parent(kb *collection, clause *target, clause *source, int add_chi
 void free_predname_mapping(void *arg);
 int pm_compare(const void *arg, const void *obj);
 int flags_negative(clause *c);
-int flag_active_at_least(clause *c, long time);
+long flag_min(clause *c);
 void func_from_long(alma_term *t, long l);
 char* name_with_arity(char *name, int arity);
 

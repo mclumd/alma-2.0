@@ -61,9 +61,9 @@ void kb_init(kb **collection, char **files, int file_count, char *agent, char *t
   tommy_array_init(&collec->pos_lit_reinstates);
   tommy_array_init(&collec->neg_lit_reinstates);
 
-  const alma_proc procs[15] = {{"neg_int", 1}, {"neg_int_spec", 1}, {"neg_int_gen", 1}, {"pos_int", 1}, {"pos_int_spec", 1},
-                   {"pos_int_gen", 1}, {"acquired", 2}, {"ancestor", 3}, {"non_ancestor", 3}, {"parent", 3}, {"parents_defaults", 2},
-                   {"parent_non_default", 2}, {"less_than", 2}, {"quote_cons", 2}, {"not_equal", 2}};
+  const alma_proc procs[17] = {{"neg_int", 1}, {"neg_int_spec", 1}, {"neg_int_gen", 1}, {"pos_int", 1}, {"pos_int_spec", 1},
+                   {"pos_int_gen", 1}, {"acquired", 2}, {"pos_int_past", 3}, {"neg_int_past", 3}, {"ancestor", 3}, {"non_ancestor", 3},
+                   {"parent", 3}, {"parents_defaults", 2}, {"parent_non_default", 2}, {"less_than", 2}, {"quote_cons", 2}, {"not_equal", 2}};
   memcpy(collec->procs, procs, sizeof(procs));
 
   parse_init();

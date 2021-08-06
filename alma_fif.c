@@ -173,6 +173,8 @@ static void fif_task_unify_loop(kb *collection, tommy_list *tasks, tommy_list *s
         task_erased = 1; // Set to not place next_task into stopped
       }
       else {
+        if (collection->verbose)
+          print_bindings(collection, next_task->bindings, 1, 1, buf);
         free_fif_task(next_task);
         task_erased = 1;
       }
@@ -201,6 +203,7 @@ static void fif_task_unify_loop(kb *collection, tommy_list *tasks, tommy_list *s
 
             if (pred_unify(next_func, to_unify, copy, collection->verbose)) {
               if (collection->verbose) {
+                tee_alt("Unification succeeded!\n", collection, buf);
                 print_bindings(collection, copy, 1, 1, buf);
               }
 
@@ -298,6 +301,7 @@ static void process_fif_task_mapping(kb *collection, fif_task_mapping *entry, to
 
               if (pred_unify(fif_access(f->fif, f->premises_done), to_unify_func, f->bindings, collection->verbose)) {
                 if (collection->verbose) {
+                  tee_alt("Unification succeeded!\n", collection, buf);
                   print_bindings(collection, f->bindings, 1, 1, buf);
                 }
 
@@ -334,6 +338,7 @@ static void process_fif_task_mapping(kb *collection, fif_task_mapping *entry, to
               }
               else {
                 if (collection->verbose) {
+                  tee_alt("Unification failed\n", collection, buf);
                   print_bindings(collection, f->bindings, 1, 1, buf);
                 }
 
@@ -375,8 +380,11 @@ static void process_fif_task_mapping(kb *collection, fif_task_mapping *entry, to
             tommy_list_insert_tail(to_progress, &f->node, f);
           }
         }
-        else
+        else {
           cleanup_bindings(copy);
+          if (collection->verbose)
+            print_bindings(collection, f->bindings, 1, 1, buf);
+        }
       }
     }
   }

@@ -580,12 +580,12 @@ int term_unify(alma_term *x, alma_term *y, binding_list *theta) {
 // All bindings must be cleaned up by caller
 int pred_unify(alma_function *x, alma_function *y, binding_list *theta, int verbose) {
   int ret = unify_function(x, y, x, y, 0, theta);
-  if (verbose) {
+  /*if (verbose) {
     if (ret)
       printf("Unification success!\n");
     else
       printf("Unification failure\n");
-  }
+  }*/
   return ret;
 }
 

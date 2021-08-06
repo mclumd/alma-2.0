@@ -5,7 +5,7 @@
 #include "tommy.h"
 #include "alma_fif.h"
 
-typedef enum introspect_kind {POS_INT_SPEC, POS_INT, POS_INT_GEN, NEG_INT_SPEC, NEG_INT, NEG_INT_GEN, ACQUIRED} introspect_kind;
+typedef enum introspect_kind {POS_INT_SPEC, POS_INT, POS_INT_GEN, NEG_INT_SPEC, NEG_INT, NEG_INT_GEN, ACQUIRED, POS_INT_PAST, NEG_INT_PAST} introspect_kind;
 
 // Returns a boolean value for if proc matches a procedure name
 int is_proc(alma_function *proc, kb *alma) {
@@ -143,14 +143,25 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *alma, intr
     return 0;
   }
 
-  // When second acquired arg is a bound variable, it must have a numeric value; obtain long from it
+  // When second acquired/past introspect arg is a bound variable, it must have a numeric value; obtain long from it
   long acquired_time_bound = 0;
   binding *time_binding = NULL;
-  if (kind == ACQUIRED && (time_binding = bindings_contain(bindings, arg->terms[1].variable))) {
+  if ((kind == ACQUIRED || kind == POS_INT_PAST || kind == NEG_INT_PAST) &&
+      (time_binding = bindings_contain(bindings, arg->terms[1].variable))) {
     if (time_binding->term->type != FUNCTION || time_binding->term->function->term_count != 0)
       return 0;
     else
       str_to_long(time_binding->term->function->name, &acquired_time_bound);
+  }
+  // When third arg of past introspect is a bound variable, it must have a numeric value; obtain long from it
+  long end_time_bound = 0;
+  time_binding = NULL;
+  if ((kind == ACQUIRED || kind == POS_INT_PAST || kind == NEG_INT_PAST) &&
+      (time_binding = bindings_contain(bindings, arg->terms[2].variable))) {
+    if (time_binding->term->type != FUNCTION || time_binding->term->function->term_count != 0)
+      return 0;
+    else
+      str_to_long(time_binding->term->function->name, &end_time_bound);
   }
 
   // Create copy and substitute based on bindings available
@@ -173,6 +184,10 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *alma, intr
       tee_alt("Performing neg_int_gen on \"", alma, NULL);
     else if (kind == ACQUIRED)
       tee_alt("Performing acquired on \"", alma, NULL);
+    else if (kind == POS_INT_PAST)
+      tee_alt("Performing pos_int_past on \"", alma, NULL);
+    else if (kind == NEG_INT_PAST)
+      tee_alt("Performing neg_int_past on \"", alma, NULL);
     clause_print(alma, search_term->quote->clause_quote, NULL);
     tee_alt("\"\n", alma, NULL);
   }
@@ -186,87 +201,91 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *alma, intr
     int non_specific = (kind == POS_INT || kind == POS_INT_GEN || kind == NEG_INT || kind == NEG_INT_GEN);
     for (int i = mapping_num_clauses(mapping, search_term->quote->clause_quote->tag)-1; i >= 0; i--) {
       clause *ith = mapping_access(mapping, search_term->quote->clause_quote->tag, i);
-      // Must be a non-flagged result with pos / neg literal count matching query
-      // If doing acquired proc, and the time argument was bound, it must match the clause
-      if (flags_negative(ith) && counts_match(ith, search_term->quote->clause_quote)
-          && (kind != ACQUIRED || !acquired_time_bound || (ith->acquired == acquired_time_bound))) {
-        // Convert clause in question to quotation term
-        if (non_specific) {
-          q->clause_quote = malloc(sizeof(*q->clause_quote));
-          // copy_and_quasiquote_clause may reject copying, for which would free and continue
-          if (!copy_and_quasiquote_clause(ith, q->clause_quote, search_term->quote->clause_quote, kind)) {
-            if (alma->verbose) {
-              tee_alt("Structure failure of \"", alma, NULL);
-              clause_print(alma, ith, NULL);
-              tee_alt("\"\n", alma, NULL);
-            }
 
-            free(q->clause_quote);
-            q->clause_quote = NULL;
-            continue;
-          }
-        }
-        else {
-          q->clause_quote = ith;
-        }
-
-        // Create bindings copy as either empty list or copy of arg
-        binding_list *copy = malloc(sizeof(*copy));
-        copy_bindings(copy, bindings);
-
-        if (alma->verbose) {
-          tee_alt("Attempting to unify with \"", alma, NULL);
-          clause_print(alma, q->clause_quote, NULL);
-          tee_alt("\"\n", alma, NULL);
-        }
-
-        // Returning first match based at the moment
-        if (quote_term_unify(search_term->quote, q, copy)) {
-          if (alma->verbose)
-            tee_alt("Unification succeeded\n", alma, NULL);
-
-          // If an introspect call which passes in task info, add unified clause to the task
-          if (task != NULL) {
-            task->num_unified++;
-            task->unified_clauses = realloc(task->unified_clauses, sizeof(*task->unified_clauses)*task->num_unified);
-            task->unified_clauses[task->num_unified-1] = ith;
-          }
-
-          if (kind != NEG_INT_SPEC && kind != NEG_INT && kind != NEG_INT_GEN)
-            swap_bindings(bindings, copy);
-          cleanup_bindings(copy);
-
-          if (kind == ACQUIRED) {
-            // If they unify, create term out of acquired answer
-            alma_term *time_term = malloc(sizeof(*time_term));
-            func_from_long(time_term, ith->acquired);
-            add_binding(bindings, arg->terms[1].variable, time_term, arg, 0);
-          }
-
-          // Don't free clause unless gen case
-          if (!non_specific)
-            q->clause_quote = NULL;
-          free_quote(q);
-
-          if (alma->verbose)
-            tee_alt("\n", alma, NULL);
-
-          free_term(search_term);
-          free(search_term);
-          return kind != NEG_INT_SPEC && kind != NEG_INT && kind != NEG_INT_GEN;
-        }
-
-        if (non_specific)
-          free_clause(q->clause_quote);
-        q->clause_quote = NULL;
-        cleanup_bindings(copy);
+      // Must be a result with pos / neg literal count matching query -- else fail
+      if (!counts_match(ith, search_term->quote->clause_quote))
+        continue;
+      // Must be either non-past introspect and a non-flagged formula, or past introspect with a flagged formula -- else fail
+      if (!((flags_negative(ith) && kind != POS_INT_PAST && kind != NEG_INT_PAST)
+          || (!flags_negative(ith) && (kind == POS_INT_PAST || kind == NEG_INT_PAST))))
+        continue;
+      // If doing acquired/past introspect procs, and the time argument(s) are bound, they must match the clause metadata -- else fail
+      if (kind == ACQUIRED || kind == POS_INT_PAST || kind == NEG_INT_PAST) {
+        if ((acquired_time_bound && ith->acquired != acquired_time_bound)
+            || (kind != ACQUIRED && end_time_bound && flag_min(ith) != end_time_bound))
+          continue;
       }
+
+      // Convert clause in question to quotation term
+      if (non_specific) {
+        q->clause_quote = malloc(sizeof(*q->clause_quote));
+        // copy_and_quasiquote_clause may reject copying, for which would free and continue
+        if (!copy_and_quasiquote_clause(ith, q->clause_quote, search_term->quote->clause_quote, kind)) {
+          if (alma->verbose) {
+            tee_alt("Structure failure of \"", alma, NULL);
+            clause_print(alma, ith, NULL);
+            tee_alt("\"\n", alma, NULL);
+          }
+
+          free(q->clause_quote);
+          q->clause_quote = NULL;
+          continue;
+        }
+      }
+      else {
+        q->clause_quote = ith;
+      }
+
+      // Create bindings copy as either empty list or copy of arg
+      binding_list *copy = malloc(sizeof(*copy));
+      copy_bindings(copy, bindings);
+
+      if (alma->verbose) {
+        tee_alt("Attempting to unify with \"", alma, NULL);
+        clause_print(alma, q->clause_quote, NULL);
+        tee_alt("\"\n", alma, NULL);
+      }
+
+      // Returning first match based at the moment
+      if (quote_term_unify(search_term->quote, q, copy)) {
+        if (alma->verbose)
+          tee_alt("Unification succeeded\n", alma, NULL);
+
+        // If an introspect call which passes in task info, add unified clause to the task
+        if (task != NULL) {
+          task->num_unified++;
+          task->unified_clauses = realloc(task->unified_clauses, sizeof(*task->unified_clauses)*task->num_unified);
+          task->unified_clauses[task->num_unified-1] = ith;
+        }
+
+        if (kind != NEG_INT_SPEC && kind != NEG_INT && kind != NEG_INT_GEN)
+          swap_bindings(bindings, copy);
+        cleanup_bindings(copy);
+
+        if (kind == ACQUIRED && !acquired_time_bound) {
+          // If they unify, create term out of acquired answer
+          alma_term *time_term = malloc(sizeof(*time_term));
+          func_from_long(time_term, ith->acquired);
+          add_binding(bindings, arg->terms[1].variable, time_term, arg, 0);
+        }
+
+        // Don't free clause unless gen case
+        if (!non_specific)
+          q->clause_quote = NULL;
+        free_quote(q);
+
+        free_term(search_term);
+        free(search_term);
+        return kind != NEG_INT_SPEC && kind != NEG_INT && kind != NEG_INT_GEN;
+      }
+
+      if (non_specific)
+        free_clause(q->clause_quote);
+      q->clause_quote = NULL;
+      cleanup_bindings(copy);
     }
     free_quote(q);
   }
-
-  if (alma->verbose)
-    tee_alt("\n", alma, NULL);
 
   free_term(search_term);
   free(search_term);
@@ -322,8 +341,9 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time,
           tee_alt("\"\n", alma, NULL);
         }
 
+        // Literal counts must match, and ancestor must be trusted or flagged for a time at or after query_time
         if (counts_match(ith, descendant_copy->quote->clause_quote) && ith->acquired <= query_time
-            && (flags_negative(ith) || flag_active_at_least(ith, query_time))) {
+            && (flags_negative(ith) || flag_min(ith) == query_time)) {
           // Create copy as either empty list or copy of arg
           binding_list *desc_bindings = malloc(sizeof(*desc_bindings));
           copy_bindings(desc_bindings, bindings);
@@ -365,7 +385,7 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time,
                 copy_bindings(anc_bindings, desc_bindings);
 
                 if (counts_match(c, ancestor_copy->quote->clause_quote)
-                    && (flags_negative(c) || flag_active_at_least(c, query_time))) {
+                    && (flags_negative(c) || flag_min(c) == query_time)) {
                   if (alma->verbose) {
                     tee_alt("Attempting to unify with \"", alma, NULL);
                     clause_print(alma, c, NULL);
@@ -521,7 +541,8 @@ static int parents_defaults(alma_term *arg, alma_term *time, binding_list *bindi
       for (int i = mapping_num_clauses(mapping, arg_copy->quote->clause_quote->tag)-1; i >= 0; i--) {
         clause *ith = mapping_access(mapping, arg_copy->quote->clause_quote->tag, i);
         if (counts_match(ith, arg_copy->quote->clause_quote) && ith->acquired <= query_time
-            && (flags_negative(ith) || flag_active_at_least(ith, query_time))) {
+            && (flags_negative(ith) || flag_min(ith) == query_time)) {
+
           // Create copy as either empty list or copy of arg
           binding_list *arg_bindings = malloc(sizeof(*arg_bindings));
           copy_bindings(arg_bindings, bindings);
@@ -729,6 +750,16 @@ int proc_run(alma_function *proc, binding_list *bindings, fif_task *task, kb *al
     // Must match (given bindings) the schema acquired("...", Var)
     if ((proc->term_count == 2 || proc->term_count == 3) && proc->terms[1].type == VARIABLE)
       return introspect(proc, bindings, alma, ACQUIRED, NULL);
+  }
+  else if (strcmp(proc->name, "pos_int_past") == 0) {
+    // Must match (given bindings) the schema pos_int_past("...", Start, End)
+    if ((proc->term_count == 3 || proc->term_count == 4) && proc->terms[1].type == VARIABLE && proc->terms[2].type == VARIABLE)
+      return introspect(proc, bindings, alma, POS_INT_PAST, NULL);
+  }
+  else if (strcmp(proc->name, "neg_int_past") == 0) {
+    // Must match (given bindings) the schema neg_int_past("...", Start, End)
+    if ((proc->term_count == 3 || proc->term_count == 4) && proc->terms[1].type == VARIABLE && proc->terms[2].type == VARIABLE)
+      return introspect(proc, bindings, alma, NEG_INT_PAST, NULL);
   }
   else if (strcmp(proc->name, "ancestor") == 0) {
     // Must match (given bindings) the schema ancestor("...", "...", Time)
