@@ -168,7 +168,7 @@ def train_loop(network, num_steps, explosion_steps, kb, train_interval, dgl_data
 def train_offline(datafilename, kb,  gnn_nodes, model_name="offline"):
     network = None
 
-    for i in range(20):
+    for i in range(100):
         print("Training round", i)
         with open(datafilename, "rb") as datafile:
             data = pickle.load(datafile)
@@ -367,7 +367,7 @@ def test(network, network_priors, exp_size=10, num_steps=500, alma_heap_print_si
         
     res_task_input = [ x[:2] for x in res_tasks]
     if network_priors and network.dgl_gnn:
-        priorities = (1 - network.get_priorities(res_task_input)) + 0.1
+        priorities = (network.get_priorities(res_task_input)) + 0.1
     elif network_priors:
         priorities = 1 - network.get_priorities(res_task_input)
     else:
@@ -457,7 +457,7 @@ def main():
 
     if args.offline_train != "NONE":
         network = train_offline(args.offline_train, args.kb,  args.gnn_nodes)
-        test(network ,True, 100, heap_print_freq=1, alma_heap_print_size=100, use_gnn=True, kb=args.kb, gnn_nodes=args.gnn_nodes)
+        test(network ,True, args.explosion_steps, args.testing_reasoning_steps, heap_print_freq=1, alma_heap_print_size=100, use_gnn=True, kb=args.kb, gnn_nodes=args.gnn_nodes)
 
     if args.cpu_only:
         # TODO:  This may need to be done before any tensorflow imports

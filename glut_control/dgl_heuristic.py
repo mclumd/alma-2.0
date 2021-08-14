@@ -11,7 +11,7 @@ from dgl.dataloading import GraphDataLoader
 class dgl_heuristic(res_prebuffer):
     def __init__(self, input_size, pi_dataset=False, gat_network=False, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.model = dgl_network.simpleGAT(input_size, 512, 2, 16, 1) if gat_network else dgl_network.GCN(input_size, 512, 2)
+        self.model = dgl_network.simpleGAT(input_size, 512, 2, 16, 1) if gat_network else dgl_network.GCN(input_size, 64, 2)
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.01)
         self.dgl_gnn = True
         self.pi_dataset = pi_dataset
@@ -80,7 +80,7 @@ class dgl_heuristic(res_prebuffer):
         i=0
         #self.model.eval()
         for batched_graph, labels in test_dataloader:
-            print(i, '/', len(X))
+            #print(i, '/', len(X))
             i+=1
             pred = torch.softmax(self.model(batched_graph, batched_graph.ndata['feat'].float()),1).detach().cpu().numpy()
             preds.append(pred)
