@@ -48,7 +48,9 @@ class GCN(nn.Module):
         self.conv1 = GraphConv(in_feats, h_feats)
         self.conv2 = GraphConv(h_feats, h_feats)
         self.conv3 = GraphConv(h_feats, h_feats)
-        self.conv4 = GraphConv(h_feats, num_classes)
+        self.conv4 = GraphConv(h_feats, h_feats)
+        self.conv5 = GraphConv(h_feats, num_classes)
+        self.decision_layer = nn.Linear(h_feats, num_classes)
 
     def forward(self, g, in_feat):
         h = self.conv1(g, in_feat)
@@ -58,8 +60,10 @@ class GCN(nn.Module):
         h = self.conv3(g, h)
         h = F.relu(h)
         h = self.conv4(g, h)
+        h = F.relu(h)
         g.ndata['h'] = h
-        return dgl.mean_nodes(g, 'h')
+        return self.decision_layer(dgl.mean_nodes(g, 'h'))
+        #return h   # Return the readout rather than the mean; this only makes sense with the new dataset model
 
     def readout(self, g, in_feat):
         h = self.conv1(g, in_feat)
@@ -72,8 +76,39 @@ class GCN(nn.Module):
         
 
     def save(filename):
-        torch.save(self, "gcndir/" + filename + ".pt")        
+        torch.save(self, "gcndir/" + filename + ".pt")
 
+class GAPGCN(nn.Module):
+    def __init__(self, in_feats, h_feats, num_classes):
+        # self.allow_zero_in_degree = True      # does not work as intended??? solved issue with dgl.add_self_loop(g) in dataset process
+        super(GAPGCN, self).__init__()
+        self.conv1 = GraphConv(in_feats, h_feats)
+        self.conv2 = GraphConv(h_feats, h_feats)
+        self.conv3 = GraphConv(h_feats, h_feats)
+        self.conv4 = GraphConv(h_feats, h_feats)
+        self.gate_nn = nn.Linear(h_feats, 1)
+        self.gap = dgl.nn.GlobalAttentionPooling(self.gate_nn)
+        self.decision_layer = nn.Linear(h_feats, num_classes)
+
+    def forward(self, g, in_feat):
+        h = self.conv1(g, in_feat)
+        h = F.relu(h)
+        h = self.conv2(g, h)
+        h = F.relu(h)
+        h = self.conv3(g, h)
+        h = F.relu(h)
+        h = self.conv4(g, h)
+        h = F.relu(h)
+        h = self.gap(g, h)
+        #g.ndata['h'] = h
+        return self.decision_layer(h)
+        #return h   # Return the readout rather than the mean; this only makes sense with the new dataset model
+
+
+    def save(filename):
+        torch.save(self, "gcndir/" + filename + ".pt")
+
+    
 class GatedGCN(nn.Module):
     def __init__(self, in_feats, h_feats, num_classes):
         super(GatedGCN, self).__init__()

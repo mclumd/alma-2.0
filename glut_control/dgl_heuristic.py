@@ -49,7 +49,7 @@ class dgl_heuristic(res_prebuffer):
             # if i > 250:
             #     break
             pred = self.model(batched_graph, batched_graph.ndata['feat'].float() ) if self.gat_network else self.model(batched_graph, batched_graph.ndata['feat'].float())
-            pred = torch.softmax(pred,1)
+            #pred = torch.softmax(pred,1)
             tensor = torch.tensor((), dtype=torch.float32)
             mse_labels = tensor.new_zeros((len(labels), 2))
             for j in range(batched_graph.batch_size):
@@ -69,7 +69,7 @@ class dgl_heuristic(res_prebuffer):
 
     def get_priorities(self, inputs, already_vectorized=False):
         X = inputs if already_vectorized else self.vectorize(inputs)
-        Y = np.zeros(len(X)) # filler data, labels don't matter
+        y = np.zeros(len(X)) # filler data, labels don't matter
         dataset = dgl_dataset.PotentialInferenceDataSet(X, y)  if self.pi_dataset else dgl_dataset.AlmaDataset(X, y)
         sampler = SequentialSampler(torch.arange(len(X)))
         #sampler = SequentialSampler(torch.arange(1))
@@ -78,11 +78,12 @@ class dgl_heuristic(res_prebuffer):
 #            dataset, sampler=sampler, batch_size=len(X), drop_last=False)
         preds = []
         i=0
-        self.model.eval()
+        #self.model.eval()
         for batched_graph, labels in test_dataloader:
             print(i, '/', len(X))
             i+=1
-            preds.append(torch.softmax(self.model(batched_graph, batched_graph.ndata['feat'].float()),1).detach().cpu().numpy())
+            pred = torch.softmax(self.model(batched_graph, batched_graph.ndata['feat'].float()),1).detach().cpu().numpy()
+            preds.append(pred)
         print('done')
         self.model.train()
         return np.array(preds).reshape(-1,2)[:,1]

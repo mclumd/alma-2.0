@@ -166,54 +166,59 @@ def train_loop(network, num_steps, explosion_steps, kb, train_interval, dgl_data
     K.clear_session()
 
 def train_offline(datafilename, kb,  gnn_nodes, model_name="offline"):
-    with open(datafilename, "rb") as datafile:
-        data = pickle.load(datafile)
+    network = None
 
-    training_set_incidence_graph = data['training_set_ig']
-    training_set_y = data['training_set_y']
-    training_set_str = data['training_set_str']
-    training_set_tree = data['training_set_tree']
+    for i in range(20):
+        print("Training round", i)
+        with open(datafilename, "rb") as datafile:
+            data = pickle.load(datafile)
 
-    # Split the data into positive and negative sets
-    pos_igs, neg_igs = [], []
-    pos_str, neg_str = [], []
-    pos_tree, neg_tree = [], []
-    for i in range(len(training_set_y)):
-        ig, y, string, tree = training_set_incidence_graph.pop(), training_set_y.pop(), training_set_str.pop(), training_set_tree.pop()
-        if y == 0:
-            neg_igs.append(ig); neg_str.append(string); neg_tree.append(tree)
-        else:
-            pos_igs.append(ig); pos_str.append(string); pos_tree.append(tree)
+        training_set_incidence_graph = data['training_set_ig']
+        training_set_y = data['training_set_y']
+        training_set_str = data['training_set_str']
+        training_set_tree = data['training_set_tree']
 
-    neg_igs, neg_str, neg_tree = shuffle(neg_igs, neg_str, neg_tree)
-    pos_igs, pos_str, pos_tree = shuffle(pos_igs, pos_str, pos_tree)
+        # Split the data into positive and negative sets
+        pos_igs, neg_igs = [], []
+        pos_str, neg_str = [], []
+        pos_tree, neg_tree = [], []
+        for i in range(len(training_set_y)):
+            ig, y, string, tree = training_set_incidence_graph.pop(), training_set_y.pop(), training_set_str.pop(), training_set_tree.pop()
+            if y == 0:
+                neg_igs.append(ig); neg_str.append(string); neg_tree.append(tree)
+            else:
+                pos_igs.append(ig); pos_str.append(string); pos_tree.append(tree)
 
-    # Initialize the network
-    if "test1_kb.pl" in kb:
-        subjects = ['a', 'b', 'distanceAt', 'distanceBetweenBoundedBy']
+        neg_igs, neg_str, neg_tree = shuffle(neg_igs, neg_str, neg_tree)
+        pos_igs, pos_str, pos_tree = shuffle(pos_igs, pos_str, pos_tree)
 
-    num_features = pos_igs[0][1].shape[1]   # Length of a single feature vector
-    network = dgl_heuristic(num_features, True, True, subjects, [], use_gnn=True, gnn_nodes = gnn_nodes)
-    # Train
-    batch_size = 16
-    while len(pos_igs) >= batch_size:
-        pos_batch, neg_batch = pos_igs[:batch_size], neg_igs[:batch_size]
-        pos_str, neg_str = pos_str[:batch_size], neg_str[:batch_size]
-        pos_tree, neg_tree = pos_tree[:batch_size], neg_tree[:batch_size]
-        
-        pos_igs, neg_igs = pos_igs[batch_size:], neg_igs[batch_size:]
-        pos_str, neg_str = pos_str[batch_size:], neg_str[batch_size:]
-        pos_tree, neg_tree = pos_tree[batch_size:], neg_tree[batch_size:]
-        
-        given_batch = {'posig': pos_batch, 'negig': neg_batch,
-                       'pos_str': pos_str, 'neg_str': neg_str}
-        H = network.train_buffered_batch(given_batch=given_batch)
-        if H is not None:
-            acc, loss = H.history['accuracy'][0], H.history['loss'][0]
-            print("accuracy: {} \t loss: {}".format(acc, loss))
+        if network is None:
+            # Initialize the network
+            if "test1_kb.pl" in kb:
+                subjects = ['a', 'b', 'distanceAt', 'distanceBetweenBoundedBy']
+            num_features = pos_igs[0][1].shape[1]   # Length of a single feature vector
+            network = dgl_heuristic(num_features, False, False, subjects, [], use_gnn=True, gnn_nodes = gnn_nodes)
+
+        # Train
+        batch_size = 16
+        while len(pos_igs) >= batch_size:
+            pos_batch, neg_batch = pos_igs[:batch_size], neg_igs[:batch_size]
+            pos_str, neg_str = pos_str[:batch_size], neg_str[:batch_size]
+            pos_tree, neg_tree = pos_tree[:batch_size], neg_tree[:batch_size]
+
+            pos_igs, neg_igs = pos_igs[batch_size:], neg_igs[batch_size:]
+            pos_str, neg_str = pos_str[batch_size:], neg_str[batch_size:]
+            pos_tree, neg_tree = pos_tree[batch_size:], neg_tree[batch_size:]
+
+            given_batch = {'posig': pos_batch, 'negig': neg_batch,
+                           'pos_str': pos_str, 'neg_str': neg_str}
+            H = network.train_buffered_batch(given_batch=given_batch)
+            if H is not None:
+                acc, loss = H.history['accuracy'][0], H.history['loss'][0]
+                print("accuracy: {} \t loss: {}".format(acc, loss))
 
     # Cleanup and return
-    network.model_save(model_name, numeric_bits)
+    network.model_save(model_name, 10)
     return network
 
 #@profile
@@ -325,7 +330,7 @@ def test_network(network, num_steps, kb):
     print("Testing:  accuracy: {} \t loss: {} \t tacc {}".format(acc, loss, H.history['tacc'][0]))
 
 
-def test(network, network_priors, exp_size=10, num_steps=500, alma_heap_print_size=100, prb_print_size=30, numeric_bits=10, heap_print_freq=10, prb_threshold=-1, use_gnn = False, kb='/home/justin/alma-2.0/glut_control/test1_kb.pl', gnn_nodes=2000, initial_test=False):
+def test(network, network_priors, exp_size=10, num_steps=500, alma_heap_print_size=100, prb_print_size=30, numeric_bits=10, heap_print_freq=10, prb_threshold=1.0, use_gnn = False, kb='/home/justin/alma-2.0/glut_control/test1_kb.pl', gnn_nodes=2000, initial_test=False):
     alma_inst,res = alma.init(1,kb, '0', 1, 1000, [], [])
     dbb_instances = []
     exp = explosion(exp_size, kb, alma_inst)
@@ -361,7 +366,9 @@ def test(network, network_priors, exp_size=10, num_steps=500, alma_heap_print_si
             test_network(network, num_steps, kb)
         
     res_task_input = [ x[:2] for x in res_tasks]
-    if network_priors:
+    if network_priors and network.dgl_gnn:
+        priorities = (1 - network.get_priorities(res_task_input)) + 0.1
+    elif network_priors:
         priorities = 1 - network.get_priorities(res_task_input)
     else:
         priorities = np.random.uniform(size=len(res_task_input))
@@ -369,12 +376,19 @@ def test(network, network_priors, exp_size=10, num_steps=500, alma_heap_print_si
     alma.set_priors_prb(alma_inst, priorities.flatten().tolist())
     alma.prb_to_res_task(alma_inst, prb_threshold)
 
+
     #print("prb: ", alma.prebuf(alma_inst))
     kb = alma.kbprint(alma_inst)[0]
     print("kb: ")
     for s in kb.split('\n'):
         print(s)
+
+    import alma_utils
+    alma_utils.pr_heap_print(alma_inst)
+
+    alma.astep(alma_inst)
     for idx in range(num_steps):
+        print("idx=", idx)
         prb = alma.prebuf(alma_inst)[0]
         if (idx % heap_print_freq == 0):
             print("Step: ", idx)
@@ -443,6 +457,7 @@ def main():
 
     if args.offline_train != "NONE":
         network = train_offline(args.offline_train, args.kb,  args.gnn_nodes)
+        test(network ,True, 100, heap_print_freq=1, alma_heap_print_size=100, use_gnn=True, kb=args.kb, gnn_nodes=args.gnn_nodes)
 
     if args.cpu_only:
         # TODO:  This may need to be done before any tensorflow imports
