@@ -6,7 +6,6 @@ import unif.unifier as un
 import re
 
 
-
 class node_representation:
     def __init__(self, subjects):
         if type(subjects) == type({}):
@@ -256,4 +255,4 @@ def graph_rep_test():
     gr = graph_representation(dict([(x, i+1) for i, x in enumerate(['a', 'b', 'distanceAt', 'distanceBetweenBoundedBy'])]), 30)
     gr.inputs_to_graphs(test_input0, test_input1)
 
-#graph_rep_test()
+graph_rep_test()

@@ -8,31 +8,41 @@ Currently, the following are planned:
 """
 
 import tensorflow as tf
+
+#tf.config.gpu.set_per_process_memory_fraction(0.25)
+#tf.config.gpu.set_per_process_memory_growth(True)
+
 from tensorflow import keras
 from tensorflow.keras.models import Model
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.losses import BinaryCrossentropy
 from tensorflow.keras.metrics import BinaryAccuracy
 from tensorflow.keras.layers import Dense, Dropout
-from spektral.layers import GCNConv, GlobalSumPool
-from spektral.data.graph import Graph
-from spektral.data import DisjointLoader
 
-import spektral
-import spektral.models
+#from spektral.layers import GCNConv, GlobalSumPool
+#from spektral.data.graph import Graph
+#from spektral.data import DisjointLoader
+
+#import spektral
+#import spektral.models
 
 import numpy as np
-from rl_dataset import potential_inference_data, simple_graph_dataset
+#from rl_dataset import potential_inference_data, simple_graph_dataset
 import sys
 import pickle
 import alma_functions as aw
 from sklearn.utils import shuffle
 from vectorization import graph_representation, unifies, vectorize_bow1, vectorize_bow2
+#from memory_profiler import profile
+import dgl_network
 
+import ctypes 
+class PyObject(ctypes.Structure):
+    _fields_ = [("refcnt", ctypes.c_long)]
+    
 def forward_model(use_tf = False, num_subjects=0):
     # TODO:  fix use_tf code to return everything if this ever gets used.
     if use_tf:
-        import tensorflow as tf
         model  = tf.keras.models.Sequential([
             tf.keras.Input(shape=( (  2*num_subjects,)) ),    # One input for each term
             tf.keras.layers.Dense(32, activation='relu'),
@@ -60,63 +70,63 @@ class history_struct:
     def __init__(self, d):
         self.history = d
         
-class gnn_model(Model):
-    def __init__(self, max_nodes=20):
-        super().__init__()
-        # TODO:  See if tanh works better as a hidden activation function
-        self.graph_net = spektral.models.general_gnn.GeneralGNN(1, activation='sigmoid', hidden=16, message_passing=4,
-                                                                 pre_process=2, post_process=2, connectivity='cat', batch_norm=True,
-                                                                 dropout=0.2, aggregate='sum', pool='sum', hidden_activation='sigmoid')
-        #self.graph_net = spektral.models.gcn.GCN(1)
-        self.graph_net.compile('adam', 'binary_crossentropy')
-        self.optimizer = Adam(learning_rate=0.00025, clipnorm=1.0)
-        #self.loss_fn = BinaryCrossentropy()
-        self.loss_fn = keras.losses.Huber()
-        self.acc_fn = BinaryAccuracy()
+# class gnn_model(Model):
+#     def __init__(self, max_nodes=20):
+#         super().__init__()
+#         # TODO:  See if tanh works better as a hidden activation function
+#         self.graph_net = spektral.models.general_gnn.GeneralGNN(1, activation='sigmoid', hidden=16, message_passing=4,
+#                                                                  pre_process=2, post_process=2, connectivity='cat', batch_norm=True,
+#                                                                  dropout=0.2, aggregate='sum', pool='sum', hidden_activation='sigmoid')
+#         #self.graph_net = spektral.models.gcn.GCN(1)
+#         self.graph_net.compile('adam', 'binary_crossentropy')
+#         self.optimizer = Adam(learning_rate=0.00025, clipnorm=1.0)
+#         #self.loss_fn = BinaryCrossentropy()
+#         self.loss_fn = keras.losses.Huber()
+#         self.acc_fn = BinaryAccuracy()
 
-    def call(self, inputs):
-        return self.graph_net(inputs)
+#     def call(self, inputs):
+#         return self.graph_net(inputs)
 
-    # Training function
-    #@tf.function(input_signature=loader_tr.tf_signature(), experimental_relax_shapes=True)
-    def train_on_batch(self, inputs, target):
-        with tf.GradientTape() as tape:
-            predictions = self.graph_net(inputs, training=True)
-            loss = self.loss_fn(target, predictions) + sum(self.graph_net.losses)
-            acc = self.acc_fn(target, predictions)
-            preds_01 = np.array([ 0.0 if p <= 0.5 else 1 for p in predictions])
-            #tacc = np.square(preds_01 - target.T).mean()
-            tacc = (1 - abs(preds_01 - target.T)).mean()
-            gradients = tape.gradient(loss, self.graph_net.trainable_variables)
-            self.optimizer.apply_gradients(zip(gradients, self.graph_net.trainable_variables))
-        return loss, acc, tacc
+#     # Training function
+#     #@tf.function(input_signature=loader_tr.tf_signature(), experimental_relax_shapes=True)
+#     def train_on_batch(self, inputs, target):
+#         with tf.GradientTape() as tape:
+#             predictions = self.graph_net(inputs, training=True)
+#             loss = self.loss_fn(target, predictions) + sum(self.graph_net.losses)
+#             acc = self.acc_fn(target, predictions)
+#             preds_01 = np.array([ 0.0 if p <= 0.5 else 1 for p in predictions])
+#             #tacc = np.square(preds_01 - target.T).mean()
+#             tacc = (1 - abs(preds_01 - target.T)).mean()
+#             gradients = tape.gradient(loss, self.graph_net.trainable_variables)
+#             self.optimizer.apply_gradients(zip(gradients, self.graph_net.trainable_variables))
+#         return loss, acc, tacc
 
-    def fit(self, X, y, batch_size=16, verbose=True):
-        dataset = simple_graph_dataset(X,y)
-        loader = DisjointLoader(dataset, batch_size = batch_size)
-        preds = []
-        #results = []
-        total_loss = 0
-        total_acc = 0
-        total_tacc = 0
-        num_epochs = len(X) // batch_size
-        if len(X) % batch_size != 0:
-            num_epochs += 1    # Extra batch for remainder
-        for i in range(num_epochs):
-            b = loader.__next__()
-            #b[0] looks like features, b[1] looks like graph, b[2] is targets, b[3] is some kind of large index array
-            inputs = (b[0], b[1], b[3])
-            target = b[2]
-            loss, acc, tacc = self.train_on_batch(inputs, target )
-            total_loss += loss
-            total_acc += acc
-            total_tacc += tacc
-            #results.append((loss, acc))
-            #preds.append(batch_preds.numpy())
-        return history_struct({'accuracy': [(total_acc / num_epochs)],
-                               'loss': [(total_loss / num_epochs)],
-                               'tacc': [(total_tacc / num_epochs)]
-                               })
+#     def fit(self, X, y, batch_size=16, verbose=True):
+#         dataset = simple_graph_dataset(X,y)
+#         loader = DisjointLoader(dataset, batch_size = batch_size)
+#         preds = []
+#         #results = []
+#         total_loss = 0
+#         total_acc = 0
+#         total_tacc = 0
+#         num_epochs = len(X) // batch_size
+#         if len(X) % batch_size != 0:
+#             num_epochs += 1    # Extra batch for remainder
+#         for i in range(num_epochs):
+#             b = loader.__next__()
+#             #b[0] looks like features, b[1] looks like graph, b[2] is targets, b[3] is some kind of large index array
+#             inputs = (b[0], b[1], b[3])
+#             target = b[2]
+#             loss, acc, tacc = self.train_on_batch(inputs, target )
+#             total_loss += loss
+#             total_acc += acc
+#             total_tacc += tacc
+#             #results.append((loss, acc))
+#             #preds.append(batch_preds.numpy())
+#         return history_struct({'accuracy': [(total_acc / num_epochs)],
+#                                'loss': [(total_loss / num_epochs)],
+#                                'tacc': [(total_tacc / num_epochs)]
+#                                })
 
 
 class gnn_model_zero():
@@ -153,7 +163,8 @@ class gnn_model_zero():
 
         """
         return np.hstack([X[0], X[1]]).flatten()
-    
+
+    #@profile
     def fit(self, X, y, batch_size, verbose=True, callbacks=[]):
         X = np.array([self.flatten_input(Xi) for Xi in X])   # TODO:  Make this more efficient
         y = np.array(y)
@@ -180,7 +191,7 @@ class gnn_model_zero():
 
 
 class res_prebuffer:
-    def __init__(self, subjects, words, use_tf=False, debug=True, use_gnn=False, gnn_nodes = 2000, bow_algorithm='bow1'):
+    def __init__(self, subjects, words, use_tf=False, debug=True, use_gnn=False, gnn_nodes = 2000, bow_algorithm='bow1', use_gpu = False):
         self.use_tf = use_tf
 
         self.subjects = subjects
@@ -220,6 +231,8 @@ class res_prebuffer:
             self.graph_rep = graph_representation(self.subjects_dict, self.max_gnn_nodes)
 
         self.model = forward_model(use_tf, len(self.subjects_dict)+1) if not use_gnn else gnn_model_zero(self.max_gnn_nodes,self.graph_rep.feature_len)
+        self.dgl_gnn = False # Overridden in dgl_heuristic
+        self.use_gpu = use_gpu
     
 
 
@@ -297,23 +310,52 @@ class res_prebuffer:
         self.ypos_count += ypos
 
     """  Get rid of excess samples; this should help prevent memory leaks. """
-    def clean(self):
+    def clean(self, deep = False):
         if self.debug:
             self.Xbuffer, self.ybuffer, self.saved_prbs, self.saved_inputs = shuffle(self.Xbuffer, self.ybuffer, self.saved_prbs, self.saved_inputs)
+            xaddr = id(self.Xbuffer)
+            yaddr = id(self.ybuffer)
+            prbaddr = id(self.saved_prbs)
+            inpaddr = id(self.saved_inputs)            
+            print("Clearning references (xbuffer, ybuffer, saved_prbs, saved_inputs):  ",
+                  PyObject.from_address(xaddr).refcnt,
+                  PyObject.from_address(yaddr).refcnt,
+                  PyObject.from_address(prbaddr).refcnt,
+                  PyObject.from_address(inpaddr).refcnt)
         else:
             self.Xbuffer, self.ybuffer = shuffle(self.Xbuffer, self.ybuffer)
 
         pos_floor  = self.batch_size
         neg_floor = self.batch_size
-        while (self.ypos_count > pos_floor) and (self.yneg_count > neg_floor):
-            x, y = self.Xbuffer.pop(), self.ybuffer.pop()
+        if deep:
             if self.debug:
-               self.saved_prbs.pop(), self.saved_inputs.pop()
-            if y == 0:
-                self.yneg_count -= 1
-            else:
-                self.ypos_count -= 1
-            
+                self.saved_prbs = []
+                self.saved_inputs = []
+
+            self.Xbuffer = []
+            self.ybuffer = []
+            self.yneg_count = 0
+            self.ypos_count = 0 
+        else:
+            while (self.ypos_count > pos_floor) and (self.yneg_count > neg_floor):
+                x, y = self.Xbuffer.pop(), self.ybuffer.pop()
+                if self.debug:
+                    self.saved_prbs.pop(), self.saved_inputs.pop()
+                if y == 0:
+                    self.yneg_count -= 1
+                else:
+                    self.ypos_count -= 1
+
+        if self.debug:
+            xaddr = id(self.Xbuffer)
+            yaddr = id(self.ybuffer)
+            prbaddr = id(self.saved_prbs)
+            inpaddr = id(self.saved_inputs)            
+            print("After cleaning references (xbuffer, ybuffer, saved_prbs, saved_inputs):  ",
+                  PyObject.from_address(xaddr).refcnt,
+                  PyObject.from_address(yaddr).refcnt,
+                  PyObject.from_address(prbaddr).refcnt,
+                  PyObject.from_address(inpaddr).refcnt)
 
     # Get a batch (X,y) of num_samples training pairs, 
     # Here X will be a (num_samples, input_size) input array
@@ -327,12 +369,14 @@ class res_prebuffer:
         total_samples = 0
         total_pos = 0
         Xres, yres = [], []
+        dbg = []
         num_neg = num_samples - num_pos
         while (total_samples < num_samples):
             #print("Total samples: {} \t Xbuf_len: {}  \t ybuf_len: {}\t\t\t pos: {} \t neg: {}\n".format(total_samples, len(self.Xbuffer), len(self.ybuffer), total_pos, total_samples - total_pos))
             x, y = self.Xbuffer.pop(), self.ybuffer.pop()
             if self.debug:
                 dbg_prb, dbg_input = self.saved_prbs.pop(), self.saved_inputs.pop()
+                dbg.append(dbg_prb)
             total_neg = total_samples - total_pos
             needed_pos = num_pos - total_pos
             needed_neg  = num_neg - total_neg
@@ -360,12 +404,15 @@ class res_prebuffer:
         if self.debug:
             print("-"*80)
         if self.use_gnn:
-            return Xres, yres
+            return Xres, yres, dbg
         else:
-            return np.array(Xres), np.array(yres)
+            return np.array(Xres), np.array(yres), dbg
 
+    #@profile
     def train_buffered_batch(self, sample_ratio=0.5):
-        X, y0 = self.get_training_batch(self.batch_size, int(self.batch_size*sample_ratio))
+        X, y0, dbg = self.get_training_batch(self.batch_size, int(self.batch_size*sample_ratio))
+        XG = X
+        YG = y0
         if self.use_tf:
             y = tf.reshape(y0, (-1, 1))
         else:
@@ -379,10 +426,10 @@ class res_prebuffer:
             self.optimizer.apply_gradients(zip(gradients, self.model.trainable_variables))
             print("y, pred:", y.numpy().T, pred.numpy().T)
             print("loss: {} \t acc: {}\n".format(self.train_loss(loss), self.train_accuracy(y, pred), end='\r'))
-            return pred
+            return pred, XG, YG     #pass out x + y to dgl net
         else:
             # TODO:  make sure this continues training rather than reinitializing
-            return self.model.fit(X, y, batch_size=self.batch_size, verbose=True)
+            return self.model.fit(X, y, batch_size=self.batch_size, verbose=True), XG, YG, dbg       #pass out x + y to dgl net
 
     def test_buffered_batch(self, sample_ratio=0.5):
         X, y0 = self.get_training_batch(self.batch_size, int(self.batch_size*sample_ratio))
@@ -439,6 +486,8 @@ class res_prebuffer:
             else:
                 self.model.fit(X, y, batch_size=self.batch_size)
 
+#    from memory_profiler import profile
+    #@profile
     def get_priorities(self, inputs, already_vectorized=False):
         X = inputs if already_vectorized else self.vectorize(inputs)
         if self.use_gnn and False:   # TODO:  remove False; check for gnn_zero
@@ -475,26 +524,31 @@ class res_prebuffer:
         return preds
 
     def model_save(self, id_str, numeric_bits):
-        pkl_file = open("rl_model_{}.pkl".format(id_str), "wb")
+        pkl_file = open("model_{}.pkl".format(id_str), "wb")
         pickle.dump((self.subjects, self.words, self.num_subjects, self.num_words, self.subjects_dict, self.words_dict, self.batch_size, self.use_tf, numeric_bits, self.use_gnn, self.max_gnn_nodes, self.vectorize_alg), pkl_file)
         if self.use_gnn and False:
-            self.model.graph_net.save("rl_model_{}".format(id_str))
+            self.model.graph_net.save("model_{}".format(id_str))
             print("GNN trainable weights:")
             print(self.model.graph_net.trainable_weights)
+        elif self.dgl_gnn:
+            dgl_network.save_gnn_model(self.model, "model_{}".format(id_str))
         else:
-            self.model.save("rl_model_{}".format(id_str))
+            self.model.save("model_{}".format(id_str))
 
     def model_load(self, id_str):
         if self.use_gnn:
             # print("Model loading not yet implemented.")
             # raise NotImplementedError
             # TODO:  test the following code
-            pkl_file = open("rl_model_{}.pkl".format(id_str), "rb")
+            pkl_file = open("model_{}.pkl".format(id_str), "rb")
             (self.subjects, self.words, self.num_subjects, self.num_words, self.subjects_dict, self.words_dict, self.batch_size, self.use_tf, numeric_bits, self.use_gnn, self.max_gnn_nodes,self.vectorize_alg ) = pickle.load(pkl_file)
             #self.model.graph_net = keras.models.load_model("rl_model_{}".format(id_str))   #TODO:  Handle both types of gnn
-            self.model.load(id_str)
+            if self.dgl_gnn:
+                self.model = dgl_network.load_gnn_model("model_{}".format(id_str))
+            else:
+                self.model.load(id_str)
         else:
-            self.model = keras.models.load_model("rl_model_{}".format(id_str))
+            self.model = keras.models.load_model("model_{}".format(id_str))
 
     def unify_likelihood(self, inputs):
         X = self.vectorize(inputs)

@@ -1,3 +1,8 @@
 *.o
 *.x
 *.txt
+*.idea*
+*.a
+*.so
+res_task_heap.c
+res_task_heap.h
