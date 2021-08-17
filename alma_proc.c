@@ -156,7 +156,7 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *alma, intr
   // When third arg of past introspect is a bound variable, it must have a numeric value; obtain long from it
   long end_time_bound = 0;
   time_binding = NULL;
-  if ((kind == ACQUIRED || kind == POS_INT_PAST || kind == NEG_INT_PAST) &&
+  if ((kind == POS_INT_PAST || kind == NEG_INT_PAST) &&
       (time_binding = bindings_contain(bindings, arg->terms[2].variable))) {
     if (time_binding->term->type != FUNCTION || time_binding->term->function->term_count != 0)
       return 0;
@@ -258,7 +258,7 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *alma, intr
           task->unified_clauses[task->num_unified-1] = ith;
         }
 
-        if (kind != NEG_INT_SPEC && kind != NEG_INT && kind != NEG_INT_GEN)
+        if (kind != NEG_INT_SPEC && kind != NEG_INT && kind != NEG_INT_GEN && kind != NEG_INT_PAST)
           swap_bindings(bindings, copy);
         cleanup_bindings(copy);
 
@@ -276,7 +276,7 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *alma, intr
 
         free_term(search_term);
         free(search_term);
-        return kind != NEG_INT_SPEC && kind != NEG_INT && kind != NEG_INT_GEN;
+        return kind != NEG_INT_SPEC && kind != NEG_INT && kind != NEG_INT_GEN && kind != NEG_INT_PAST;
       }
 
       if (non_specific)
@@ -289,7 +289,7 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *alma, intr
 
   free_term(search_term);
   free(search_term);
-  return kind == NEG_INT_SPEC || kind == NEG_INT || kind == NEG_INT_GEN;
+  return kind == NEG_INT_SPEC || kind == NEG_INT || kind == NEG_INT_GEN || kind == NEG_INT_PAST;
 }
 
 // ancestor(A, B) returns true if a A appears as an ancestor in any derivation of B
@@ -725,8 +725,13 @@ static int not_equal(alma_term *arg1, alma_term *arg2, binding_list *bindings, k
 int proc_run(alma_function *proc, binding_list *bindings, fif_task *task, kb *alma) {
   // Each procedure has optional extra argument for bound constraint
   if (strstr(proc->name, "neg_int") == proc->name) {
+    if (strcmp(proc->name, "neg_int_past") == 0) {
+      // Must match (given bindings) the schema neg_int_past("...", Start, End)
+      if ((proc->term_count == 3 || proc->term_count == 4) && proc->terms[1].type == VARIABLE && proc->terms[2].type == VARIABLE)
+        return introspect(proc, bindings, alma, NEG_INT_PAST, NULL);
+    }
     // Must match (given bindings) the schema neg_int("...") / neg_int_gen("...") / neg_int_spec("...")
-    if (proc->term_count == 1 || proc->term_count == 2) {
+    else if (proc->term_count == 1 || proc->term_count == 2) {
       introspect_kind type = NEG_INT;
       if (strcmp(proc->name, "neg_int_spec") == 0)
         type = NEG_INT_SPEC;
@@ -736,8 +741,13 @@ int proc_run(alma_function *proc, binding_list *bindings, fif_task *task, kb *al
     }
   }
   else if (strstr(proc->name, "pos_int") == proc->name) {
+    if (strcmp(proc->name, "pos_int_past") == 0) {
+      // Must match (given bindings) the schema pos_int_past("...", Start, End)
+      if ((proc->term_count == 3 || proc->term_count == 4) && proc->terms[1].type == VARIABLE && proc->terms[2].type == VARIABLE)
+        return introspect(proc, bindings, alma, POS_INT_PAST, NULL);
+    }
     // Must match (given bindings) the schema pos_int("...") / pos_int_gen("...") / pos_int_spec("...")
-    if (proc->term_count == 1 || proc->term_count == 2) {
+    else if (proc->term_count == 1 || proc->term_count == 2) {
       introspect_kind type = POS_INT;
       if (strcmp(proc->name, "pos_int_spec") == 0)
         type = POS_INT_SPEC;
@@ -750,16 +760,6 @@ int proc_run(alma_function *proc, binding_list *bindings, fif_task *task, kb *al
     // Must match (given bindings) the schema acquired("...", Var)
     if ((proc->term_count == 2 || proc->term_count == 3) && proc->terms[1].type == VARIABLE)
       return introspect(proc, bindings, alma, ACQUIRED, NULL);
-  }
-  else if (strcmp(proc->name, "pos_int_past") == 0) {
-    // Must match (given bindings) the schema pos_int_past("...", Start, End)
-    if ((proc->term_count == 3 || proc->term_count == 4) && proc->terms[1].type == VARIABLE && proc->terms[2].type == VARIABLE)
-      return introspect(proc, bindings, alma, POS_INT_PAST, NULL);
-  }
-  else if (strcmp(proc->name, "neg_int_past") == 0) {
-    // Must match (given bindings) the schema neg_int_past("...", Start, End)
-    if ((proc->term_count == 3 || proc->term_count == 4) && proc->terms[1].type == VARIABLE && proc->terms[2].type == VARIABLE)
-      return introspect(proc, bindings, alma, NEG_INT_PAST, NULL);
   }
   else if (strcmp(proc->name, "ancestor") == 0) {
     // Must match (given bindings) the schema ancestor("...", "...", Time)
