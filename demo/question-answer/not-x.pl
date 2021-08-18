@@ -5,6 +5,9 @@ fif(now(0), query_belief(quote(rel(foo, x)), 1)).
 
 fif(now(3), rel(foo, x)).
 
+fif(now(4), query_truth(quote(rel(foo, x)), 5)).
+fif(now(4), query_belief(quote(rel(foo, x)), 5)).
+
 fif(now(5), query_truth(quote(rel(foo, x)), 6)).
 fif(now(5), query_belief(quote(rel(foo, x)), 6)).
 

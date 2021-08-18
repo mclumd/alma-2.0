@@ -262,11 +262,16 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *alma, intr
           swap_bindings(bindings, copy);
         cleanup_bindings(copy);
 
-        if (kind == ACQUIRED && !acquired_time_bound) {
-          // If they unify, create term out of acquired answer
+        // When have time argument answers, make new bindings out of answer terms
+        if ((kind == ACQUIRED || kind == POS_INT_PAST) && !acquired_time_bound) {
           alma_term *time_term = malloc(sizeof(*time_term));
           func_from_long(time_term, ith->acquired);
           add_binding(bindings, arg->terms[1].variable, time_term, arg, 0);
+        }
+        if (kind == POS_INT_PAST && !end_time_bound) {
+          alma_term *time_term = malloc(sizeof(*time_term));
+          func_from_long(time_term, flag_min(ith));
+          add_binding(bindings, arg->terms[2].variable, time_term, arg, 0);
         }
 
         // Don't free clause unless gen case
