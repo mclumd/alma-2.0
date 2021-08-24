@@ -64,6 +64,8 @@ typedef struct kb {
   tommy_array pos_lit_reinstates; // Holds positive literal reinstatements, for contradiction checking
   tommy_array neg_lit_reinstates; // Holds negative literal reinstatements, for contradiction checking
 
+  tommy_array trues; // True() literals to have their arguments unwrapped
+
   tommy_list clauses; // Linked list storing index_mappings, keeps track of all clauses
   tommy_hashlin index_map; // Maps index value to a clause
   tommy_hashlin fif_map; // Map of fif_mapping, tracks fif formulas

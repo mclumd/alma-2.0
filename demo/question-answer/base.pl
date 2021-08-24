@@ -78,7 +78,6 @@ fif(and(query_belief(quote(not(rel(`Pred, `Arg_a, `Arg_b, `Arg_c))), Asktime),
     acquired(quote(rel(`Pred, `Arg_a, `Arg_b, `Arg_c)), Learnedtime)))),
 answer(quote(query_belief(quote(not(rel(``Pred, ``Arg_a, ``Arg_b, ``Arg_c))), `Asktime)), no, reason(quote(acquired(quote(rel(``Pred, ``Arg_a, ``Arg_b, ``Arg_c)), `Learnedtime))))).
 
-
 % Truth query: no
 % Unary case
 fif(and(query_truth(quote(rel(`Pred, `Arg)), Asktime),
@@ -165,6 +164,7 @@ fif(and(query_truth(X, Asktime),
     and(pos_int_past(X, Learnedtime, Endtime),
     retired(X, Endtime))))),
 answer(quote(query_truth(`X, `Asktime)), unsure, reason(quote(retired(`X, `Endtime))))).
+
 
 % When X isn't a current belief, and wasn't a belief in the past either
 % Belief query: no

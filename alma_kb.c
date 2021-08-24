@@ -1851,8 +1851,10 @@ void process_new_clauses(kb *collection, kb_str *buf, int make_tasks) {
       add_clause(collection, c);
 
       if (c->pos_count == 1 && c->neg_count == 0) {
-        if (strcmp(c->pos_lits[0]->name, "true") == 0)
-          handle_true(collection, c, buf);
+        if (strcmp(c->pos_lits[0]->name, "true") == 0) {
+          tommy_array_insert(&collection->trues, c);
+          tommy_array_set(&collection->new_clauses, i, NULL);
+        }
         else if (strcmp(c->pos_lits[0]->name, "distrust") == 0)
           handle_distrust(collection, c, buf);
       }
@@ -2019,4 +2021,13 @@ void process_new_clauses(kb *collection, kb_str *buf, int make_tasks) {
   tommy_array_init(&collection->retire_set);
   tommy_array_done(&collection->retire_parents);
   tommy_array_init(&collection->retire_parents);
+
+  for (tommy_size_t i = 0; i < tommy_array_size(&collection->trues); i++) {
+    clause *c = tommy_array_get(&collection->trues, i);
+    if (flags_negative(c))
+      handle_true(collection, c, buf);
+  }
+  tommy_array_done(&collection->trues);
+  tommy_array_init(&collection->trues);
+
 }
