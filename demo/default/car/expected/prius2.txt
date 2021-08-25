@@ -1,0 +1,7 @@
+rel(car, prius)
+rel(gas_tank_car, prius)
+rel(electric_car, prius)
+rel(charged, prius)
+~rel(fueled, prius)
+rel(powered, prius)
+abnormal(prius, gas_tank_car, "rel(powered, prius)")

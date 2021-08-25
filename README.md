@@ -69,14 +69,22 @@ make
 ## Testing
 Testing is automated with the Python script `belief-test.py`. Test script usage is:
 ```
-belief_test.py [-h] -b BASE -d DIR -a AXIOM_COUNT
+python belief_test.py [-h] -b BASE -t TOPIC -d DIR -a AXIOM_COUNT
 ```
 
 Arguments:
 `-b BASE, --base BASE` Base axiom file
 
+`-t TOPIC, --topic TOPIC` Topic axiom file specific to test domain (mollusk or car)
+
 `-d DIR, --dir DIR` .pl and .txt directory
 
-`-a AXIOM_COUNT, --axiom_count AXIOM_COUNT` Base axiom count
+`-a AXIOM_COUNT, --axiom_count AXIOM_COUNT` Base axiom count, summed at the end for analysis
 
 The directory provided should contain a subdirectory `almafiles` with .pl files, and a subdirectory `expected` with .txt files of expected steady-state beliefs.
+
+Examples to run the car or mollusk test batches:
+```
+python belief_test.py -b demo/default/base.pl -t demo/default/car/topic.pl -d demo/default/car/ -a 19
+python belief_test.py -b demo/default/base.pl -t demo/default/mollusk/topic.pl -d demo/default/mollusk/ -a 19
+```

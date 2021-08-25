@@ -100,9 +100,9 @@ fif(and(contradicting(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
     and(not(rel(Prop_b, Obj)),
     and(parent(quote(fif(and(rel(`Kind_b, Obj), not(rel(`Prop_b, Obj))), not(rel(`Pred, Obj)))), quote(not(rel(`Pred, `Obj))), T),
     not_equal(quote(fif(and(rel(`Kind_a, Obj), not(rel(`Prop_a, Obj))), not(rel(`Pred, Obj)))), quote(fif(and(rel(`Kind_b, Obj), not(rel(`Prop_b, Obj))), not(rel(`Pred, Obj))))))))))))),
-and(update(quote(fif(and(rel(`Kind_a, Obj), rel(`Prop_a, Obj)), rel(`Pred, Obj))), quote(fif(and(rel(`Kind_a, Obj), and(rel(`Prop_a, Obj), neg_int(quote(abnormal(`Obj, ``Kind_a, quote(rel(```Pred, ``Obj))))))), rel(`Pred, Obj)))),
+and(update(quote(fif(and(rel(`Kind_a, Obj), rel(`Prop_a, Obj)), rel(`Pred, Obj))), quote(fif(and(rel(`Kind_a, Obj), and(rel(`Prop_a, Obj), neg_int(quote(abnormal(`Obj, ``Kind_a, quote(not(rel(```Pred, ``Obj)))))))), rel(`Pred, Obj)))),
 and(reinstate(quote(not(rel(`Pred, `Obj))), T),
-fif(and(rel(Kind_a, Ab_Obj), and(rel(Prop_a, Ab_Obj), rel(Pred, Ab_Obj))), abnormal(Ab_Obj, Kind_a, quote(rel(`Pred, `Ab_Obj))))))).
+fif(and(rel(Kind_a, Ab_Obj), and(rel(Prop_a, Ab_Obj), not(rel(Pred, Ab_Obj)))), abnormal(Ab_Obj, Kind_a, quote(not(rel(`Pred, `Ab_Obj)))))))).
 
 
 % Formulas for resolving contradictions where one contradictand is descended from a default, and the other is not
