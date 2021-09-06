@@ -22,6 +22,9 @@ def pr_heap_print(alma_inst, alma_heap_print_size=100):
             break
 
 def heap_size(alma_inst):
+    return alma.res_task_buf_size(alma_inst)
+
+def heap_size_old(alma_inst):
     rth = alma.res_task_buf(alma_inst)
     hs = len(rth[1].split('\n')[:-1])
     del rth
@@ -43,6 +46,8 @@ def alma_tree_to_str(tree):
         return tree[1] + '(' + ''.join([alma_tree_to_str(term) for term in tree[2]   ]) + ')'
     elif tree[0] == 'var':
         return tree[1]
+    elif tree[0] == 'a':
+        return alma_tree_to_str(tree[1][0]) + ' and ' + alma_tree_to_str(tree[1][1])
 
 def alma_collection_to_strings(collection):
     return [ alma_tree_to_str(tree) for tree in collection]

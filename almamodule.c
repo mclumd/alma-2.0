@@ -478,10 +478,8 @@ static PyObject *set_prb_priorities(PyObject *self, PyObject *args) {
 
   collection = (kb *) alma_kb;
   collection_prb = &collection->pre_res_task_buffer;
-
   list_len = PyList_Size(priority_list);
   prb_elmnt = tommy_list_head(collection_prb);
-
 
   for (idx = 0; idx < list_len; idx++) {
     list_item = PyList_GetItem(priority_list, idx);
@@ -621,6 +619,24 @@ static PyObject * alma_atomic_step(PyObject *self, PyObject *args) {
 
 
 
+static PyObject *get_res_buf_size(PyObject *self, PyObject *args) {
+  //Get resolution task heap size
+  PyObject *result;
+  long alma_kb;
+  kb *collection;
+  
+  if (!PyArg_ParseTuple(args, "l", &alma_kb))
+    return NULL;
+
+  collection = (kb *)alma_kb;
+
+
+  res_task_heap *res_tasks = &collection->res_tasks;
+
+  result = Py_BuildValue("l", res_tasks->count);
+  return result;
+}
+    
 static PyObject *get_res_buf( PyObject *self, PyObject *args) {
   //Get resolution task heap.
 
@@ -628,6 +644,7 @@ static PyObject *get_res_buf( PyObject *self, PyObject *args) {
   PyObject *py_lst;
   kb *collection;
   PyObject *result;
+  PyObject *tmp1, *tmp2;
 
   if (!PyArg_ParseTuple(args, "l", &alma_kb))
     return NULL;
@@ -658,15 +675,22 @@ static PyObject *get_res_buf( PyObject *self, PyObject *args) {
     alma_function_print(collection, t->neg, &buf);
     tee_alt("\n", collection, &buf);
 
+    tmp1 = clause_to_pyobject(collection, t->x);
+    tmp2 = clause_to_pyobject(collection, t->y);
     PyList_Append(py_lst, Py_BuildValue("OOd",
-					clause_to_pyobject(collection, t->x),
-					clause_to_pyobject(collection, t->y),
+					tmp1,
+					tmp2,
 					element->priority));
+    Py_DECREF(tmp1);
+    Py_DECREF(tmp2);
+    
   }
 
 
 
   result = Py_BuildValue("(O,s)",py_lst, buf.buffer);
+  Py_DECREF(py_lst);
+
   free(buf.buffer);
   return result;
 }
@@ -989,6 +1013,7 @@ static PyMethodDef AlmaMethods[] = {
   {"prb_to_res_task", prb_to_resolutions, METH_VARARGS,"Flush pre-resolution task list to resolution task heap."},
   {"single_prb_to_res_task", single_prb_to_resolutions, METH_VARARGS,"Move single pre-resolution task list to resolution task heap."},
   {"res_task_buf", get_res_buf, METH_VARARGS,"Get resolution task heap."},
+  {"res_task_buf_size", get_res_buf_size, METH_VARARGS,"Get resolution task heap size."},
   {"kbprint", alma_kbprint, METH_VARARGS,"Print out entire alma kb."},
   {"halt", alma_halt, METH_VARARGS,"Stop an alma kb."},
   {"add", alma_add, METH_VARARGS,"Add a clause or formula to an alma kb."},
