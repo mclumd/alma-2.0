@@ -59,7 +59,7 @@ def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000,
         reward_fn = get_rewards_test3
     else:
         reward_fn = get_rewards_test1
-    network = rpb_dqn(10000, reward_fn, subjects, [], use_gnn=use_gnn, gnn_nodes=gnn_nodes) if prior_network is None else prior_network    # Use max_reward of 10K
+    network = rpb_dqn(10000, reward_fn, subjects, [], use_gnn=use_gnn, gnn_nodes=gnn_nodes, use_state=True) if prior_network is None else prior_network    # Use max_reward of 10K
     replay_buffer = rl_dataset.experience_replay_buffer()
     start_time = time.time()
     for episode in range(network.starting_episode, network.starting_episode + num_episodes):
@@ -80,7 +80,7 @@ def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000,
             replay_buffer = rl_dataset.experience_replay_buffer()
 
 
-        if episode % 2500 == 0:
+        if episode % 2500 == 0 and False:
             res = test(network, kb, num_steps)
             print("-"*80)
             print("Rewards at episode {} (epsilon=={}): {}".format(episode, network.epsilon, res['rewards']))

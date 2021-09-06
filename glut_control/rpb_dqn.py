@@ -1,8 +1,8 @@
 import rl_utils
-from resolution_prebuffer import res_prebuffer, gnn_model, gnn_model_zero
+from resolution_prebuffer import res_prebuffer, gnn_model_zero
 import numpy as np
-from rl_dataset import simple_graph_dataset
-from spektral.data import DisjointLoader
+#from rl_dataset import simple_graph_dataset
+#from spektral.data import DisjointLoader
 from tensorflow import keras
 import tensorflow as tf
 import pickle
@@ -14,7 +14,7 @@ class rpb_dqn(res_prebuffer):
     def __init__(self, max_reward, reward_fn, subjects=[], words=[],
                  use_tf=False, debug=True, use_gnn=True, gnn_nodes=20,
                  seed=0, gamma=0.99, epsilon=1.0, eps_min=0.1,
-                 eps_max=1.0, batch_size=16, starting_episode=0):
+                 eps_max=1.0, batch_size=16, starting_episode=0, use_state = False):
         """
         Params:
           max_reward:  maximum reward for an episode; used to scale rewards for Q-function
@@ -30,8 +30,12 @@ class rpb_dqn(res_prebuffer):
         self.epsilon_greedy_episodes = 300000
 
         self.batch_size = batch_size
-        self.current_model = self.model
-        self.target_model =  gnn_model_zero(self.max_gnn_nodes,self.graph_rep.feature_len)
+        if use_state:
+            self.current_model = gnn_model_zero(self.max_gnn_nodes,self.graph_rep.feature_len, True)
+            self.target_model =  gnn_model_zero(self.max_gnn_nodes,self.graph_rep.feature_len, True)
+        else:
+            self.current_model = self.model
+            self.target_model =  gnn_model_zero(self.max_gnn_nodes,self.graph_rep.feature_len)
         #self.loss_fn = keras.losses.Huber()
         self.bellman_loss = keras.losses.MeanSquaredError()
         self.optimizer = keras.optimizers.Adam(learning_rate=0.00025, clipnorm=1.0)
@@ -42,6 +46,7 @@ class rpb_dqn(res_prebuffer):
         self.reward_fn = reward_fn
         self.starting_episode = starting_episode
         self.current_episode = starting_episode
+        self.use_state = use_state
 
     def epsilon_decay(self):
         self.epsilon -= (self.epsilon_interval / self.epsilon_greedy_episodes)
@@ -51,8 +56,18 @@ class rpb_dqn(res_prebuffer):
     def reset_start(self):
         self.starting_episode = self.current_episode + 1
         self.current_episode = self.starting_episode
+
+
     def get_priorities(self, inputs, current_model=True, training=False, numpy=True):
-        X = self.vectorize(inputs)
+        """
+        inputs is either a list of actions (pre-inferences) or else a pair (state,action).
+        """
+        if self.use_gnn:
+            actionX = self.vectorize(inputs[1])
+            stateX = self.kb_vecorize(inputs[0])
+            inputX = (stateX, actionX)
+        else:
+            inputX = self.vectorize(inputs)
         model = self.current_model if current_model else self.target_model
         if self.use_gnn and False:   # TODO:   bring back for spektral GNN
             preds = []
@@ -69,7 +84,7 @@ class rpb_dqn(res_prebuffer):
                 batch_preds = model.predict(b, training=training)
                 preds.append(batch_preds)
         else:
-            preds = model.predict(X)
+            preds = model.predict(inputXX)
         if numpy:
             #result = np.concatenate([p.numpy() for p in preds]).reshape(-1)   #TODO:  needed for spektral GNN
             result  = preds
@@ -79,11 +94,20 @@ class rpb_dqn(res_prebuffer):
 
 
     def fit(self, batch, verbose=True):
-        X = self.vectorize(batch.actions)
-        batch_size = len(X)
-        future_rewards = self.target_model.predict(X)
+        actionX = self.vectorize(batch.actions)
+        if self.use_state:
+            stateX = self.kb_vectorize(batch.states0)
+            inputX = (stateX, actionX)
+            # On return, actionX is a list of batch_size pairs (graph, features)
+            #            stateX is a list of batch_size, each element of which is
+            #                   a variable-length list of (graph, features) pairs
+            #
+        else:
+            inputX = actionX
+        batch_size = len(actionX)
+        future_rewards = self.target_model.predict(inputX)            
         updated_q_values = np.array(batch.rewards).reshape(-1,1) + self.gamma * future_rewards
-        return self.current_model.fit(X, updated_q_values, batch_size, callbacks=[self.tensorboard_callback])
+        return self.current_model.fit(inputX, updated_q_values, batch_size, callbacks=[self.tensorboard_callback])
         
         
 

@@ -6,7 +6,6 @@ Currently, the following are planned:
   b) 
   c) 
 """
-
 import tensorflow as tf
 
 #tf.config.gpu.set_per_process_memory_fraction(0.25)
@@ -34,7 +33,7 @@ import alma_functions as aw
 from sklearn.utils import shuffle
 from vectorization import graph_representation, unifies, vectorize_bow1, vectorize_bow2
 #from memory_profiler import profile
-import dgl_network
+#import dgl_network
 
 import ctypes 
 class PyObject(ctypes.Structure):
@@ -130,9 +129,10 @@ class history_struct:
 
 
 class gnn_model_zero():
-    def __init__(self, max_nodes=20, num_features=20):
+    def __init__(self, max_nodes=20, num_features=20, use_state = False):
         #gnn_model.__init__(self, max_nodes)
         input_size = (2*max_nodes)**2 + (2*max_nodes*num_features)
+
         self.input_size = input_size
         self.max_nodes = max_nodes
         self.num_features = num_features
@@ -143,17 +143,49 @@ class gnn_model_zero():
         # out = keras.layers.Dense(1, activation='sigmoid')(x2)
         # self.graph_net = out
 
-        self.model = keras.models.Sequential()
-        self.model.add(keras.Input(shape=( (  input_size,)) ))    # One input for each term
-        self.model.add(keras.layers.Dense(8, activation='tanh'))
-        self.model.add(keras.layers.Dense(8, activation='tanh'))
-        self.model.add(keras.layers.Dense(1, activation='sigmoid'))
-        self.model.compile(loss='mse', optimizer='adam', metrics=['accuracy', 'mse'])
+        # If we are encoding state, we will *separately* encode the KB,
+        # concatenate it with the action and feed the result into self.model
+        self.model_input = keras.Input(shape=( (  input_size,)), name="action_input")
+        self.use_state = use_state
+        if use_state:
+            self.state_input_size = (max_nodes)**2 + (max_nodes*num_features) # We'll feed in KB formulae one at a time
+            self.state_input = keras.Input(shape=(None, self.state_input_size), name="state_input")
+            #self.state_embedding = keras.layers.Embedding(1000, 512)(self.state_input)
+            self.state_features = keras.layers.LSTM(128)(self.state_input)
+            self.emb_input = keras.layers.concatenate([self.state_features, self.model_input])
+        else:
+            self.emb_input = self.model_input
 
+        self.dense1 = keras.layers.Dense(8, activation='tanh')(self.emb_input)
+        self.dense2 = keras.layers.Dense(8, activation='tanh')(self.dense1)
+        self.output = keras.layers.Dense(1, activation='sigmoid')(self.dense2)
+
+        if False:
+            self.model = keras.models.Sequential()
+            self.model.add(keras.Input(shape=( (  input_size,)) ))    # One input for each term
+            self.model.add(keras.layers.Dense(8, activation='tanh'))
+            self.model.add(keras.layers.Dense(8, activation='tanh'))
+            self.model.add(keras.layers.Dense(1, activation='sigmoid'))
+
+        if use_state:
+            self.model = keras.Model(
+                inputs = [self.state_input, self.model_input],
+                outputs = [self.output]
+            )
+        else:
+            self.model = keras.Model(
+                inputs = [self.model_input],
+                outputs = [self.output]
+            )
+        self.model.compile(loss='mse', optimizer='adam', metrics=['mse'])
+            
         self.optimizer = Adam(learning_rate=0.00025, clipnorm=1.0)
         self.loss_fn = keras.losses.Huber()
         self.acc_fn = BinaryAccuracy()
 
+
+            
+            
     
     def flatten_input(self, X):
         """
@@ -165,22 +197,49 @@ class gnn_model_zero():
         return np.hstack([X[0], X[1]]).flatten()
 
     #@profile
-    def fit(self, X, y, batch_size, verbose=True, callbacks=[]):
-        X = np.array([self.flatten_input(Xi) for Xi in X])   # TODO:  Make this more efficient
+    def fit(self, inputs, y, batch_size, verbose=True, callbacks=[]):
+        if self.use_state:
+            # Coming in, we have inputs = (states, actions) where:
+            #            actions is a list of batch_size pairs (graph, features)
+            #            states is a list of batch_size, each element of which is
+            #                   a variable-length list of (graph, features) pairs
+            # What we want to feed into the network should flatten the pairs:
+            #    stateX should be a tensor of rank (batch_size, ???, graph_size + feature_size)
+            #    actions should be a tensor of rank (batch_size, graph_size + feature_size)
+            states = inputs[0]
+            actions = inputs[1]
+            stateX = [np.array([self.flatten_input(Xi) for Xi in kb]) for kb in states]
+        else:
+            actions = inputs
+        actionX = np.array([self.flatten_input(Xi) for Xi in actions])   # TODO:  Make this more efficient
         y = np.array(y)
-        num_epochs = len(X) // batch_size
-        if len(X) % batch_size != 0:
-            num_epochs += 1    # Extra batch for remainder
-        for i in range(num_epochs):
-            Xbatch = X[i*batch_size:(i+1)*batch_size]
-            ybatch = y[i*batch_size:(i+1)*batch_size]
-            #loss, acc, tacc = self.model.fit(Xbatch, ybatch)
-            H = self.model.fit(Xbatch, ybatch, callbacks=callbacks)
-        return H
+        if self.use_state:
+            for j in range(len(actions)):
+                state, action = stateX[j], actionX[j]
+                y = y[j]
+                H = self.model.fit({"action_input": action, "state_input": state}, ybatch, callbacks=callbacks)
+        else:
+            num_batches = len(actions) // batch_size
+            if len(actionX) % batch_size != 0:
+                num_batches += 1    # Extra batch for remainder
+            for i in range(num_batches):
+                actionXbatch = actionX[i*batch_size:(i+1)*batch_size]
+                ybatch = y[i*batch_size:(i+1)*batch_size]
+                #loss, acc, tacc = self.model.fit(Xbatch, ybatch)
+                H = self.model.fit(actionXbatch, ybatch, callbacks=callbacks)
+
+            return H
 
     def predict(self, X):
-        X = np.array([self.flatten_input(Xi) for Xi in X])
-        preds = self.model.predict(X)
+        if self.use_state:
+            states = X[0]
+            actions = X[1]
+            actionX = np.array([self.flatten_input(Xi) for Xi in actions])   # TODO:  Make this more efficient
+            stateX = [np.array([self.flatten_input(Xi) for Xi in kb]) for kb in states]
+            preds = np.array([self.model.predict({"action_input": np.expand_dims(action,axis=0), "state_input": np.expand_dims(state, axis=0)}) for action, state in zip(actionX, stateX)]).reshape(-1,1)
+        else:
+            X = np.array([self.flatten_input(Xi) for Xi in X])
+            preds = self.model.predict(X)
         return preds
     
     def save(self, id_str):
@@ -230,7 +289,7 @@ class res_prebuffer:
             self.graph_buffer = None
             self.graph_rep = graph_representation(self.subjects_dict, self.max_gnn_nodes)
 
-        self.model = forward_model(use_tf, len(self.subjects_dict)+1) if not use_gnn else gnn_model_zero(self.max_gnn_nodes,self.graph_rep.feature_len)
+        self.model = forward_model(use_tf, len(self.subjects_dict)+1) if not use_gnn else gnn_model_zero(self.max_gnn_nodes,self.graph_rep.feature_len, use_state=True)
         self.dgl_gnn = False # Overridden in dgl_heuristic
         self.use_gpu = use_gpu
     
@@ -272,15 +331,21 @@ class res_prebuffer:
         elif self.vectorize_alg == 'gnn1':
             res = []
             for inp0, inp1 in inputs:
-                #print(inp0, inp1)
                 res.append(self.graph_rep.inputs_to_graphs(inp0, inp1))
-            #print('done')
-            #test = np.array(res)
             return res
             #  after debugging use this
             #  return np.array([ self.graph_rep.inputs_to_graphs(inp0, inp1) for inp0, inp1 in inputs ])
         elif self.vectorize_alg == 'word2vec':
             return self.vectorize_w2vec(inputs)
+
+    def kb_vectorize(self, list_of_states):
+        if self.vectorize_alg == 'gnn1':
+            res = []
+            for kb in list_of_states:
+                res.append([self.graph_rep.graph_features(sentence) for sentence in kb])
+        else:
+            raise Exception("kb_vectorize with currently unsupported vectorization algorithm")
+        return res
         
 
 
