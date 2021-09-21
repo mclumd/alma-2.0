@@ -64,7 +64,7 @@ class rpb_dqn(res_prebuffer):
         """
         if self.use_gnn:
             actionX = self.vectorize(inputs[1])
-            stateX = self.kb_vecorize(inputs[0])
+            stateX = self.kb_vectorize(inputs[0])
             inputX = (stateX, actionX)
         else:
             inputX = self.vectorize(inputs)
@@ -84,7 +84,7 @@ class rpb_dqn(res_prebuffer):
                 batch_preds = model.predict(b, training=training)
                 preds.append(batch_preds)
         else:
-            preds = model.predict(inputXX)
+            preds = model.predict(inputX)
         if numpy:
             #result = np.concatenate([p.numpy() for p in preds]).reshape(-1)   #TODO:  needed for spektral GNN
             result  = preds

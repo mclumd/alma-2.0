@@ -34,7 +34,10 @@ def collect_episode(network, replay_buffer, alma_inst, episode_length):
                 priorities =  np.random.uniform(size=len(full_actions))
                 min_idx = np.argmin(priorities)
             else:
-                priorities = 1 - (network.get_priorities(actions_no_priorities)*0.9).flatten()
+                if network.use_state:
+                    priorities = 1 - (network.get_priorities(([state0]*len(actions_no_priorities), actions_no_priorities)) * 0.9).flatten()
+                else:
+                    priorities = 1 - (network.get_priorities(actions_no_priorities) * 0.9).flatten()
                 min_idx = np.argmin(priorities)
 
             action = full_actions[min_idx][:2]
@@ -71,7 +74,10 @@ def play_episode(network, alma_inst, episode_length):
         if len(prb) > 0:
             #action = [prebuf[0][0][:2]]
             actions = [pres[:2] for pres in prb]
-            priorities = 1 - network.get_priorities(actions)*0.9
+            if network.use_state:
+                priorities = 1 - network.get_priorities( ([kb]*len(actions), actions)  )
+            else:
+                priorities = 1 - network.get_priorities(actions)*0.9
             alma.set_priors_prb(alma_inst, priorities.flatten().tolist())
             alma.prb_to_res_task(alma_inst, 1.0)   # Note the 1.0 is a threshold, not a priority
             alma.astep(alma_inst)

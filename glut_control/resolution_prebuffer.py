@@ -214,10 +214,15 @@ class gnn_model_zero():
         actionX = np.array([self.flatten_input(Xi) for Xi in actions])   # TODO:  Make this more efficient
         y = np.array(y)
         if self.use_state:
+            #Iterate through the batch manually so that we can use variable length states.
+            #TODO:  Find a way to process a batch at a time -- this might involve using ragged tensors
+            #       or padding.  
             for j in range(len(actions)):
                 state, action = stateX[j], actionX[j]
-                y = y[j]
-                H = self.model.fit({"action_input": action, "state_input": state}, ybatch, callbacks=callbacks)
+                ybatch = y[j]
+                H = self.model.fit({"action_input": np.expand_dims(action, axis=0),
+                                    "state_input": np.expand_dims(state, axis=0)}, 
+                                    ybatch, callbacks=callbacks)
         else:
             num_batches = len(actions) // batch_size
             if len(actionX) % batch_size != 0:
