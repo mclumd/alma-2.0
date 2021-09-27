@@ -14,7 +14,8 @@ class rpb_dqn(res_prebuffer):
     def __init__(self, max_reward, reward_fn, subjects=[], words=[],
                  use_tf=False, debug=True, use_gnn=True, gnn_nodes=20,
                  seed=0, gamma=0.99, epsilon=1.0, eps_min=0.1,
-                 eps_max=1.0, batch_size=16, starting_episode=0, use_state = False):
+                 eps_max=1.0, batch_size=16, starting_episode=0, use_state = False,
+                 done_reward=0):
         """
         Params:
           max_reward:  maximum reward for an episode; used to scale rewards for Q-function
@@ -47,6 +48,7 @@ class rpb_dqn(res_prebuffer):
         self.starting_episode = starting_episode
         self.current_episode = starting_episode
         self.use_state = use_state
+        self.done_reward = done_reward
 
     def epsilon_decay(self):
         self.epsilon -= (self.epsilon_interval / self.epsilon_greedy_episodes)
