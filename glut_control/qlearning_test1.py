@@ -30,7 +30,7 @@ def res_task_lits(lit_str):
     return [ x.split('\t') for x in L]
 
 #@profile
-def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000, train_interval=500, update_target_network_interval=10000, debug_level=0, gnn_nodes = 20, exhaustive_training=False, kb='/home/justin/alma-2.0/glut_control/qlearning2.pl', subjects = ['a', 'f', 'g', 'l'], prior_network = None):
+def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000, train_interval=500, update_target_network_interval=10000, debug_level=0, gnn_nodes = 20, exhaustive_training=False, kb='/home/justin/alma-2.0/glut_control/qlearning2.pl', subjects = ['a', 'f', 'g', 'l', 'now'], prior_network = None):
     """
     Train Q-network on the initial qlearning task.   
 
@@ -59,7 +59,7 @@ def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000,
         reward_fn = get_rewards_test3
     else:
         reward_fn = get_rewards_test1
-    network = rpb_dqn(10000, reward_fn, subjects, [], use_gnn=use_gnn, gnn_nodes=gnn_nodes, use_state=True) if prior_network is None else prior_network    # Use max_reward of 10K
+    network = rpb_dqn(100, reward_fn, subjects, [], use_gnn=use_gnn, gnn_nodes=gnn_nodes, use_state=True) if prior_network is None else prior_network    # Use max_reward of 10K
     replay_buffer = rl_dataset.experience_replay_buffer()
     start_time = time.time()
     for episode in range(network.starting_episode, network.starting_episode + num_episodes):
@@ -139,6 +139,7 @@ def main():
     else:
             subjects = ['a', 'f', 'g', 'l']
 
+    subjects.append('now')
     network = None
     if args.reload != "NONE":
         model_name = args.reload
