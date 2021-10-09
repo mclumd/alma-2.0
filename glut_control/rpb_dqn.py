@@ -33,6 +33,7 @@ class rpb_dqn(res_prebuffer):
 
         self.batch_size = batch_size
         self.debugging=debugging
+        self.log_dir = "logs/fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         if use_state:
             self.current_model = gnn_model_zero(self.max_gnn_nodes,self.graph_rep.feature_len, True, self.debugging)
             self.target_model =  gnn_model_zero(self.max_gnn_nodes,self.graph_rep.feature_len, True, self.debugging)
@@ -44,7 +45,7 @@ class rpb_dqn(res_prebuffer):
         self.optimizer = keras.optimizers.Adam(learning_rate=0.00025, clipnorm=1.0)
         self.max_reward = max_reward
         #self.acc_fn = CategoricalAccuracy()
-        self.log_dir = "logs/fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+
         if self.debugging:
             self.tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=self.log_dir, histogram_freq=1,
                                                                        write_graph=True, write_images=True)

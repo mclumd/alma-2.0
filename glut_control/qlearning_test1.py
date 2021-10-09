@@ -17,10 +17,11 @@ import argparse
 import rl_utils, rl_dataset
 #import resolution_prebuffer as rpb
 from rpb_dqn import rpb_dqn, get_rewards_test1, get_rewards_test3
-import time
+import time, datetime
 #import tracemalloc
 #from memory_profiler import profile
 import psutil
+import tensorflow as tf
 
 test_params = {
     'explosion_size': 1000,
@@ -38,7 +39,7 @@ def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000,
           update_target_network_interval=10000, debug_level=0, gnn_nodes = 20,
           exhaustive_training=False, kb='/home/justin/alma-2.0/glut_control/qlearning2.pl',
           subjects = ['a', 'f', 'g', 'l', 'now'], prior_network = None, debugging=False,
-          testing_interval=math.inf):
+          testing_interval=math.inf, tboard = True):
     """
     Train Q-network on the initial qlearning task.   
 
@@ -71,6 +72,9 @@ def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000,
                       gnn_nodes=gnn_nodes, use_state=True, debugging=debugging) if prior_network is None else prior_network    # Use max_reward of 10K
     replay_buffer = rl_dataset.experience_replay_buffer()
     start_time = time.time()
+    if tboard:
+        reward_log_dir = 'logs/rewards/' + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        reward_summary_writer = tf.summary.create_file_writer(reward_log_dir)
     for episode in range(network.starting_episode, network.starting_episode + num_episodes):
         print("Starting episode ", episode)
         network.current_episode = episode
@@ -97,6 +101,10 @@ def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000,
             print("Rewards at episode {} (epsilon=={}): {}".format(episode, network.epsilon, res['rewards']))
             network.model_save(model_name + "_ckpt" + str(episode))
             print("-"*80)
+            if tboard:
+                with reward_summary_writer.as_default():
+                    for (i, rew) in enumerate(res['rewards']):
+                        tf.summary.scalar("reward{}".format(i), rew, step=episode)
 
 
         if debug_level > 2:
