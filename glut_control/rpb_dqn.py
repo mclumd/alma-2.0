@@ -8,6 +8,7 @@ import tensorflow as tf
 import pickle
 import datetime
 import os
+#from memory_profiler import profile
 
 model_prefix = "no_index/models"
 class rpb_dqn(res_prebuffer):
@@ -15,7 +16,7 @@ class rpb_dqn(res_prebuffer):
                  use_tf=False, debug=True, use_gnn=True, gnn_nodes=20,
                  seed=0, gamma=0.99, epsilon=1.0, eps_min=0.1,
                  eps_max=1.0, batch_size=16, starting_episode=0, use_state = False,
-                 done_reward=0):
+                 done_reward=0, debugging=False):
         """
         Params:
           max_reward:  maximum reward for an episode; used to scale rewards for Q-function
@@ -31,19 +32,22 @@ class rpb_dqn(res_prebuffer):
         self.epsilon_greedy_episodes = 300000
 
         self.batch_size = batch_size
+        self.debugging=debugging
         if use_state:
-            self.current_model = gnn_model_zero(self.max_gnn_nodes,self.graph_rep.feature_len, True)
-            self.target_model =  gnn_model_zero(self.max_gnn_nodes,self.graph_rep.feature_len, True)
+            self.current_model = gnn_model_zero(self.max_gnn_nodes,self.graph_rep.feature_len, True, self.debugging)
+            self.target_model =  gnn_model_zero(self.max_gnn_nodes,self.graph_rep.feature_len, True, self.debugging)
         else:
             self.current_model = self.model
-            self.target_model =  gnn_model_zero(self.max_gnn_nodes,self.graph_rep.feature_len)
+            self.target_model =  gnn_model_zero(self.max_gnn_nodes,self.graph_rep.feature_len, self.debugging)
         #self.loss_fn = keras.losses.Huber()
         self.bellman_loss = keras.losses.MeanSquaredError()
         self.optimizer = keras.optimizers.Adam(learning_rate=0.00025, clipnorm=1.0)
         self.max_reward = max_reward
         #self.acc_fn = CategoricalAccuracy()
         self.log_dir = "logs/fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-        self.tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=self.log_dir, histogram_freq=1)
+        if self.debugging:
+            self.tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=self.log_dir, histogram_freq=1,
+                                                                       write_graph=True, write_images=True)
         self.reward_fn = reward_fn
         self.starting_episode = starting_episode
         self.current_episode = starting_episode
@@ -94,7 +98,7 @@ class rpb_dqn(res_prebuffer):
             result = tf.concat(axis=0, values = preds)
         return result
 
-
+    #@profile
     def fit(self, batch, verbose=True):
         actionX = self.vectorize(batch.actions)
         if self.use_state:

@@ -93,7 +93,8 @@ def play_episode(network, alma_inst, episode_length):
             #alma_utils.pr_heap_print(alma_inst, 10)
             print("=" * 80)
     return record
-            
+
+#@profile
 def replay_train(network, replay_buffer, exhaustive = False):
     if replay_buffer.num_entries() > network.batch_size:
         batch = replay_buffer.get_batch(network.batch_size)

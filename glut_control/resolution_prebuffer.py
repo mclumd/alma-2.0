@@ -129,8 +129,9 @@ class history_struct:
 
 
 class gnn_model_zero():
-    def __init__(self, max_nodes=20, num_features=20, use_state = False):
+    def __init__(self, max_nodes=20, num_features=20, use_state = False, debugging=False):
         #gnn_model.__init__(self, max_nodes)
+        self.debugging = debugging
         input_size = (2*max_nodes)**2 + (2*max_nodes*num_features)
 
         self.input_size = input_size
@@ -177,14 +178,16 @@ class gnn_model_zero():
                 inputs = [self.model_input],
                 outputs = [self.output]
             )
-        self.model.compile(loss='mse', optimizer='adam', metrics=['mse'])
+        self.model.compile(loss='mse', optimizer='adam', metrics=['mse'], run_eagerly=self.debugging)
             
         self.optimizer = Adam(learning_rate=0.00025, clipnorm=1.0)
         self.loss_fn = keras.losses.Huber()
         self.acc_fn = BinaryAccuracy()
 
 
-            
+    def tb_summary(self, x):
+        tf.summary.histogram('x', x)
+        return x
             
     
     def flatten_input(self, X):
@@ -221,8 +224,8 @@ class gnn_model_zero():
                 state, action = stateX[j], actionX[j]
                 ybatch = y[j]
                 H = self.model.fit({"action_input": np.expand_dims(action, axis=0),
-                                    "state_input": np.expand_dims(state, axis=0)}, 
-                                    ybatch, callbacks=callbacks)
+                                    "state_input": np.expand_dims(state, axis=0)},
+                                    ybatch, callbacks=callbacks, epochs=1)
         else:
             num_batches = len(actions) // batch_size
             if len(actionX) % batch_size != 0:
@@ -294,7 +297,7 @@ class res_prebuffer:
             self.graph_buffer = None
             self.graph_rep = graph_representation(self.subjects_dict, self.max_gnn_nodes)
 
-        self.model = forward_model(use_tf, len(self.subjects_dict)+1) if not use_gnn else gnn_model_zero(self.max_gnn_nodes,self.graph_rep.feature_len, use_state=True)
+        self.model = forward_model(use_tf, len(self.subjects_dict)+1) if not use_gnn else gnn_model_zero(self.max_gnn_nodes,self.graph_rep.feature_len, use_state=True, debugging=debug)
         self.dgl_gnn = False # Overridden in dgl_heuristic
         self.use_gpu = use_gpu
     

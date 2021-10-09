@@ -7,7 +7,10 @@ import random
 import numpy as np
 import itertools
 import pickle
+import math
 import gc
+gc.disable()
+
 from importlib import reload
 import alma, alma_utils
 import argparse
@@ -16,7 +19,8 @@ import rl_utils, rl_dataset
 from rpb_dqn import rpb_dqn, get_rewards_test1, get_rewards_test3
 import time
 #import tracemalloc
-from memory_profiler import profile
+#from memory_profiler import profile
+import psutil
 
 test_params = {
     'explosion_size': 1000,
@@ -30,7 +34,11 @@ def res_task_lits(lit_str):
     return [ x.split('\t') for x in L]
 
 #@profile
-def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000, train_interval=500, update_target_network_interval=10000, debug_level=0, gnn_nodes = 20, exhaustive_training=False, kb='/home/justin/alma-2.0/glut_control/qlearning2.pl', subjects = ['a', 'f', 'g', 'l', 'now'], prior_network = None):
+def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000, train_interval=500,
+          update_target_network_interval=10000, debug_level=0, gnn_nodes = 20,
+          exhaustive_training=False, kb='/home/justin/alma-2.0/glut_control/qlearning2.pl',
+          subjects = ['a', 'f', 'g', 'l', 'now'], prior_network = None, debugging=False,
+          testing_interval=math.inf):
     """
     Train Q-network on the initial qlearning task.   
 
@@ -59,7 +67,8 @@ def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000,
         reward_fn = get_rewards_test3
     else:
         reward_fn = get_rewards_test1
-    network = rpb_dqn(100, reward_fn, subjects, [], use_gnn=use_gnn, gnn_nodes=gnn_nodes, use_state=True) if prior_network is None else prior_network    # Use max_reward of 10K
+    network = rpb_dqn(100, reward_fn, subjects, [], use_gnn=use_gnn,
+                      gnn_nodes=gnn_nodes, use_state=True, debugging=debugging) if prior_network is None else prior_network    # Use max_reward of 10K
     replay_buffer = rl_dataset.experience_replay_buffer()
     start_time = time.time()
     for episode in range(network.starting_episode, network.starting_episode + num_episodes):
@@ -73,14 +82,16 @@ def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000,
         if (episode % train_interval == 0) and (episode > 0):
             rl_utils.replay_train(network, replay_buffer, exhaustive_training)
             if episode % update_target_network_interval == 0:
-                print("Updating at: ", time.time() - start_time)
+                print("Updating at: {}  \t Memory usage: {} \t   Replay buffer size: {} ".format( time.time() - start_time,
+                                                                                                  psutil.Process().memory_info().rss / (1024 * 1024),
+                                                                                                  replay_buffer.num_entries()))
                 network.target_model.model.set_weights(network.current_model.model.get_weights())
         if episode % 200 == 0:
             del replay_buffer
             replay_buffer = rl_dataset.experience_replay_buffer()
 
 
-        if episode % 2500 == 0 and False:
+        if episode % testing_interval == 0:
             res = test(network, kb, num_steps)
             print("-"*80)
             print("Rewards at episode {} (epsilon=={}): {}".format(episode, network.epsilon, res['rewards']))
@@ -118,12 +129,14 @@ def main():
 
     parser.add_argument("--train_interval", type=int, default=500)
     parser.add_argument("--target_update_interval", type=int, default=500)
+    parser.add_argument("--testing_interval", help="Test model during training", type=int, default=1000)
     parser.add_argument("--reload", action='store', required=False, default="NONE")
     parser.add_argument("--gnn", action='store_true')
     parser.add_argument("--gnn_nodes", type=int, default=50)
     parser.add_argument("--cpu_only", action='store_true')
     parser.add_argument("--exhaustive", action='store_true')
     parser.add_argument("--kb", default='/home/justin/alma-2.0/glut_control/qlearning2.pl', action='store')
+    parser.add_argument("--debugging", action='store_true')
 
     args = parser.parse_args()
     print("Running with arguments ", args)
@@ -156,9 +169,9 @@ def main():
         print('Training; model name is ', args.train)
         model_name = args.train
         if network is None:
-            network = train(args.episode_length, args.train, True, args.num_episodes, train_interval=args.train_interval, update_target_network_interval=args.target_update_interval, gnn_nodes = args.gnn_nodes, exhaustive_training=args.exhaustive, kb=args.kb, subjects=subjects)
+            network = train(args.episode_length, args.train, True, args.num_episodes, train_interval=args.train_interval, update_target_network_interval=args.target_update_interval, gnn_nodes = args.gnn_nodes, exhaustive_training=args.exhaustive, kb=args.kb, subjects=subjects, debugging=args.debugging, testing_interval=args.testing_interval)
         else:
-            network = train(args.episode_length, args.train, True, args.num_episodes, train_interval=args.train_interval, update_target_network_interval=args.target_update_interval, gnn_nodes = args.gnn_nodes, exhaustive_training=args.exhaustive, kb=args.kb, subjects=subjects, prior_network=network)
+            network = train(args.episode_length, args.train, True, args.num_episodes, train_interval=args.train_interval, update_target_network_interval=args.target_update_interval, gnn_nodes = args.gnn_nodes, exhaustive_training=args.exhaustive, kb=args.kb, subjects=subjects, prior_network=network, testing_interval=args.testing_interval)
         use_net = True
     
     if args.random_network:
