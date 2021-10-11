@@ -49,6 +49,8 @@ class rpb_dqn(res_prebuffer):
         if self.debugging:
             self.tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=self.log_dir, histogram_freq=1,
                                                                        write_graph=True, write_images=True)
+        else:
+            self.tensorboard_callback = None
         self.reward_fn = reward_fn
         self.starting_episode = starting_episode
         self.current_episode = starting_episode
@@ -114,7 +116,7 @@ class rpb_dqn(res_prebuffer):
         batch_size = len(actionX)
         future_rewards = self.target_model.predict(inputX)            
         updated_q_values = np.array(batch.rewards).reshape(-1,1) + self.gamma * future_rewards
-        return self.current_model.fit(inputX, updated_q_values, batch_size, callbacks=[self.tensorboard_callback])
+        return self.current_model.fit(inputX, updated_q_values, batch_size, callbacks=[self.tensorboard_callback] if self.tensorboard_callback is not None else [])
         
         
 

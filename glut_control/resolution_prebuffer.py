@@ -152,7 +152,7 @@ class gnn_model_zero():
             self.state_input_size = (max_nodes)**2 + (max_nodes*num_features) # We'll feed in KB formulae one at a time
             self.state_input = keras.Input(shape=(None, self.state_input_size), name="state_input")
             #self.state_embedding = keras.layers.Embedding(1000, 512)(self.state_input)
-            self.state_features = 0*keras.layers.LSTM(128)(self.state_input)
+            self.state_features = 0.1*keras.layers.LSTM(16)(self.state_input)
             self.emb_input = 0.9*keras.layers.concatenate([self.state_features, self.model_input])
         else:
             self.emb_input = self.model_input
