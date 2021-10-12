@@ -5,7 +5,7 @@ _CPU_ONLY=True
 
 import random
 import os
-from guppy import hpy
+#from guppy import hpy
 
 if _CPU_ONLY:
     os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
@@ -19,7 +19,7 @@ from importlib import reload
 import alma
 from alma_utils import *
 import argparse
-from memory_profiler import profile
+#from memory_profiler import profile
 import random
 
 #os.environ["LD_LIBRARY_PATH"] = "/home/justin/alma-2.0/"
