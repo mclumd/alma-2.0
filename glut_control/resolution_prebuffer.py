@@ -129,7 +129,7 @@ class history_struct:
 
 
 class gnn_model_zero():
-    def __init__(self, max_nodes=20, num_features=20, use_state = False, debugging=False):
+    def __init__(self, max_nodes=20, num_features=20, use_state = False, debugging=False, tb_log_dir = "/tmp"):
         #gnn_model.__init__(self, max_nodes)
         self.debugging = debugging
         input_size = (2*max_nodes)**2 + (2*max_nodes*num_features)
@@ -183,7 +183,9 @@ class gnn_model_zero():
         self.optimizer = Adam(learning_rate=0.00025, clipnorm=1.0)
         self.loss_fn = keras.losses.Huber()
         self.acc_fn = BinaryAccuracy()
-
+        if self.debugging:
+            self.train_loss =  tf.keras.metrics.Mean('train_loss', dtype=tf.float32)
+            self.train_summary_writer = tf.summary.create_file_writer(tb_log_dir)
 
     def tb_summary(self, x):
         tf.summary.histogram('x', x)
