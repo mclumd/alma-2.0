@@ -178,7 +178,8 @@ class gnn_model_zero():
                 inputs = [self.model_input],
                 outputs = [self.output]
             )
-        self.model.compile(loss='mse', optimizer='adam', metrics=['mse'], run_eagerly=self.debugging)
+        #self.model.compile(loss='mse', optimizer='adam', metrics=['mse'], run_eagerly=self.debugging)
+        self.model.compile(loss='mse', optimizer='adam', metrics=['mse'], run_eagerly=False)
             
         self.optimizer = Adam(learning_rate=0.00025, clipnorm=1.0)
         self.loss_fn = keras.losses.Huber()

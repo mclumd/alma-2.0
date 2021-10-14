@@ -23,6 +23,12 @@ import time, datetime
 import psutil
 import tensorflow as tf
 
+physical_devices = tf.config.list_physical_devices('GPU') 
+tf.config.experimental.set_memory_growth(physical_devices[0], True)
+tf.config.experimental.set_memory_growth(physical_devices[1], True)
+
+
+
 test_params = {
     'explosion_size': 1000,
     'alma_heap_print_size': 100
@@ -34,6 +40,9 @@ def res_task_lits(lit_str):
     L = lit_str.split('\n')[:-1]
     return [ x.split('\t') for x in L]
 
+def print_gpu_mem():
+    print(tf.config.experimental.get_memory_info('GPU:0'))
+    print(tf.config.experimental.get_memory_info('GPU:1'))
 #@profile
 def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000, train_interval=500,
           update_target_network_interval=10000, debug_level=0, gnn_nodes = 20,
@@ -69,7 +78,7 @@ def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000,
     else:
         reward_fn = get_rewards_test1
     network = rpb_dqn(100, reward_fn, subjects, [], use_gnn=use_gnn,
-                      gnn_nodes=gnn_nodes, use_state=True, debugging=debugging) if prior_network is None else prior_network    # Use max_reward of 10K
+                      gnn_nodes=gnn_nodes, use_state=False, debugging=debugging) if prior_network is None else prior_network    # Use max_reward of 10K
     replay_buffer = rl_dataset.experience_replay_buffer()
     start_time = time.time()
     if tboard:
@@ -81,10 +90,18 @@ def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000,
         #del alma
         reload(alma)
         alma_inst,res = alma.init(1,kb, '0', 1, 1000, [], [])
+        print("Pre-collect")
+        print_gpu_mem()
         rl_utils.collect_episode(network, replay_buffer, alma_inst, num_steps)
         alma.halt(alma_inst)
+        print("Post-collect")
+        print_gpu_mem()
         if (episode % train_interval == 0) and (episode > 0):
+            print("Pre-train")
+            print_gpu_mem()
             rl_utils.replay_train(network, replay_buffer, exhaustive_training)
+            print("Post-train")
+            print_gpu_mem()
             if episode % update_target_network_interval == 0:
                 print("Updating at: {}  \t Memory usage: {} \t   Replay buffer size: {} ".format( time.time() - start_time,
                                                                                                   psutil.Process().memory_info().rss / (1024 * 1024),
@@ -96,7 +113,11 @@ def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000,
 
 
         if episode % testing_interval == 0:
+            print("Pre-test")
+            print_gpu_mem()
             res = test(network, kb, num_steps)
+            print("Post-test")
+            print_gpu_mem()
             print("-"*80)
             print("Rewards at episode {} (epsilon=={}): {}".format(episode, network.epsilon, res['rewards']))
             network.model_save(model_name + "_ckpt" + str(episode))

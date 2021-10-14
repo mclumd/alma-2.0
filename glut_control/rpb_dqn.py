@@ -48,7 +48,7 @@ class rpb_dqn(res_prebuffer):
 
         if self.debugging:
             self.tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=self.log_dir, histogram_freq=1,
-                                                                       write_graph=True, write_images=True)
+                                                                       write_graph=True, write_images=True, profile_batch='500,520')
         else:
             self.tensorboard_callback = None
         self.reward_fn = reward_fn
