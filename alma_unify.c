@@ -285,7 +285,6 @@ binding* bindings_contain(binding_list *theta, alma_variable *var) {
 
 static int occurs_check(binding_list *theta, alma_variable *var, alma_term *x);
 
-
 static int occurs_check_var(binding_list *theta, alma_variable *var, alma_variable *x) {
   if (x->id == var->id)
     return 1;

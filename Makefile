@@ -7,11 +7,8 @@ TOMMY = tommyds/tommyds/
 
 all: alma.x shared python
 
-alma.x: alma.o tommyarray.o tommyhashlin.o tommyhash.o tommylist.o mpc.o alma_parser.o alma_formula.o alma_kb.o alma_unify.o alma_command.o alma_print.o alma_proc.o alma_fif.o alma_backsearch.o
-	$(CC) alma.o tommyarray.o tommyhashlin.o tommyhash.o tommylist.o mpc.o alma_parser.o alma_formula.o alma_kb.o alma_unify.o alma_command.o alma_print.o alma_proc.o alma_fif.o alma_backsearch.o -o alma.x
-
-alma.o: alma.c alma_command.h alma_kb.h alma_print.h
-	$(CC) $(CFLAGS) -c alma.c
+alma.x: tommyarray.o tommyhashlin.o tommyhash.o tommylist.o mpc.o alma.o alma_parser.o alma_formula.o alma_kb.o alma_unify.o alma_command.o alma_print.o alma_proc.o alma_fif.o alma_backsearch.o
+	$(CC) tommyarray.o tommyhashlin.o tommyhash.o tommylist.o mpc.o alma.o alma_parser.o alma_formula.o alma_kb.o alma_unify.o alma_command.o alma_print.o alma_proc.o alma_fif.o alma_backsearch.o -o alma.x
 
 tommyhashlin.o: $(TOMMY)tommyhash.c $(TOMMY)tommyhashlin.c $(TOMMY)tommytypes.h $(TOMMY)tommyhash.h $(TOMMY)tommylist.h $(TOMMY)tommyhashlin.h
 	$(CC) $(CFLAGS) -c $(TOMMY)tommyhashlin.c
@@ -31,7 +28,10 @@ tommy: $(TOMMY)tommytypes.h $(TOMMY)tommyhash.h $(TOMMY)tommylist.h $(TOMMY)tomm
 mpc.o: mpc/mpc.c mpc/mpc.h
 	$(CC) $(CFLAGS) -c mpc/mpc.c
 
-alma_command.o: alma_command.c alma_command.h alma_kb.h alma_formula.h alma_backsearch.h alma_fif.h alma_parser.h alma_print.h tommy.h
+alma.o: alma.c alma.h alma_command.h alma_print.h
+	$(CC) $(CFLAGS) -c alma.c
+
+alma_command.o: alma_command.c alma_command.h alma.h alma_kb.h alma_formula.h alma_backsearch.h alma_fif.h alma_parser.h alma_print.h tommy.h
 	$(CC) $(CFLAGS) -c alma_command.c
 
 alma_parser.o: alma_parser.c mpc/mpc.h alma_parser.h
@@ -40,7 +40,7 @@ alma_parser.o: alma_parser.c mpc/mpc.h alma_parser.h
 alma_formula.o: alma_formula.c mpc/mpc.h alma_parser.h alma_print.h alma_kb.h alma_formula.h
 	$(CC) $(CFLAGS) -c alma_formula.c
 
-alma_kb.o: alma_kb.c alma_unify.h alma_formula.h alma_print.h alma_kb.h alma_proc.h alma_backsearch.h alma_fif.h tommy.h
+alma_kb.o: alma_kb.c alma_unify.h alma_formula.h alma_print.h alma_kb.h alma_backsearch.h alma_fif.h tommy.h
 	$(CC) $(CFLAGS) -c alma_kb.c
 
 alma_unify.o: alma_unify.c alma_unify.h alma_fif.h alma_formula.h alma_kb.h

@@ -32,7 +32,7 @@ static void collect_variables(alma_term *term, binding_list *b, int quote_level,
 }
 
 // Initializes backward search with negation of clause argument
-void backsearch_from_clause(kb *collection, clause *c) {
+void backsearch_from_clause(tommy_list *backsearch_tasks, clause *c) {
   backsearch_task *bt = malloc(sizeof(*bt));
   bt->clause_count = 0;
   c->index = --bt->clause_count;
@@ -73,10 +73,10 @@ void backsearch_from_clause(kb *collection, clause *c) {
   tommy_array_insert(&bt->new_clause_bindings, negated_bindings);
 
   tommy_array_init(&bt->to_resolve);
-  tommy_list_insert_tail(&collection->backsearch_tasks, &bt->node, bt);
+  tommy_list_insert_tail(backsearch_tasks, &bt->node, bt);
 }
 
-static clause* backsearch_duplicate_check(kb *collection, backsearch_task *task, clause *c) {
+static clause* backsearch_duplicate_check(backsearch_task *task, clause *c) {
   for (int i = 0; i < tommy_array_size(&task->clauses); i++) {
     clause *compare = tommy_array_get(&task->clauses, i);
     if (compare->tag == c->tag && !clauses_differ(c, compare))
@@ -86,13 +86,13 @@ static clause* backsearch_duplicate_check(kb *collection, backsearch_task *task,
 }
 
 // Given particular task, populate to_resolve based on each clause
-void generate_backsearch_tasks(kb *collection, backsearch_task *bt, kb_str *buf) {
+void generate_backsearch_tasks(kb *collection, long time, backsearch_task *bt) {
   for (int i = 0; i < tommy_array_size(&bt->new_clauses); i++) {
     clause *c = tommy_array_get(&bt->new_clauses, i);
-    clause *dupe = duplicate_check(collection, c, 0);
+    clause *dupe = duplicate_check(collection, time, c, 0);
     int bs_dupe = 0;
     if (dupe == NULL) {
-      dupe = backsearch_duplicate_check(collection, bt, c);
+      dupe = backsearch_duplicate_check(bt, c);
       bs_dupe = 1;
     }
 
@@ -100,8 +100,8 @@ void generate_backsearch_tasks(kb *collection, backsearch_task *bt, kb_str *buf)
       c->index = --bt->clause_count;
 
       // Obtain tasks between new backward search clauses and KB items
-      make_res_tasks(collection, c, c->pos_count, c->pos_lits, &collection->neg_map, &bt->to_resolve, 1, 0);
-      make_res_tasks(collection, c, c->neg_count, c->neg_lits, &collection->pos_map, &bt->to_resolve, 1, 1);
+      make_res_tasks(c, c->pos_count, c->pos_lits, &collection->neg_map, &bt->to_resolve, 1, 0);
+      make_res_tasks(c, c->neg_count, c->neg_lits, &collection->pos_map, &bt->to_resolve, 1, 1);
 
       // Obtain tasks between pairs of backsearch clauses
       // Currently a linear scan, perhaps to adjust later
@@ -109,9 +109,9 @@ void generate_backsearch_tasks(kb *collection, backsearch_task *bt, kb_str *buf)
         clause *jth = tommy_array_get(&bt->clauses, j);
 
         for (int k = 0; k < c->pos_count; k++)
-          make_single_task(collection, c, c->pos_lits[k], jth, &bt->to_resolve, 1, 0);
+          make_single_task(c, c->pos_lits[k], jth, &bt->to_resolve, 1, 0);
         for (int k = 0; k < c->neg_count; k++)
-          make_single_task(collection, c, c->neg_lits[k], jth, &bt->to_resolve, 1, 1);
+          make_single_task(c, c->neg_lits[k], jth, &bt->to_resolve, 1, 1);
       }
 
       tommy_array_insert(&bt->clauses, c);
@@ -124,7 +124,7 @@ void generate_backsearch_tasks(kb *collection, backsearch_task *bt, kb_str *buf)
     }
     else {
       if (bs_dupe)
-        transfer_parent(collection, dupe, c, 0, buf);
+        transfer_parent(dupe, c, 0);
       cleanup_bindings(tommy_array_get(&bt->new_clause_bindings, i));
       free_clause(c);
     }
@@ -136,11 +136,11 @@ void generate_backsearch_tasks(kb *collection, backsearch_task *bt, kb_str *buf)
 }
 
 // Advances by resolving available tasks
-void process_backsearch_tasks(kb *collection, kb_str *buf) {
-  tommy_node *curr = tommy_list_head(&collection->backsearch_tasks);
+void process_backsearch_tasks(kb *collection, long time, tommy_list *backsearch_tasks, kb_logger *logger) {
+  tommy_node *curr = tommy_list_head(backsearch_tasks);
   while (curr) {
     backsearch_task *t = curr->data;
-    process_res_tasks(collection, &t->to_resolve, &t->new_clauses, t, buf);
+    process_res_tasks(collection, time, &t->to_resolve, &t->new_clauses, t, logger);
     curr = curr->next;
   }
 }

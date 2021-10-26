@@ -4,6 +4,7 @@
 #include "tommy.h"
 #include "alma_formula.h"
 #include "alma_kb.h"
+#include "alma_proc.h"
 
 typedef struct fif_info {
   int premise_count;
@@ -41,16 +42,16 @@ typedef struct fif_task {
   tommy_node node; // For storage in fif_mapping's list
 } fif_task;
 
-void fif_task_map_init(kb *collection, clause *c, int init_to_unify);
-void fif_tasks_from_clause(kb *collection, clause *c);
-void process_fif_tasks(kb *collection, kb_str *buf);
+void fif_task_map_init(kb *collection, alma_proc *procs, tommy_hashlin *fif_tasks, clause *c, int init_to_unify);
+void fif_tasks_from_clause(tommy_hashlin *fif_tasks, clause *c);
+void process_fif_tasks(kb *collection, alma_proc *procs, kb_logger *logger);
 
 void fif_to_front(tommy_array *clauses);
 void free_fif_mapping(void *arg);
 void free_fif_task(fif_task *task);
 void free_fif_task_mapping(void *arg);
 alma_function* fif_access(clause *c, int i);
-void remove_fif_singleton_tasks(kb *collection, clause *c);
+void remove_fif_singleton_tasks(tommy_hashlin *fif_tasks, tommy_hashlin *fif_map, clause *c);
 
 int fifm_compare(const void *arg, const void *obj);
 int fif_taskm_compare(const void *arg, const void *obj);

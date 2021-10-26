@@ -29,9 +29,9 @@ typedef struct backsearch_task {
   tommy_node node;
 } backsearch_task;
 
-void backsearch_from_clause(kb *collection, clause *c);
-void generate_backsearch_tasks(kb *collection, backsearch_task *bt, kb_str *buf);
-void process_backsearch_tasks(kb *collection, kb_str *buf);
+void backsearch_from_clause(tommy_list *backsearch_tasks, clause *c);
+void generate_backsearch_tasks(kb *collection, long time, backsearch_task *bt);
+void process_backsearch_tasks(kb *collection, long time, tommy_list *backsearch_tasks, kb_logger *logger);
 void backsearch_halt(backsearch_task *t);
 
 int bm_compare(const void *arg, const void *obj);

@@ -22,51 +22,21 @@ static char* now(long t) {
   return str;
 }
 
-// Caller will need to free collection with kb_halt
-void kb_init(kb **collection, char **files, int file_count, char *agent, char *trialnum, char *log_dir,  int verbose, kb_str *buf, int logon) {
-  // Allocate and initialize
-  *collection = malloc(sizeof(**collection));
-  kb *collec = *collection;
+// Caller will need to free reasoner with alma_halt
+void alma_init(alma *reasoner, char **files, int file_count, char *agent, char *trialnum, char *log_dir,  int verbose, kb_str *buf, int logon) {
+  reasoner->time = 0;
+  reasoner->prev = reasoner->now = NULL;
 
-  collec->verbose = verbose;
-
-  collec->size = 0;
-  collec->time = 0;
-  collec->prev = collec->now = NULL;
-  collec->idling = 0;
-  collec->variable_id_count = 0;
-  collec->next_index = 0;
-
-  tommy_array_init(&collec->new_clauses);
-  tommy_array_init(&collec->timestep_delay_clauses);
-  tommy_list_init(&collec->clauses);
-  tommy_hashlin_init(&collec->index_map);
-  tommy_hashlin_init(&collec->pos_map);
-  tommy_list_init(&collec->pos_list);
-  tommy_hashlin_init(&collec->neg_map);
-  tommy_list_init(&collec->neg_list);
-  tommy_hashlin_init(&collec->fif_map);
-
-  tommy_array_init(&collec->res_tasks);
-  tommy_hashlin_init(&collec->fif_tasks);
-  tommy_list_init(&collec->backsearch_tasks);
-
-  tommy_array_init(&collec->distrust_set);
-  tommy_array_init(&collec->distrust_parents);
-  tommy_array_init(&collec->handle_set);
-  tommy_array_init(&collec->handle_parents);
-  tommy_array_init(&collec->retire_set);
-  tommy_array_init(&collec->retire_parents);
-
-  tommy_array_init(&collec->pos_lit_reinstates);
-  tommy_array_init(&collec->neg_lit_reinstates);
-
-  tommy_array_init(&collec->trues);
-
+  reasoner->idling = 0;
+  reasoner->core_kb = malloc(sizeof(*reasoner->core_kb));
+  kb_init(reasoner->core_kb, verbose);
+  reasoner->agents_count = 0;
+  reasoner->agents_kb = NULL;
+  tommy_list_init(&reasoner->backsearch_tasks);
   const alma_proc procs[17] = {{"neg_int", 1}, {"neg_int_spec", 1}, {"neg_int_gen", 1}, {"pos_int", 1}, {"pos_int_spec", 1},
                    {"pos_int_gen", 1}, {"acquired", 2}, {"pos_int_past", 3}, {"neg_int_past", 3}, {"ancestor", 3}, {"non_ancestor", 3},
                    {"parent", 3}, {"parents_defaults", 2}, {"parent_non_default", 2}, {"less_than", 2}, {"quote_cons", 2}, {"not_equal", 2}};
-  memcpy(collec->procs, procs, sizeof(procs));
+  memcpy(reasoner->procs, procs, sizeof(procs));
 
   parse_init();
 
@@ -97,11 +67,15 @@ void kb_init(kb **collection, char **files, int file_count, char *agent, char *t
     logname[log_dir_len+4+agentlen+1+triallen] = '-';
     strncpy(logname+log_dir_len+6+agentlen+triallen, time, 24);
     strcpy(logname+log_dir_len+6+agentlen+triallen+timelen, "-log.txt");
-    collec->almalog = fopen(logname, "w");
+    reasoner->almalog = fopen(logname, "w");
     free(logname);
   } else {
-    collec->almalog = NULL;
+    reasoner->almalog = NULL;
   }
+
+  kb_logger logger;
+  logger.log = reasoner->almalog;
+  logger.buf = buf;
 
   // Given a file argument, obtain other initial clauses from
   if (files != NULL) {
@@ -109,14 +83,14 @@ void kb_init(kb **collection, char **files, int file_count, char *agent, char *t
       alma_node *trees;
       int num_trees;
 
-      if (formulas_from_source(files[i], 1, &num_trees, &trees, collec, buf)) {
-        nodes_to_clauses(collec, trees, num_trees, &collec->new_clauses, 0, buf);
-        fif_to_front(&collec->new_clauses);
+      if (formulas_from_source(files[i], 1, &num_trees, &trees,  &logger)) {
+        nodes_to_clauses(reasoner->core_kb, trees, num_trees, &reasoner->core_kb->new_clauses, 0, &logger);
+        fif_to_front(&reasoner->core_kb->new_clauses);
       }
       // If any file cannot parse, cleanup and exit
       else {
         free(files);
-        kb_halt(collec);
+        alma_halt(reasoner);
         exit(0);
       }
     }
@@ -127,27 +101,27 @@ void kb_init(kb **collection, char **files, int file_count, char *agent, char *t
     strcpy(sentence, "agentname(");
     strcpy(sentence + 10, agent);
     strcpy(sentence + 10 + namelen, ").");
-    assert_formula(collec, sentence, 0, buf);
+    assert_formula(reasoner->core_kb, sentence, 0, &logger);
     free(sentence);
   }
 
-  collec->prev = now(collec->time);
-  assert_formula(collec, collec->prev, 0, buf);
+  reasoner->prev = now(reasoner->time);
+  assert_formula(reasoner->core_kb, reasoner->prev, 0, &logger);
 
   // Insert starting clauses
-  process_new_clauses(collec, buf, 0);
+  process_new_clauses(reasoner->core_kb, reasoner->procs, reasoner->time, &logger, 0);
   // Second pass of process_new_clauses for late-added meta-formulas like contra from end of first pass
-  process_new_clauses(collec, buf, 0);
+  process_new_clauses(reasoner->core_kb, reasoner->procs, reasoner->time, &logger, 0);
 
   // Generate starting tasks
-  tommy_node *i = tommy_list_head(&collec->clauses);
+  tommy_node *i = tommy_list_head(&reasoner->core_kb->clauses);
   while (i) {
     clause *c = ((index_mapping*)i->data)->value;
     if (c->tag == FIF)
-      fif_task_map_init(collec, c, 0);
+      fif_task_map_init(reasoner->core_kb, reasoner->procs, &reasoner->core_kb->fif_tasks, c, 0);
     else {
-      res_tasks_from_clause(collec, c, 0);
-      fif_tasks_from_clause(collec, c);
+      res_tasks_from_clause(reasoner->core_kb, c, 0);
+      fif_tasks_from_clause(&reasoner->core_kb->fif_tasks, c);
     }
     i = i->next;
   }
@@ -156,9 +130,10 @@ void kb_init(kb **collection, char **files, int file_count, char *agent, char *t
 // System idles if there are no resolution tasks, backsearch tasks, or to_unify fif values
 // First of these is true when no new clauses (source of res tasks) exist
 // To_unify values are all removed in current implementation each step from exhaustive fif
-static int idling_check(kb *collection, int new_clauses) {
+// Thus, answer is either from having new_clauses OR finding tasks in backsearch
+static int idling_check(alma *reasoner, int new_clauses) {
   if (!new_clauses) {
-    tommy_node *i = tommy_list_head(&collection->backsearch_tasks);
+    tommy_node *i = tommy_list_head(&reasoner->backsearch_tasks);
     while (i) {
       backsearch_task *bt = i->data;
       if (tommy_array_size(&bt->to_resolve) > 0)
@@ -170,139 +145,132 @@ static int idling_check(kb *collection, int new_clauses) {
   return 0;
 }
 
-void kb_step(kb *collection, kb_str *buf) {
-  collection->time++;
+void alma_step(alma *reasoner, kb_str *buf) {
+  kb_logger logger;
+  logger.log = reasoner->almalog;
+  logger.buf = buf;
+
+  reasoner->time++;
 
   // Move delayed clauses into new_clauses
-  for (tommy_size_t i = 0; i < tommy_array_size(&collection->timestep_delay_clauses); i++) {
-    clause *c = tommy_array_get(&collection->timestep_delay_clauses, i);
-    tommy_array_insert(&collection->new_clauses, c);
+  for (tommy_size_t i = 0; i < tommy_array_size(&reasoner->core_kb->timestep_delay_clauses); i++) {
+    clause *c = tommy_array_get(&reasoner->core_kb->timestep_delay_clauses, i);
+    tommy_array_insert(&reasoner->core_kb->new_clauses, c);
   }
-  tommy_array_done(&collection->timestep_delay_clauses);
-  tommy_array_init(&collection->timestep_delay_clauses);
+  tommy_array_done(&reasoner->core_kb->timestep_delay_clauses);
+  tommy_array_init(&reasoner->core_kb->timestep_delay_clauses);
 
-  process_res_tasks(collection, &collection->res_tasks, &collection->new_clauses, NULL, buf);
-  process_fif_tasks(collection, buf);
-  process_backsearch_tasks(collection, buf);
+  process_res_tasks(reasoner->core_kb, reasoner->time, &reasoner->core_kb->res_tasks, &reasoner->core_kb->new_clauses, NULL, &logger);
+  process_fif_tasks(reasoner->core_kb, reasoner->procs, &logger);
+  process_backsearch_tasks(reasoner->core_kb, reasoner->time, &reasoner->backsearch_tasks, &logger);
 
-  int newc = tommy_array_size(&collection->new_clauses) > 0;
-  process_new_clauses(collection, buf, 1);
+  int newc = tommy_array_size(&reasoner->core_kb->new_clauses) > 0;
+  process_new_clauses(reasoner->core_kb, reasoner->procs, reasoner->time, &logger, 1);
 
   // New clock rules go last
-  collection->now = now(collection->time);
-  assert_formula(collection, collection->now, 0, buf);
-  delete_formula(collection, collection->prev, 0, buf);
-  free(collection->prev);
-  collection->prev = collection->now;
+  reasoner->now = now(reasoner->time);
+  assert_formula(reasoner->core_kb, reasoner->now, 0, &logger);
+  delete_formula(reasoner->core_kb, reasoner->time, reasoner->prev, 0, &logger);
+  free(reasoner->prev);
+  reasoner->prev = reasoner->now;
 
   // Second pass of process_new_clauses covers clock rules as well as late-added meta-formulas like contra from end of first pass
-  process_new_clauses(collection, buf, 1);
+  process_new_clauses(reasoner->core_kb, reasoner->procs, reasoner->time, &logger, 1);
 
-  tommy_node *i = tommy_list_head(&collection->backsearch_tasks);
+  tommy_node *i = tommy_list_head(&reasoner->backsearch_tasks);
   while (i) {
-    generate_backsearch_tasks(collection, i->data, buf);
+    generate_backsearch_tasks(reasoner->core_kb, reasoner->time, i->data);
     i = i->next;
   }
 
-  collection->idling = idling_check(collection, newc);
-  if (collection->idling)
-    tee_alt("-a: Idling...\n", collection, buf);
+  reasoner->idling = idling_check(reasoner, newc);
+  if (reasoner->idling)
+    tee_alt("-a: Idling...\n", &logger);
 }
 
-void kb_print(kb *collection, kb_str *buf) {
-  //  char temp_buf[1000];
-  //  tee_alt("in kb_print:\n",buf);
+void alma_print(alma *reasoner, kb_str *buf) {
+  kb_logger logger;
+  logger.log = reasoner->almalog;
+  logger.buf = buf;
 
-  //  sprintf(temp_buf," %p:%p",(void *)buf,(void *)temp);
-  //  strcpy(&(buf->buffer[buf->size]),temp_buf);
-  //  buf->size += strlen(temp_buf);
-  tommy_node *i = tommy_list_head(&collection->clauses);
-  while (i) {
-    index_mapping *data = i->data;
-    if (collection->verbose || data->value->dirty_bit) {
-      tee_alt("%ld: ", collection, buf, data->key);
-      clause_print(collection, data->value, buf);
-      tee_alt("\n", collection, buf);
-    }
-    i = i->next;
-  }
+  kb_print(reasoner->core_kb, &logger);
 
-  i = tommy_list_head(&collection->backsearch_tasks);
+  tommy_node* i = tommy_list_head(&reasoner->backsearch_tasks);
   if (i) {
-    tee_alt("Back searches:\n", collection, buf);
+    tee_alt("Back searches:\n", &logger);
     for (int count = 0; i != NULL; i = i->next, count++) {
-      tee_alt("%d\n", collection, buf, count);
+      tee_alt("%d\n",  &logger, count);
       backsearch_task *t = i->data;
       for (tommy_size_t j = 0; j < tommy_array_size(&t->clauses); j++) {
         clause *c = tommy_array_get(&t->clauses, j);
-        tee_alt("%ld: ", collection, buf, c->index);
-        clause_print(collection, c, buf);
+        tee_alt("%ld: ", &logger, c->index);
+        clause_print(c, &logger);
         binding_mapping *m = tommy_hashlin_search(&t->clause_bindings, bm_compare, &c->index, tommy_hash_u64(0, &c->index, sizeof(c->index)));
         if (m != NULL) {
-          tee_alt(" (bindings: ", collection, buf);
-          print_bindings(collection, m->bindings, 0, 0, buf);
-          tee_alt(")", collection, buf);
+          tee_alt(" (bindings: ",  &logger);
+          print_bindings(m->bindings, 0, 0,  &logger);
+          tee_alt(")", &logger);
         }
-        tee_alt("\n", collection, buf);
+        tee_alt("\n", &logger);
       }
     }
   }
-  tee_alt("\n", collection, buf);
+  tee_alt("\n", &logger);
   if (logs_on) {
-    fflush(collection->almalog);
+    fflush(reasoner->almalog);
   }
 }
 
-void kb_halt(kb *collection) {
+void alma_halt(alma *reasoner) {
   // now and prev alias at this point, only free one
-  free(collection->now);
-  if (collection->now == NULL)
-    free(collection->prev);
+  free(reasoner->now);
+  if (reasoner->now == NULL)
+    free(reasoner->prev);
 
-  for (tommy_size_t i = 0; i < tommy_array_size(&collection->new_clauses); i++)
-    free_clause(tommy_array_get(&collection->new_clauses, i));
-  tommy_array_done(&collection->new_clauses);
-  tommy_array_done(&collection->timestep_delay_clauses);
+  for (tommy_size_t i = 0; i < tommy_array_size(&reasoner->core_kb->new_clauses); i++)
+    free_clause(tommy_array_get(&reasoner->core_kb->new_clauses, i));
+  tommy_array_done(&reasoner->core_kb->new_clauses);
+  tommy_array_done(&reasoner->core_kb->timestep_delay_clauses);
 
-  tommy_array_done(&collection->distrust_set);
-  tommy_array_done(&collection->distrust_parents);
-  tommy_array_done(&collection->handle_set);
-  tommy_array_done(&collection->handle_parents);
-  tommy_array_done(&collection->retire_set);
-  tommy_array_done(&collection->retire_parents);
+  tommy_array_done(&reasoner->core_kb->distrust_set);
+  tommy_array_done(&reasoner->core_kb->distrust_parents);
+  tommy_array_done(&reasoner->core_kb->handle_set);
+  tommy_array_done(&reasoner->core_kb->handle_parents);
+  tommy_array_done(&reasoner->core_kb->retire_set);
+  tommy_array_done(&reasoner->core_kb->retire_parents);
 
-  tommy_array_done(&collection->pos_lit_reinstates);
-  tommy_array_done(&collection->neg_lit_reinstates);
+  tommy_array_done(&reasoner->core_kb->pos_lit_reinstates);
+  tommy_array_done(&reasoner->core_kb->neg_lit_reinstates);
 
-  tommy_array_done(&collection->trues);
+  tommy_array_done(&reasoner->core_kb->trues);
 
-  tommy_node *curr = tommy_list_head(&collection->clauses);
+  tommy_node *curr = tommy_list_head(&reasoner->core_kb->clauses);
   while (curr) {
     index_mapping *data = curr->data;
     curr = curr->next;
     free_clause(data->value);
     free(data);
   }
-  tommy_hashlin_done(&collection->index_map);
+  tommy_hashlin_done(&reasoner->core_kb->index_map);
 
-  tommy_list_foreach(&collection->pos_list, free_predname_mapping);
-  tommy_hashlin_done(&collection->pos_map);
+  tommy_list_foreach(&reasoner->core_kb->pos_list, free_predname_mapping);
+  tommy_hashlin_done(&reasoner->core_kb->pos_map);
 
-  tommy_list_foreach(&collection->neg_list, free_predname_mapping);
-  tommy_hashlin_done(&collection->neg_map);
+  tommy_list_foreach(&reasoner->core_kb->neg_list, free_predname_mapping);
+  tommy_hashlin_done(&reasoner->core_kb->neg_map);
 
-  tommy_hashlin_foreach(&collection->fif_map, free_fif_mapping);
-  tommy_hashlin_done(&collection->fif_map);
+  tommy_hashlin_foreach(&reasoner->core_kb->fif_map, free_fif_mapping);
+  tommy_hashlin_done(&reasoner->core_kb->fif_map);
 
-  // Res task pointers are aliases to those freed from collection->clauses, so only free overall task here
-  for (tommy_size_t i = 0; i < tommy_array_size(&collection->res_tasks); i++)
-    free(tommy_array_get(&collection->res_tasks, i));
-  tommy_array_done(&collection->res_tasks);
+  // Res task pointers are aliases to those freed from reasoner->clauses, so only free overall task here
+  for (tommy_size_t i = 0; i < tommy_array_size(&reasoner->core_kb->res_tasks); i++)
+    free(tommy_array_get(&reasoner->core_kb->res_tasks, i));
+  tommy_array_done(&reasoner->core_kb->res_tasks);
 
-  tommy_hashlin_foreach(&collection->fif_tasks, free_fif_task_mapping);
-  tommy_hashlin_done(&collection->fif_tasks);
+  tommy_hashlin_foreach(&reasoner->core_kb->fif_tasks, free_fif_task_mapping);
+  tommy_hashlin_done(&reasoner->core_kb->fif_tasks);
 
-  curr = tommy_list_head(&collection->backsearch_tasks);
+  curr = tommy_list_head(&reasoner->backsearch_tasks);
   while (curr) {
     backsearch_task *data = curr->data;
     curr = curr->next;
@@ -310,35 +278,47 @@ void kb_halt(kb *collection) {
   }
 
   if (logs_on) {
-    fclose(collection->almalog);
+    fclose(reasoner->almalog);
   }
 
-  free(collection);
+  free(reasoner);
 
   parse_cleanup();
 }
 
-void kb_assert(kb *collection, char *string, kb_str *buf) {
-  assert_formula(collection, string, 1, buf);
+void alma_assert(alma *reasoner, char *string, kb_str *buf) {
+  kb_logger logger;
+  logger.log = reasoner->almalog;
+  logger.buf = buf;
+  assert_formula(reasoner->core_kb, string, 1, &logger);
 }
 
-void kb_remove(kb *collection, char *string, kb_str *buf) {
-  //  tee_alt("ALMA: IN KB REMOVE\n",buf);
-  delete_formula(collection, string, 1, buf);
+void alma_remove(alma *reasoner, char *string, kb_str *buf) {
+  kb_logger logger;
+  logger.log = reasoner->almalog;
+  logger.buf = buf;
+  delete_formula(reasoner->core_kb, reasoner->time, string, 1, &logger);
 }
 
-void kb_update(kb *collection, char *string, kb_str *buf) {
-  update_formula(collection, string, buf);
+void alma_update(alma *reasoner, char *string, kb_str *buf) {
+  kb_logger logger;
+  logger.log = reasoner->almalog;
+  logger.buf = buf;
+  update_formula(reasoner->core_kb, reasoner->time, string, &logger);
 }
 
-void kb_observe(kb *collection, char *string, kb_str *buf) {
+void alma_observe(alma *reasoner, char *string, kb_str *buf) {
+  kb_logger logger;
+  logger.log = reasoner->almalog;
+  logger.buf = buf;
+
   // Parse string into clauses
   alma_node *formulas;
   int formula_count;
-  if (formulas_from_source(string, 0, &formula_count, &formulas, collection, buf)) {
+  if (formulas_from_source(string, 0, &formula_count, &formulas, &logger)) {
     tommy_array arr;
     tommy_array_init(&arr);
-    nodes_to_clauses(collection, formulas, formula_count, &arr, 0, buf);
+    nodes_to_clauses(reasoner->core_kb, formulas, formula_count, &arr, 0, &logger);
 
     for (int i = 0; i < tommy_array_size(&arr); i++) {
       clause *c = tommy_array_get(&arr, i);
@@ -346,15 +326,15 @@ void kb_observe(kb *collection, char *string, kb_str *buf) {
         alma_function *lit = (c->pos_count == 1) ? c->pos_lits[0] : c->neg_lits[0];
         lit->term_count++;
         lit->terms = realloc(lit->terms, sizeof(*lit->terms)*lit->term_count);
-        func_from_long(lit->terms+(lit->term_count-1), collection->time+1);
-        tommy_array_insert(&collection->new_clauses, c);
-        tee_alt("-a: ", collection, buf);
-        clause_print(collection, c, buf);
-        tee_alt(" observed\n", collection, buf);
+        func_from_long(lit->terms+(lit->term_count-1), reasoner->time+1);
+        tommy_array_insert(&reasoner->core_kb->new_clauses, c);
+        tee_alt("-a: ", &logger);
+        clause_print(c, &logger);
+        tee_alt(" observed\n", &logger);
       }
       else {
-        clause_print(collection, c, buf);
-        tee_alt(" has too many literals\n", collection, buf);
+        clause_print(c, &logger);
+        tee_alt(" has too many literals\n", &logger);
         free_clause(c);
       }
     }
@@ -362,14 +342,18 @@ void kb_observe(kb *collection, char *string, kb_str *buf) {
   }
 }
 
-void kb_backsearch(kb *collection, char *string, kb_str *buf) {
+void alma_backsearch(alma *reasoner, char *string, kb_str *buf) {
+  kb_logger logger;
+  logger.log = reasoner->almalog;
+  logger.buf = buf;
+
   // Parse string into clauses
   alma_node *formulas;
   int formula_count;
-  if (formulas_from_source(string, 0, &formula_count, &formulas, collection, buf)) {
+  if (formulas_from_source(string, 0, &formula_count, &formulas, &logger)) {
     tommy_array arr;
     tommy_array_init(&arr);
-    nodes_to_clauses(collection, formulas, formula_count, &arr, 0, buf);
+    nodes_to_clauses(reasoner->core_kb, formulas, formula_count, &arr, 0, &logger);
 
     clause *c = tommy_array_get(&arr, 0);
     // Free all after first
@@ -378,15 +362,15 @@ void kb_backsearch(kb *collection, char *string, kb_str *buf) {
     tommy_array_done(&arr);
     if (c != NULL) {
       if (c->pos_count + c->neg_count > 1) {
-        tee_alt("-a: query clause has too many literals\n", collection, buf);
+        tee_alt("-a: query clause has too many literals\n", &logger);
         free_clause(c);
       }
       else {
-        collection->idling = 0;
-        backsearch_from_clause(collection, c);
-        tee_alt("-a: Backsearch initiated for ", collection, buf);
-        clause_print(collection, c, buf);
-        tee_alt("\n", collection, buf);
+        reasoner->idling = 0;
+        backsearch_from_clause(&reasoner->backsearch_tasks, c);
+        tee_alt("-a: Backsearch initiated for ", &logger);
+        clause_print(c, &logger);
+        tee_alt("\n", &logger);
       }
     }
   }

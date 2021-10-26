@@ -6,21 +6,22 @@
 #include "alma_fif.h"
 
 typedef enum introspect_kind {POS_INT_SPEC, POS_INT, POS_INT_GEN, NEG_INT_SPEC, NEG_INT, NEG_INT_GEN, ACQUIRED, POS_INT_PAST, NEG_INT_PAST} introspect_kind;
+const int NUM_PROCS = 17;
 
 // Returns a boolean value for if proc matches a procedure name
-int is_proc(alma_function *proc, kb *alma) {
-  for (int i = 0; i < sizeof(alma->procs)/sizeof(alma->procs[0]); i++)
-    if (strcmp(alma->procs[i].name, proc->name) == 0)
+int is_proc(alma_function *proc, alma_proc *procs) {
+  for (int i = 0; i < NUM_PROCS; i++)
+    if (strcmp(procs[i].name, proc->name) == 0)
       return 1;
   return 0;
 }
 
 // Returns a boolean value for all variables being bound (needed prior to executing procedure)
-int proc_bound_check(alma_function *proc, binding_list *bindings, kb *alma) {
+int proc_bound_check(alma_function *proc, binding_list *bindings, alma_proc *procs) {
   int arity = 0;
-  for (int i = 0; i < sizeof(alma->procs)/sizeof(alma->procs[0]); i++) {
-    if (strcmp(alma->procs[i].name, proc->name) == 0) {
-      arity = alma->procs[i].arity;
+  for (int i = 0; i < NUM_PROCS; i++) {
+    if (strcmp(procs[i].name, proc->name) == 0) {
+      arity = procs[i].arity;
       break;
     }
   }
@@ -134,7 +135,7 @@ static int str_to_long(char *str, long *res) {
 
 // For now, introspect fails on flagged formulas
 // It seems intuitive to reject them, since introspection is based on current knowledge
-static int introspect(alma_function *arg, binding_list *bindings, kb *alma, introspect_kind kind, fif_task *task) {
+static int introspect(alma_function *arg, binding_list *bindings, kb *alma, kb_logger *logger, introspect_kind kind, fif_task *task) {
   alma_term *query = arg->terms+0;
   binding *res;
   // Argument must be a clause quote or variable bound to one
@@ -171,25 +172,25 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *alma, intr
 
   if (alma->verbose) {
     if (kind == POS_INT_SPEC)
-      tee_alt("Performing pos_int_spec on \"", alma, NULL);
+      tee_alt("Performing pos_int_spec on \"", logger);
     else if (kind == POS_INT)
-      tee_alt("Performing pos_int on \"", alma, NULL);
+      tee_alt("Performing pos_int on \"", logger);
     else if (kind == POS_INT_GEN)
-      tee_alt("Performing pos_int_gen on \"", alma, NULL);
+      tee_alt("Performing pos_int_gen on \"", logger);
     else if (kind == NEG_INT_SPEC)
-      tee_alt("Performing neg_int_spec on \"", alma, NULL);
+      tee_alt("Performing neg_int_spec on \"", logger);
     else if (kind == NEG_INT)
-      tee_alt("Performing neg_int on \"", alma, NULL);
+      tee_alt("Performing neg_int on \"", logger);
     else if (kind == NEG_INT_GEN)
-      tee_alt("Performing neg_int_gen on \"", alma, NULL);
+      tee_alt("Performing neg_int_gen on \"", logger);
     else if (kind == ACQUIRED)
-      tee_alt("Performing acquired on \"", alma, NULL);
+      tee_alt("Performing acquired on \"", logger);
     else if (kind == POS_INT_PAST)
-      tee_alt("Performing pos_int_past on \"", alma, NULL);
+      tee_alt("Performing pos_int_past on \"", logger);
     else if (kind == NEG_INT_PAST)
-      tee_alt("Performing neg_int_past on \"", alma, NULL);
-    clause_print(alma, search_term->quote->clause_quote, NULL);
-    tee_alt("\"\n", alma, NULL);
+      tee_alt("Performing neg_int_past on \"", logger);
+    clause_print(search_term->quote->clause_quote, logger);
+    tee_alt("\"\n", logger);
   }
 
   void *mapping = clause_lookup(alma, search_term->quote->clause_quote);
@@ -222,9 +223,9 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *alma, intr
         // copy_and_quasiquote_clause may reject copying, for which would free and continue
         if (!copy_and_quasiquote_clause(ith, q->clause_quote, search_term->quote->clause_quote, kind)) {
           if (alma->verbose) {
-            tee_alt("Structure failure of \"", alma, NULL);
-            clause_print(alma, ith, NULL);
-            tee_alt("\"\n", alma, NULL);
+            tee_alt("Structure failure of \"", logger);
+            clause_print(ith, logger);
+            tee_alt("\"\n", logger);
           }
 
           free(q->clause_quote);
@@ -241,15 +242,15 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *alma, intr
       copy_bindings(copy, bindings);
 
       if (alma->verbose) {
-        tee_alt("Attempting to unify with \"", alma, NULL);
-        clause_print(alma, q->clause_quote, NULL);
-        tee_alt("\"\n", alma, NULL);
+        tee_alt("Attempting to unify with \"", logger);
+        clause_print(q->clause_quote, logger);
+        tee_alt("\"\n", logger);
       }
 
       // Returning first match based at the moment
       if (quote_term_unify(search_term->quote, q, copy)) {
         if (alma->verbose)
-          tee_alt("Unification succeeded\n", alma, NULL);
+          tee_alt("Unification succeeded\n", logger);
 
         // If an introspect call which passes in task info, add unified clause to the task
         if (task != NULL) {
@@ -298,7 +299,7 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *alma, intr
 }
 
 // ancestor(A, B) returns true if a A appears as an ancestor in any derivation of B
-static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time, binding_list *bindings, kb *alma, int neg, int parent) {
+static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time, binding_list *bindings, kb *alma, kb_logger *logger, int neg, int parent) {
   // Ensure time argument is correctly constructed: either a numeric constant, or a variable bound to one
   binding *res;
   if (time->type == VARIABLE && (res = bindings_contain(bindings, time->variable))) {
@@ -325,11 +326,11 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time,
   if (ancestor_copy->type == QUOTE && ancestor_copy->quote->type == CLAUSE &&
       descendant_copy->type == QUOTE && descendant_copy->quote->type == CLAUSE) {
     if (alma->verbose) {
-      tee_alt("Performing ancestor proc on descendant \"", alma, NULL);
-      clause_print(alma, descendant_copy->quote->clause_quote, NULL);
-      tee_alt("\" for ancestor \"", alma, NULL);
-      clause_print(alma, ancestor_copy->quote->clause_quote, NULL);
-      tee_alt("\"\n", alma, NULL);
+      tee_alt("Performing ancestor proc on descendant \"", logger);
+      clause_print(descendant_copy->quote->clause_quote, logger);
+      tee_alt("\" for ancestor \"", logger);
+      clause_print(ancestor_copy->quote->clause_quote, logger);
+      tee_alt("\"\n", logger);
     }
 
     void *mapping = clause_lookup(alma, descendant_copy->quote->clause_quote);
@@ -341,9 +342,9 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time,
         clause *ith = mapping_access(mapping, descendant_copy->quote->clause_quote->tag, i);
 
         if (alma->verbose) {
-          tee_alt("Processing \"", alma, NULL);
-          clause_print(alma, ith, NULL);
-          tee_alt("\"\n", alma, NULL);
+          tee_alt("Processing \"", logger);
+          clause_print(ith, logger);
+          tee_alt("\"\n", logger);
         }
 
         // Literal counts must match, and ancestor must be trusted or flagged for a time at or after query_time
@@ -356,7 +357,7 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time,
 
           if (quote_term_unify(descendant_copy->quote, quote_holder, desc_bindings)) {
             if (alma->verbose)
-              tee_alt("Descendant unification succeeded\n", alma, NULL);
+              tee_alt("Descendant unification succeeded\n", logger);
 
             // Frontier of parents to expand
             tommy_array queue;
@@ -392,9 +393,9 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time,
                 if (counts_match(c, ancestor_copy->quote->clause_quote)
                     && (flags_negative(c) || flag_min(c) == query_time)) {
                   if (alma->verbose) {
-                    tee_alt("Attempting to unify with \"", alma, NULL);
-                    clause_print(alma, c, NULL);
-                    tee_alt("\"\n", alma, NULL);
+                    tee_alt("Attempting to unify with \"", logger);
+                    clause_print(c, logger);
+                    tee_alt("\"\n", logger);
                   }
                   quote_holder->clause_quote = c;
 
@@ -411,9 +412,9 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time,
                   }
                 }
                 else if (alma->verbose) {
-                  tee_alt("Processing from queue \"", alma, NULL);
-                  clause_print(alma, c, NULL);
-                  tee_alt("\"\n", alma, NULL);
+                  tee_alt("Processing from queue \"", logger);
+                  clause_print(c, logger);
+                  tee_alt("\"\n", logger);
                 }
                 cleanup_bindings(anc_bindings);
 
@@ -447,9 +448,9 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time,
 
   if (alma->verbose) {
     if (has_ancestor)
-      tee_alt("Ancestor succeeded!\n", alma, NULL);
+      tee_alt("Ancestor succeeded!\n", logger);
     else
-      tee_alt("Ancestor failure\n\n", alma, NULL);
+      tee_alt("Ancestor failure\n\n", logger);
   }
 
   return has_ancestor;
@@ -508,7 +509,7 @@ static int check_default_parents(clause *c, kb *alma) {
 
 // parents_defaults(F, T) returns true if each derivation of F has a default fif as an immediate parent
 // parent_non_default(F, T) returns true if there exists a derivation of F without default fif as an immediate parent
-static int parents_defaults(alma_term *arg, alma_term *time, binding_list *bindings, kb *alma, int invert) {
+static int parents_defaults(alma_term *arg, alma_term *time, binding_list *bindings, kb *alma, kb_logger *logger, int invert) {
   // Ensure time argument is correctly constructed: either a numeric constant, or a variable bound to one
   binding *res;
   if (time->type == VARIABLE && (res = bindings_contain(bindings, time->variable))) {
@@ -531,11 +532,11 @@ static int parents_defaults(alma_term *arg, alma_term *time, binding_list *bindi
   if (arg_copy->type == QUOTE && arg_copy->quote->type == CLAUSE) {
     if (alma->verbose) {
       if (invert)
-        tee_alt("Performing parent_non_default proc on \"", alma, NULL);
+        tee_alt("Performing parent_non_default proc on \"", logger);
       else
-        tee_alt("Performing parents_default proc on \"", alma, NULL);
-      clause_print(alma, arg_copy->quote->clause_quote, NULL);
-      tee_alt("\"\n", alma, NULL);
+        tee_alt("Performing parents_default proc on \"", logger);
+      clause_print(arg_copy->quote->clause_quote, logger);
+      tee_alt("\"\n", logger);
     }
 
     void *mapping = clause_lookup(alma, arg_copy->quote->clause_quote);
@@ -556,9 +557,9 @@ static int parents_defaults(alma_term *arg, alma_term *time, binding_list *bindi
           // If unification followed by parents checking succeeds, cleans up and returns true
           if (quote_term_unify(arg_copy->quote, quote_holder, arg_bindings)) {
             if (alma->verbose) {
-              tee_alt("Processing \"", alma, NULL);
-              clause_print(alma, ith, NULL);
-              tee_alt("\"\n", alma, NULL);
+              tee_alt("Processing \"", logger);
+              clause_print(ith, logger);
+              tee_alt("\"\n", logger);
             }
 
             int check = check_default_parents(ith, alma);
@@ -582,15 +583,15 @@ static int parents_defaults(alma_term *arg, alma_term *time, binding_list *bindi
   if (alma->verbose) {
     if (result) {
       if (invert)
-        tee_alt("Has non-default parents\n", alma, NULL);
+        tee_alt("Has non-default parents\n", logger);
       else
-        tee_alt("All parents default\n", alma, NULL);
+        tee_alt("All parents default\n", logger);
     }
     else {
       if (invert)
-        tee_alt("Failed to find non-default parent\n\n", alma, NULL);
+        tee_alt("Failed to find non-default parent\n\n", logger);
       else
-        tee_alt("Failed to find all parents defaults\n\n", alma, NULL);
+        tee_alt("Failed to find all parents defaults\n\n", logger);
     }
   }
 
@@ -599,7 +600,7 @@ static int parents_defaults(alma_term *arg, alma_term *time, binding_list *bindi
 
 // Returns true if digit value of x is less than digit value of y
 // Else, incuding cases where types differ, false
-static int less_than(alma_term *x, alma_term *y, binding_list *bindings, kb *alma) {
+static int less_than(alma_term *x, alma_term *y, binding_list *bindings) {
   char *x_str;
   char *y_str;
   if (x->type == VARIABLE) {
@@ -693,7 +694,7 @@ static int quote_cons(alma_term *to_quote, alma_variable *result, binding_list *
 }
 
 // not_equal(A, B) returns true if A and B with bindings substituted are not identical clause quotes
-static int not_equal(alma_term *arg1, alma_term *arg2, binding_list *bindings, kb *alma) {
+static int not_equal(alma_term *arg1, alma_term *arg2, binding_list *bindings, kb *alma, kb_logger *logger) {
   // Create copies and substitute based on bindings available
   alma_term *arg1_copy = malloc(sizeof(*arg1_copy));
   copy_alma_term(arg1, arg1_copy);
@@ -707,11 +708,11 @@ static int not_equal(alma_term *arg1, alma_term *arg2, binding_list *bindings, k
   if (arg1_copy->type == QUOTE && arg1_copy->quote->type == CLAUSE &&
       arg2_copy->type == QUOTE && arg2_copy->quote->type == CLAUSE) {
     if (alma->verbose) {
-      tee_alt("Testing not-equal on \"", alma, NULL);
-      clause_print(alma, arg1_copy->quote->clause_quote, NULL);
-      tee_alt("\" and \"", alma, NULL);
-      clause_print(alma, arg2_copy->quote->clause_quote, NULL);
-      tee_alt("\"\n", alma, NULL);
+      tee_alt("Testing not-equal on \"", logger);
+      clause_print(arg1_copy->quote->clause_quote, logger);
+      tee_alt("\" and \"", logger);
+      clause_print(arg2_copy->quote->clause_quote, logger);
+      tee_alt("\"\n", logger);
     }
 
     not_equal = clauses_differ(arg1_copy->quote->clause_quote, arg2_copy->quote->clause_quote);
@@ -727,13 +728,13 @@ static int not_equal(alma_term *arg1, alma_term *arg2, binding_list *bindings, k
 
 
 // If proc is a valid procedure, runs and returns truth value
-int proc_run(alma_function *proc, binding_list *bindings, fif_task *task, kb *alma) {
+int proc_run(alma_function *proc, binding_list *bindings, fif_task *task, kb *alma, kb_logger *logger) {
   // Each procedure has optional extra argument for bound constraint
   if (strstr(proc->name, "neg_int") == proc->name) {
     if (strcmp(proc->name, "neg_int_past") == 0) {
       // Must match (given bindings) the schema neg_int_past("...", Start, End)
       if ((proc->term_count == 3 || proc->term_count == 4) && proc->terms[1].type == VARIABLE && proc->terms[2].type == VARIABLE)
-        return introspect(proc, bindings, alma, NEG_INT_PAST, NULL);
+        return introspect(proc, bindings, alma, logger, NEG_INT_PAST, NULL);
     }
     // Must match (given bindings) the schema neg_int("...") / neg_int_gen("...") / neg_int_spec("...")
     else if (proc->term_count == 1 || proc->term_count == 2) {
@@ -742,14 +743,14 @@ int proc_run(alma_function *proc, binding_list *bindings, fif_task *task, kb *al
         type = NEG_INT_SPEC;
       else if (strcmp(proc->name, "neg_int_gen") == 0)
         type = NEG_INT_GEN;
-      return introspect(proc, bindings, alma, type, NULL);
+      return introspect(proc, bindings, alma, logger, type, NULL);
     }
   }
   else if (strstr(proc->name, "pos_int") == proc->name) {
     if (strcmp(proc->name, "pos_int_past") == 0) {
       // Must match (given bindings) the schema pos_int_past("...", Start, End)
       if ((proc->term_count == 3 || proc->term_count == 4) && proc->terms[1].type == VARIABLE && proc->terms[2].type == VARIABLE)
-        return introspect(proc, bindings, alma, POS_INT_PAST, NULL);
+        return introspect(proc, bindings, alma, logger, POS_INT_PAST, NULL);
     }
     // Must match (given bindings) the schema pos_int("...") / pos_int_gen("...") / pos_int_spec("...")
     else if (proc->term_count == 1 || proc->term_count == 2) {
@@ -758,42 +759,42 @@ int proc_run(alma_function *proc, binding_list *bindings, fif_task *task, kb *al
         type = POS_INT_SPEC;
       else if (strcmp(proc->name, "pos_int_gen") == 0)
         type = POS_INT_GEN;
-      return introspect(proc, bindings, alma, type, task);
+      return introspect(proc, bindings, alma, logger, type, task);
     }
   }
   else if (strcmp(proc->name, "acquired") == 0) {
     // Must match (given bindings) the schema acquired("...", Var)
     if ((proc->term_count == 2 || proc->term_count == 3) && proc->terms[1].type == VARIABLE)
-      return introspect(proc, bindings, alma, ACQUIRED, NULL);
+      return introspect(proc, bindings, alma, logger, ACQUIRED, NULL);
   }
   else if (strcmp(proc->name, "ancestor") == 0) {
     // Must match (given bindings) the schema ancestor("...", "...", Time)
     if (proc->term_count == 3 || proc->term_count == 4)
-      return ancestor(proc->terms+0, proc->terms+1, proc->terms+2, bindings, alma, 0, 0);
+      return ancestor(proc->terms+0, proc->terms+1, proc->terms+2, bindings, alma, logger, 0, 0);
   }
   else if (strcmp(proc->name, "non_ancestor") == 0) {
     // Must match (given bindings) the schema non_ancestor("...", "...", Time)
     if (proc->term_count == 3 || proc->term_count == 4)
-      return ancestor(proc->terms+0, proc->terms+1, proc->terms+2, bindings, alma, 1, 0);
+      return ancestor(proc->terms+0, proc->terms+1, proc->terms+2, bindings, alma, logger, 1, 0);
   }
   else if (strcmp(proc->name, "parent") == 0) {
     // Must match (given bindings) the schema parent("...", "...", Time)
     if (proc->term_count == 3 || proc->term_count == 4)
-      return ancestor(proc->terms+0, proc->terms+1, proc->terms+2, bindings, alma, 0, 1);
+      return ancestor(proc->terms+0, proc->terms+1, proc->terms+2, bindings, alma, logger, 0, 1);
   }
   else if (strcmp(proc->name, "parents_defaults") == 0) {
     // Must match (given_bindings) the schema parents_defaults("...", Time)
     if (proc->term_count == 2 || proc->term_count == 3)
-      return parents_defaults(proc->terms+0, proc->terms+1,bindings, alma, 0);
+      return parents_defaults(proc->terms+0, proc->terms+1,bindings, alma, logger, 0);
   }
   else if (strcmp(proc->name, "parent_non_default") == 0) {
     // Must match (given_bindings) the schema parent_non_default("...", Time)
     if (proc->term_count == 2 || proc->term_count == 3)
-      return parents_defaults(proc->terms+0, proc->terms+1,bindings, alma, 1);
+      return parents_defaults(proc->terms+0, proc->terms+1,bindings, alma, logger, 1);
   }
   else if (strcmp(proc->name, "less_than") == 0) {
     if (proc->term_count == 2 || proc->term_count == 3)
-      return less_than(proc->terms+0, proc->terms+1, bindings, alma);
+      return less_than(proc->terms+0, proc->terms+1, bindings);
   }
   else if (strcmp(proc->name, "quote_cons") == 0) {
     if ((proc->term_count == 2 || proc->term_count == 3)
@@ -803,7 +804,7 @@ int proc_run(alma_function *proc, binding_list *bindings, fif_task *task, kb *al
   }
   else if (strcmp(proc->name, "not_equal") == 0) {
     if (proc->term_count == 2)
-      return not_equal(proc->terms+0, proc->terms+1, bindings, alma);
+      return not_equal(proc->terms+0, proc->terms+1, bindings, alma, logger);
   }
   return 0;
 }
