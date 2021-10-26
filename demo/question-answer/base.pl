@@ -101,19 +101,19 @@ answer(quote(query_truth(quote(rel(``Pred, ``Arg_a, ``Arg_b, ``Arg_c)), `Asktime
 % Unary case
 fif(and(query_truth(quote(not(rel(`Pred, `Arg))), Asktime),
     and(now(Asktime),
-    and(rel(`Pred, `Arg),
+    and(rel(Pred, Arg),
     acquired(quote(rel(`Pred, `Arg)), Learnedtime)))),
 answer(quote(query_truth(quote(not(rel(``Pred, ``Arg))), `Asktime)), no, reason(quote(acquired(quote(rel(``Pred, ``Arg)), `Learnedtime))))).
 % Binary case
 fif(and(query_truth(quote(not(rel(`Pred, `Arg_a, `Arg_b))), Asktime),
     and(now(Asktime),
-    and(rel(`Pred, `Arg_a, `Arg_b),
+    and(rel(Pred, Arg_a, Arg_b),
     acquired(quote(rel(`Pred, `Arg_a, `Arg_b)), Learnedtime)))),
 answer(quote(query_truth(quote(not(rel(``Pred, ``Arg_a, ``Arg_b))), `Asktime)), no, reason(quote(acquired(quote(rel(``Pred, ``Arg_a, ``Arg_b)), `Learnedtime))))).
 % Ternary case
 fif(and(query_truth(quote(not(rel(`Pred, `Arg_a, `Arg_b, `Arg_c))), Asktime),
     and(now(Asktime),
-    and(rel(`Pred, `Arg_a, `Arg_b, `Arg_c),
+    and(rel(Pred, Arg_a, Arg_b, Arg_c),
     acquired(quote(rel(`Pred, `Arg_a, `Arg_b, `Arg_c)), Learnedtime)))),
 answer(quote(query_truth(quote(not(rel(``Pred, ``Arg_a, ``Arg_b, ``Arg_c))), `Asktime)), no, reason(quote(acquired(quote(rel(``Pred, ``Arg_a, ``Arg_b, ``Arg_c)), `Learnedtime))))).
 

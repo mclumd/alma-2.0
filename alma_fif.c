@@ -113,7 +113,7 @@ static int fif_unified_flagged(fif_task *task) {
 }
 
 // Called when each premise of a fif is satisfied
-static void fif_conclude(kb *collection, fif_task *task, binding_list *bindings, tommy_array *new_clauses) {
+static void fif_conclude(fif_task *task, binding_list *bindings, tommy_array *new_clauses, long long *id_count) {
   for (int i = 0; i < task->fif->fif->num_conclusions; i++) {
     clause *conclusion = malloc(sizeof(*conclusion));
     copy_clause_structure(task->fif->fif->conclusions[i], conclusion);
@@ -129,7 +129,7 @@ static void fif_conclude(kb *collection, fif_task *task, binding_list *bindings,
     // Using task's overall bindings, obtain proper conclusion clause
     subst_clause(bindings, conclusion, 0);
 
-    set_variable_ids(conclusion, 1, 0, NULL, collection);
+    set_variable_ids(conclusion, 1, 0, NULL, id_count);
     tommy_array_insert(new_clauses, conclusion);
   }
 }
@@ -162,7 +162,7 @@ static void fif_task_unify_loop(kb *collection, tommy_list *tasks, tommy_list *s
         next_task->premises_done++;
         if (next_task->premises_done == next_task->fif->fif->premise_count) {
           if (!fif_unified_flagged(next_task))
-            fif_conclude(collection, next_task, next_task->bindings, &collection->new_clauses);
+            fif_conclude(next_task, next_task->bindings, &collection->new_clauses, &collection->variable_id_count);
           free_fif_task(next_task);
         }
         // If incomplete, use current task to continue processing
@@ -219,7 +219,7 @@ static void fif_task_unify_loop(kb *collection, tommy_list *tasks, tommy_list *s
                   next_task->premises_done++;
                   next_task->unified_clauses = realloc(next_task->unified_clauses, sizeof(*next_task->unified_clauses)*next_task->num_unified);
                   next_task->unified_clauses[next_task->num_unified-1] = jth;
-                  fif_conclude(collection, next_task, copy, &collection->new_clauses);
+                  fif_conclude(next_task, copy, &collection->new_clauses, &collection->variable_id_count);
                   cleanup_bindings(copy);
                   next_task->num_unified--;
                   next_task->premises_done--;
@@ -310,7 +310,7 @@ static void process_fif_task_mapping(kb *collection, fif_task_mapping *entry, to
                   f->num_unified++;
                   f->unified_clauses = realloc(f->unified_clauses, sizeof(*f->unified_clauses)*f->num_unified);
                   f->unified_clauses[f->num_unified-1] = unify_target;
-                  fif_conclude(collection, f, f->bindings, &collection->new_clauses);
+                  fif_conclude(f, f->bindings, &collection->new_clauses, &collection->variable_id_count);
                   cleanup_bindings(f->bindings);
                   f->premises_done--;
                   f->num_unified--;
@@ -369,7 +369,7 @@ static void process_fif_task_mapping(kb *collection, fif_task_mapping *entry, to
           // If task is now completed, obtain resulting clause and insert to new_clauses
           if (f->premises_done == f->fif->fif->premise_count) {
             if (!fif_unified_flagged(f))
-              fif_conclude(collection, f, f->bindings, &collection->new_clauses);
+              fif_conclude(f, f->bindings, &collection->new_clauses, &collection->variable_id_count);
 
             // Delete task that held case ending with proc
             free_fif_task(f);

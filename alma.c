@@ -83,71 +83,64 @@ int main(int argc, char **argv) {
 
     int counter = 0;
 
+    kb_logger logger;
+    logger.log = reasoner->almalog;
+    logger.buf = NULL;
+
     while (1) {
-      tee_alt("alma: ",reasoner->core_kb,NULL,counter);
-      //tee_alt("about to fgets...\n",NULL);
+      tee_alt("alma: ", &logger, counter);
       fflush(stdout);
       if (fgets(line, LINELEN, stdin) != NULL) {
         int len = strlen(line);
         line[len-1] = '\0';
-        //tee_alt("Command '%s' received at %d.\n", NULL, line, counter);
-        //tee_alt(line);
 
         char *pos;
         if (strcmp(line, "step") == 0) {
-          //tee_alt("ALMA %d step:\n",NULL, counter);
           alma_step(reasoner, NULL);
         }
         else if (strcmp(line, "print") == 0) {
-          //tee_alt("ALMA %d print:\n",NULL,counter);
           alma_print(reasoner, NULL);
           fflush(stdout);
         }
         else if (strcmp(line, "halt") == 0) {
-          //tee_alt("ALMA %d halt:\n",NULL,counter);
           alma_halt(reasoner);
           break;
         }
         else if ((pos = strstr(line, "add ")) != NULL && pos == line) {
-          //tee_alt("ALMA %d add:\n",NULL,counter);
           char *assertion = malloc(len - 4);
           strncpy(assertion, line+4, len-4);
           alma_assert(reasoner, assertion, NULL);
           free(assertion);
         }
         else if ((pos = strstr(line, "del ")) != NULL && pos == line) {
-          //tee_alt("ALMA %d del:\n",NULL,counter);
           char *assertion = malloc(len - 4);
           strncpy(assertion, line+4, len-4);
           alma_remove(reasoner, assertion, NULL);
           free(assertion);
         }
         else if ((pos = strstr(line, "update ")) != NULL && pos == line) {
-          //tee_alt("ALMA %d update:\n",NULL,counter);
           char *assertion = malloc(len - 7);
           strncpy(assertion, line+7, len-7);
           alma_update(reasoner, assertion, NULL);
           free(assertion);
         }
         else if ((pos = strstr(line, "obs ")) != NULL && pos == line) {
-          //tee_alt("ALMA %d obs:\n",NULL,counter);
           char *assertion = malloc(len - 4);
           strncpy(assertion, line+4, len-4);
           alma_observe(reasoner, assertion, NULL);
           free(assertion);
         }
         else if ((pos = strstr(line, "bs ")) != NULL && pos == line) {
-          //tee_alt("ALMA %d bs:\n",NULL,counter);
           char *assertion = malloc(len - 3);
           strncpy(assertion, line+3, len-3);
           alma_backsearch(reasoner, assertion, NULL);
           free(assertion);
         }
         else {
-          tee_alt("-a: Command '%s' not recognized\n", reasoner->core_kb, NULL, line);
+          tee_alt("-a: Command '%s' not recognized\n", &logger, line);
         }
       } else {
-          tee_alt("ALMA no more input\n", reasoner->core_kb, NULL);
+          tee_alt("ALMA no more input\n", &logger);
           fflush(stdout);
       }
       counter++;

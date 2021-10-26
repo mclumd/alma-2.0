@@ -84,8 +84,13 @@ void alma_init(alma *reasoner, char **files, int file_count, char *agent, char *
       int num_trees;
 
       if (formulas_from_source(files[i], 1, &num_trees, &trees,  &logger)) {
-        nodes_to_clauses(reasoner->core_kb, trees, num_trees, &reasoner->core_kb->new_clauses, 0, &logger);
-        fif_to_front(&reasoner->core_kb->new_clauses);
+        tommy_array temp;
+        tommy_array_init(&temp);
+        nodes_to_clauses(reasoner->core_kb, trees, num_trees, &temp, 0, &logger);
+        for (tommy_size_t j = 0; j < tommy_array_size(&temp); j++) {
+          tommy_array_insert(&reasoner->core_kb->new_clauses, tommy_array_get(&temp, j));
+        }
+        tommy_array_done(&temp);
       }
       // If any file cannot parse, cleanup and exit
       else {
@@ -108,6 +113,7 @@ void alma_init(alma *reasoner, char **files, int file_count, char *agent, char *
   reasoner->prev = now(reasoner->time);
   assert_formula(reasoner->core_kb, reasoner->prev, 0, &logger);
 
+  fif_to_front(&reasoner->core_kb->new_clauses);
   // Insert starting clauses
   process_new_clauses(reasoner->core_kb, reasoner->procs, reasoner->time, &logger, 0);
   // Second pass of process_new_clauses for late-added meta-formulas like contra from end of first pass
@@ -281,6 +287,7 @@ void alma_halt(alma *reasoner) {
     fclose(reasoner->almalog);
   }
 
+  free(reasoner->core_kb);
   free(reasoner);
 
   parse_cleanup();

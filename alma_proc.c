@@ -680,7 +680,7 @@ static int quote_cons(alma_term *to_quote, alma_variable *result, binding_list *
   formula->fif = NULL;
 
   // Replace non-escaping variable IDs
-  set_variable_ids(formula, 0, 1, NULL, alma);
+  set_variable_ids(formula, 0, 1, NULL, &alma->variable_id_count);
   // Place inside quotation
   increment_quote_level(formula, 0);
 

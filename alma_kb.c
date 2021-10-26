@@ -174,7 +174,7 @@ static name_record* records_retrieve(record_tree *records, int quote_level, long
 
 
 // For a single ALMA variable, set fields in record_tree
-static void set_var_name(record_tree *records, alma_variable *var, int id_from_name, int quote_level, kb *collection) {
+static void set_var_name(record_tree *records, alma_variable *var, int id_from_name, int quote_level, long long *id_count) {
   // If a match for the variable is found in the record tree, set ID using new field
   for (int i = 0; i < records->variable_count; i++) {
     name_record *rec = records->variables[i];
@@ -192,19 +192,19 @@ static void set_var_name(record_tree *records, alma_variable *var, int id_from_n
     records->variables[records->variable_count-1]->name = var->name;
   else
     records->variables[records->variable_count-1]->old_id = var->id;
-  var->id = records->variables[records->variable_count-1]->new_id = collection->variable_id_count;
-  collection->variable_id_count++;
+  var->id = records->variables[records->variable_count-1]->new_id = *id_count;
+  (*id_count)++;
 }
 
-static void set_variable_ids_rec(record_tree *records, clause *c, int id_from_name, int non_escaping_only, int quote_level, kb *collection);
+static void set_variable_ids_rec(record_tree *records, clause *c, int id_from_name, int non_escaping_only, int quote_level, long long *id_count);
 
-static void set_variable_names(record_tree *records, alma_term *term, int id_from_name, int non_escaping_only, int quote_level, kb *collection) {
+static void set_variable_names(record_tree *records, alma_term *term, int id_from_name, int non_escaping_only, int quote_level, long long *id_count) {
   if (term->type == VARIABLE && (!non_escaping_only || quote_level > 0)) {
-    set_var_name(records, term->variable, id_from_name, quote_level, collection);
+    set_var_name(records, term->variable, id_from_name, quote_level, id_count);
   }
   else if (term->type == FUNCTION) {
     for (int i = 0; i < term->function->term_count; i++)
-      set_variable_names(records, term->function->terms+i, id_from_name, non_escaping_only, quote_level, collection);
+      set_variable_names(records, term->function->terms+i, id_from_name, non_escaping_only, quote_level, id_count);
   }
   else if (term->type == QUOTE) {
     if (term->quote->type == CLAUSE) {
@@ -214,35 +214,35 @@ static void set_variable_names(record_tree *records, alma_term *term, int id_fro
       records->next_level[records->next_level_count-1] = malloc(sizeof(*records->next_level[records->next_level_count-1]));
       init_record_tree(records->next_level[records->next_level_count-1], quote_level+1, records);
 
-      set_variable_ids_rec(records->next_level[records->next_level_count-1], term->quote->clause_quote, id_from_name, non_escaping_only, quote_level+1, collection);
+      set_variable_ids_rec(records->next_level[records->next_level_count-1], term->quote->clause_quote, id_from_name, non_escaping_only, quote_level+1, id_count);
     }
   }
   else if (term->type == QUASIQUOTE && (!non_escaping_only || quote_level > term->quasiquote->backtick_count)) {
     // Trace back up along parents based on amount of quasi-quotation
     for (int i = 0; i < term->quasiquote->backtick_count; i++)
       records = records->parent;
-    set_var_name(records, term->quasiquote->variable, id_from_name, quote_level - term->quasiquote->backtick_count, collection);
+    set_var_name(records, term->quasiquote->variable, id_from_name, quote_level - term->quasiquote->backtick_count, id_count);
   }
 }
 
-static void set_variable_ids_rec(record_tree *records, clause *c, int id_from_name, int non_escaping_only, int quote_level, kb *collection) {
+static void set_variable_ids_rec(record_tree *records, clause *c, int id_from_name, int non_escaping_only, int quote_level, long long *id_count) {
   for (int i = 0; i < c->pos_count; i++)
     for (int j = 0; j < c->pos_lits[i]->term_count; j++)
-      set_variable_names(records, c->pos_lits[i]->terms+j, id_from_name, non_escaping_only, quote_level, collection);
+      set_variable_names(records, c->pos_lits[i]->terms+j, id_from_name, non_escaping_only, quote_level, id_count);
   for (int i = 0; i < c->neg_count; i++)
     for (int j = 0; j < c->neg_lits[i]->term_count; j++)
-      set_variable_names(records, c->neg_lits[i]->terms+j, id_from_name, non_escaping_only, quote_level, collection);
+      set_variable_names(records, c->neg_lits[i]->terms+j, id_from_name, non_escaping_only, quote_level, id_count);
 
   if (c->tag == FIF)
     for (int i = 0; i < c->fif->num_conclusions; i++)
-      set_variable_ids_rec(records, c->fif->conclusions[i], id_from_name, non_escaping_only, quote_level, collection);
+      set_variable_ids_rec(records, c->fif->conclusions[i], id_from_name, non_escaping_only, quote_level, id_count);
 }
 
 
-static void set_clause_from_records(record_tree *records, clause *c, int quote_level, kb *collection);
+static void set_clause_from_records(record_tree *records, clause *c, int quote_level, long long *id_count);
 
 // Use existing assembled record_tree to update ID values from old_id to new_id in the argument term
-static void set_term_from_records(record_tree *records, alma_term *term, int quote_level, kb *collection) {
+static void set_term_from_records(record_tree *records, alma_term *term, int quote_level, long long *id_count) {
   if (term->type == VARIABLE) {
     name_record *rec = records_retrieve(records, quote_level, term->variable->id);
     if (rec != NULL)
@@ -250,11 +250,11 @@ static void set_term_from_records(record_tree *records, alma_term *term, int quo
   }
   else if (term->type == FUNCTION) {
     for (int i = 0; i < term->function->term_count; i++)
-      set_term_from_records(records, term->function->terms+i, quote_level, collection);
+      set_term_from_records(records, term->function->terms+i, quote_level, id_count);
   }
   else if (term->type == QUOTE) {
     if (term->quote->type == CLAUSE) {
-      set_clause_from_records(records, term->quote->clause_quote, quote_level+1, collection);
+      set_clause_from_records(records, term->quote->clause_quote, quote_level+1, id_count);
     }
   }
   else {
@@ -267,17 +267,17 @@ static void set_term_from_records(record_tree *records, alma_term *term, int quo
   }
 }
 
-static void set_clause_from_records(record_tree *records, clause *c, int quote_level, kb *collection) {
+static void set_clause_from_records(record_tree *records, clause *c, int quote_level, long long *id_count) {
   for (int i = 0; i < c->pos_count; i++)
     for (int j = 0; j < c->pos_lits[i]->term_count; j++)
-      set_term_from_records(records, c->pos_lits[i]->terms+j, quote_level, collection);
+      set_term_from_records(records, c->pos_lits[i]->terms+j, quote_level, id_count);
   for (int i = 0; i < c->neg_count; i++)
     for (int j = 0; j < c->neg_lits[i]->term_count; j++)
-      set_term_from_records(records, c->neg_lits[i]->terms+j, quote_level, collection);
+      set_term_from_records(records, c->neg_lits[i]->terms+j, quote_level, id_count);
 
   if (c->tag == FIF)
     for (int i = 0; i < c->fif->num_conclusions; i++)
-      set_clause_from_records(records, c->fif->conclusions[i], quote_level, collection);
+      set_clause_from_records(records, c->fif->conclusions[i], quote_level, id_count);
 }
 
 // Given a clause, assign the ID fields of each variable
@@ -288,19 +288,19 @@ static void set_clause_from_records(record_tree *records, clause *c, int quote_l
 // id_from_name is true in this case; distinct variables are tracked by name
 // non_escaping_only sets variable IDs only in the case where they don't escape quotation
 // Fresh ID values drawn from variable_id_count global variable
-void set_variable_ids(clause *c, int id_from_name, int non_escaping_only, binding_list *bs_bindings, kb *collection) {
+void set_variable_ids(clause *c, int id_from_name, int non_escaping_only, binding_list *bs_bindings, long long *id_count) {
   record_tree *records;
   records = malloc(sizeof(*records));
   init_record_tree(records, 0, NULL);
 
-  set_variable_ids_rec(records, c, id_from_name, non_escaping_only, 0, collection);
+  set_variable_ids_rec(records, c, id_from_name, non_escaping_only, 0, id_count);
 
   // If bindings for a backsearch have been passed in, update variable names for them as well
   // Id_from_name always false in this case; omits that parameter
   if (bs_bindings)
     for (int i = 0; i < bs_bindings->num_bindings; i++)
       // TODO: eventually needs to get quote_level out based on binding?
-      set_term_from_records(records, bs_bindings->list[i].term, 0, collection);
+      set_term_from_records(records, bs_bindings->list[i].term, 0, id_count);
 
   //records_print(records);
   free_record_tree(records);
@@ -539,7 +539,7 @@ void nodes_to_clauses(kb *collection, alma_node *trees, int num_trees, tommy_arr
   free(trees);
   for (int i = 0; i < tommy_array_size(clauses); i++) {
     clause *c = tommy_array_get(clauses, i);
-    set_variable_ids(c, 1, 0, NULL, collection);
+    set_variable_ids(c, 1, 0, NULL, &collection->variable_id_count);
 
     if (print) {
       tee_alt("-a: ", logger);
@@ -1430,7 +1430,7 @@ static clause* make_meta_literal(kb *collection, char *predname, clause *c, long
   res->children = NULL;
   res->tag = NONE;
   res->fif = NULL;
-  set_variable_ids(res, 1, 0, NULL, collection);
+  set_variable_ids(res, 1, 0, NULL, &collection->variable_id_count);
   return res;
 }
 
@@ -1465,23 +1465,6 @@ static void binding_subst(binding_list *target, binding_list *theta) {
     subst_term(theta, target->list[i].term, 0);
 }
 
-static binding_list* parent_binding_prepare(backsearch_task *bs, long parent_index, binding_list *theta) {
-  // Retrieve parent existing bindings, if any
-  binding_mapping *mapping = NULL;
-  if (parent_index < 0)
-    mapping = tommy_hashlin_search(&bs->clause_bindings, bm_compare, &parent_index, tommy_hash_u64(0, &parent_index, sizeof(parent_index)));
-
-  // Substitute based on MGU obtained when unifying
-  if (mapping != NULL) {
-    binding_list *copy = malloc(sizeof(*copy));
-    copy_bindings(copy, mapping->bindings);
-    binding_subst(copy, theta);
-    return copy;
-  }
-  else
-    return NULL;
-}
-
 static void make_contra(kb *collection, clause *contradictand_pos, clause *contradictand_neg, long time) {
   clause *contra = malloc(sizeof(*contra));
   contra->pos_count = 1;
@@ -1501,7 +1484,7 @@ static void make_contra(kb *collection, clause *contradictand_pos, clause *contr
   contra->children = NULL;
   contra->tag = NONE;
   contra->fif = NULL;
-  set_variable_ids(contra, 1, 0, NULL, collection);
+  set_variable_ids(contra, 1, 0, NULL, &collection->variable_id_count);
   tommy_array_insert(&collection->new_clauses, contra);
 
   clause *contradicting = malloc(sizeof(*contradicting));
@@ -1509,7 +1492,7 @@ static void make_contra(kb *collection, clause *contradictand_pos, clause *contr
   contradicting->pos_lits[0]->name = realloc(contradicting->pos_lits[0]->name, strlen("contradicting")+1);
   strcpy(contradicting->pos_lits[0]->name, "contradicting");
   init_single_parent(contradicting, contra);
-  set_variable_ids(contradicting, 1, 0, NULL, collection);
+  set_variable_ids(contradicting, 1, 0, NULL, &collection->variable_id_count);
   tommy_array_insert(&collection->new_clauses, contradicting);
 
   tommy_array_insert(&collection->distrust_set, contradictand_pos);
@@ -1517,6 +1500,24 @@ static void make_contra(kb *collection, clause *contradictand_pos, clause *contr
   tommy_array_insert(&collection->distrust_set, contradictand_neg);
   tommy_array_insert(&collection->distrust_parents, contra);
 }
+
+static binding_list* parent_binding_prepare(backsearch_task *bs, long parent_index, binding_list *theta) {
+  // Retrieve parent existing bindings, if any
+  binding_mapping *mapping = NULL;
+  if (parent_index < 0)
+    mapping = tommy_hashlin_search(&bs->clause_bindings, bm_compare, &parent_index, tommy_hash_u64(0, &parent_index, sizeof(parent_index)));
+
+  // Substitute based on MGU obtained when unifying
+  if (mapping != NULL) {
+    binding_list *copy = malloc(sizeof(*copy));
+    copy_bindings(copy, mapping->bindings);
+    binding_subst(copy, theta);
+    return copy;
+  }
+  else
+    return NULL;
+}
+
 
 // Process resolution tasks from argument and place results in new_arr
 void process_res_tasks(kb *collection, long time, tommy_array *tasks, tommy_array *new_arr, backsearch_task *bs, kb_logger *logger) {
@@ -1597,7 +1598,7 @@ void process_res_tasks(kb *collection, long time, tommy_array *tasks, tommy_arra
             res_result->children_count = 0;
             res_result->children = NULL;
 
-            set_variable_ids(res_result, 0, 0, x_bindings, collection);
+            set_variable_ids(res_result, 0, 0, x_bindings, &collection->variable_id_count);
 
             tommy_array_insert(new_arr, res_result);
             if (bs)
@@ -1623,7 +1624,7 @@ void process_res_tasks(kb *collection, long time, tommy_array *tasks, tommy_arra
                 for (int j = 0; j < answer->neg_lits[0]->term_count; j++)
                   subst_term(x_bindings, answer->neg_lits[0]->terms+j, 0);
               }
-              set_variable_ids(answer, 0, 0, NULL, collection);
+              set_variable_ids(answer, 0, 0, NULL, &collection->variable_id_count);
 
               // TODO: parent setup for backsearch answer?
               tommy_array_insert(&collection->new_clauses, answer);
@@ -1716,7 +1717,7 @@ static void handle_true(kb *collection, clause *truth, kb_logger *logger) {
       decrement_quote_level(u, 1);
 
       // Adjust variable IDs for the new formula
-      set_variable_ids(u, 1, 0, NULL, collection);
+      set_variable_ids(u, 1, 0, NULL, &collection->variable_id_count);
       tommy_array_insert(&unquoted, u);
     }
 
@@ -1794,7 +1795,7 @@ static void handle_reinstate(kb *collection, clause *reinstate, long time) {
           copy_clause_structure(jth, reinstatement);
           copy_parents(jth, reinstatement);
           subst_clause(theta, reinstatement, 0);
-          set_variable_ids(reinstatement, 1, 0, NULL, collection);
+          set_variable_ids(reinstatement, 1, 0, NULL, &collection->variable_id_count);
           tommy_array_insert(&collection->timestep_delay_clauses, reinstatement);
 
           if (reinstatement->pos_count + reinstatement->neg_count == 1 && reinstatement->fif == NULL) {
@@ -1862,7 +1863,7 @@ static void handle_update(kb *collection, clause *update) {
           init_single_parent(update_clause, update);
 
           subst_clause(theta, update_clause, 0);
-          set_variable_ids(update_clause, 1, 0, NULL, collection);
+          set_variable_ids(update_clause, 1, 0, NULL, &collection->variable_id_count);
           tommy_array_insert(&collection->new_clauses, update_clause);
 
           tommy_array_insert(&collection->distrust_set, jth);
