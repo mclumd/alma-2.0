@@ -3,7 +3,7 @@
 #include "alma_unify.h"
 #include "alma_fif.h"
 #include "alma_print.h"
-#include "alma_kb.h"
+#include "alma_clause.h"
 
 // Var matching functions
 

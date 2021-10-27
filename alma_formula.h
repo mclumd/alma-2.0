@@ -1,8 +1,6 @@
 #ifndef alma_formula_h
 #define alma_formula_h
 
-extern long long variable_id_count;
-
 typedef enum node_type {FOL, PREDICATE} node_type;
 
 struct alma_fol;

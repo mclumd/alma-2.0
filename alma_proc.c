@@ -4,6 +4,7 @@
 #include "alma_print.h"
 #include "tommy.h"
 #include "alma_fif.h"
+#include "alma_clause.h"
 
 typedef enum introspect_kind {POS_INT_SPEC, POS_INT, POS_INT_GEN, NEG_INT_SPEC, NEG_INT, NEG_INT_GEN, ACQUIRED, POS_INT_PAST, NEG_INT_PAST} introspect_kind;
 const int NUM_PROCS = 17;

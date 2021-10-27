@@ -15,7 +15,6 @@ extern char logs_on;
 extern char python_mode;
 
 // Initialize global variable (declared in alma_formula header) to count up variable IDs
-//long long variable_id_count = 0;
 
 int main(int argc, char **argv) {
   int run = 0;

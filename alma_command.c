@@ -23,7 +23,7 @@ static char* now(long t) {
 }
 
 // Caller will need to free reasoner with alma_halt
-void alma_init(alma *reasoner, char **files, int file_count, char *agent, char *trialnum, char *log_dir,  int verbose, kb_str *buf, int logon) {
+void alma_init(alma *reasoner, char **files, int file_count, char *agent, char *trialnum, char *log_dir, int verbose, kb_str *buf, int logon) {
   reasoner->time = 0;
   reasoner->prev = reasoner->now = NULL;
 
@@ -86,7 +86,7 @@ void alma_init(alma *reasoner, char **files, int file_count, char *agent, char *
       if (formulas_from_source(files[i], 1, &num_trees, &trees,  &logger)) {
         tommy_array temp;
         tommy_array_init(&temp);
-        nodes_to_clauses(reasoner->core_kb, trees, num_trees, &temp, 0, &logger);
+        nodes_to_clauses(trees, num_trees, &temp, 0, &reasoner->core_kb->variable_id_count, &logger);
         for (tommy_size_t j = 0; j < tommy_array_size(&temp); j++) {
           tommy_array_insert(&reasoner->core_kb->new_clauses, tommy_array_get(&temp, j));
         }
@@ -325,7 +325,7 @@ void alma_observe(alma *reasoner, char *string, kb_str *buf) {
   if (formulas_from_source(string, 0, &formula_count, &formulas, &logger)) {
     tommy_array arr;
     tommy_array_init(&arr);
-    nodes_to_clauses(reasoner->core_kb, formulas, formula_count, &arr, 0, &logger);
+    nodes_to_clauses(formulas, formula_count, &arr, 0, &reasoner->core_kb->variable_id_count, &logger);
 
     for (int i = 0; i < tommy_array_size(&arr); i++) {
       clause *c = tommy_array_get(&arr, i);
@@ -360,7 +360,7 @@ void alma_backsearch(alma *reasoner, char *string, kb_str *buf) {
   if (formulas_from_source(string, 0, &formula_count, &formulas, &logger)) {
     tommy_array arr;
     tommy_array_init(&arr);
-    nodes_to_clauses(reasoner->core_kb, formulas, formula_count, &arr, 0, &logger);
+    nodes_to_clauses(formulas, formula_count, &arr, 0, &reasoner->core_kb->variable_id_count, &logger);
 
     clause *c = tommy_array_get(&arr, 0);
     // Free all after first

@@ -4,7 +4,9 @@
 #include "tommy.h"
 #include "alma_formula.h"
 #include "alma_kb.h"
+#include "alma_clause.h"
 #include "alma_proc.h"
+#include "alma_print.h"
 
 typedef struct fif_info {
   int premise_count;
@@ -51,6 +53,7 @@ void free_fif_mapping(void *arg);
 void free_fif_task(fif_task *task);
 void free_fif_task_mapping(void *arg);
 alma_function* fif_access(clause *c, int i);
+void remove_fif_tasks(tommy_hashlin *fif_tasks, clause *c);
 void remove_fif_singleton_tasks(tommy_hashlin *fif_tasks, tommy_hashlin *fif_map, clause *c);
 
 int fifm_compare(const void *arg, const void *obj);

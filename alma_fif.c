@@ -1,7 +1,6 @@
 #include <string.h>
 #include "alma_fif.h"
 #include "alma_proc.h"
-#include "alma_print.h"
 #include "alma_unify.h"
 
 // Given a new fif clause, initializes fif task mappings held by fif_tasks for each premise of c
@@ -480,6 +479,27 @@ alma_function* fif_access(clause *c, int i) {
     return c->neg_lits[-next - 1];
   else
     return c->pos_lits[next];
+}
+
+// Removes fif from fif_map, and deletes all fif tasks using it
+void remove_fif_tasks(tommy_hashlin *fif_tasks, clause *c) {
+  for (int i = 0; i < c->fif->premise_count; i++) {
+    alma_function *f = fif_access(c, i);
+    char *name = name_with_arity(f->name, f->term_count);
+    fif_task_mapping *tm = tommy_hashlin_search(fif_tasks, fif_taskm_compare, name, tommy_hash_u64(0, name, strlen(name)));
+    if (tm != NULL) {
+      tommy_node *curr = tommy_list_head(&tm->tasks);
+      while (curr) {
+        fif_task *currdata = curr->data;
+        curr = curr->next;
+        if (currdata->fif->index == c->index) {
+          tommy_list_remove_existing(&tm->tasks, &currdata->node);
+          free_fif_task(currdata);
+        }
+      }
+    }
+    free(name);
+  }
 }
 
 // Used in removing a singleton clause -- remove partial fif tasks involving the clause

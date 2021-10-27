@@ -2,7 +2,7 @@
 #define alma_command_h
 
 #include "alma.h"
-#include "alma_kb.h"
+#include "alma_print.h"
 
 void alma_init(alma *reasoner, char **files, int file_count, char *agent, char *trialnum, char *log_dir, int verbose, kb_str *buf, int logon);
 void alma_step(alma *reasoner, kb_str *buf);

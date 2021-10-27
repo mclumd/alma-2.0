@@ -2,9 +2,8 @@
 #include <string.h>
 #include <stdio.h>
 #include "alma_formula.h"
-#include "alma_print.h"
+#include "alma_clause.h"
 #include "alma_parser.h"
-#include "alma_kb.h"
 #include "mpc/mpc.h"
 
 // TODO: Longer term, check for error codes of library functions used

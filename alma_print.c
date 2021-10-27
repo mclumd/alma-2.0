@@ -1,8 +1,7 @@
 #include <stdarg.h>
 #include "alma_print.h"
-#include "alma_formula.h"
+#include "alma_clause.h"
 #include "alma_fif.h"
-
 
 char logs_on;
 char python_mode;

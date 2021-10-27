@@ -4,49 +4,9 @@
 #include <stdio.h>
 #include "tommy.h"
 #include "alma_formula.h"
+#include "alma_clause.h"
 #include "alma_unify.h"
-// TODO: Further consider style of using **, esp. for pos_lits/neg_lits in clause
-
-struct parent_set;
-struct fif_info;
-struct alma_proc;
-
-typedef struct kb_str {
-  long size;
-  long limit;
-  char *buffer;
-  char *curr;
-} kb_str;
-
-typedef struct kb_logger {
-  FILE *log;
-  kb_str *buf;
-} kb_logger;
-
-typedef struct clause {
-  int pos_count;
-  int neg_count;
-  alma_function **pos_lits;
-  alma_function **neg_lits;
-  int parent_set_count;
-  int children_count;
-  struct parent_set *parents; // Use more efficient structure for as needed
-  struct clause **children; // Use more efficient structure for as needed
-  if_tag tag;
-  struct fif_info *fif; // Data used to store additional fif information; non-null only if FIF tagged
-  long index; // Index of clause, used as key in index_map of KB
-  long acquired; // Time asserted to KB
-  long distrusted; // Distrust status; if nonzero the time it was distrusted
-  long retired; // Retired status; if nonzero the time it was retired
-  long handled; // Handled status; if nonzero the time that it was handled
-  int dirty_bit;
-  char pyobject_bit;
-} clause;
-
-typedef struct parent_set {
-  int count;
-  clause **clauses;
-} parent_set;
+#include "alma_print.h"
 
 typedef struct kb {
   long long variable_id_count;
@@ -107,39 +67,29 @@ typedef struct res_task {
   alma_function *neg; // Negative literal from y
 } res_task;
 
-
 void kb_init(kb* collection, int verbose);
 void kb_print(kb *collection, kb_logger *logger);
 
-int formulas_from_source(char *source, int file_src, int *formula_count, alma_node **formulas, kb_logger *logger);
-void make_clause(alma_node *node, clause *c);
-int clauses_differ(clause *x, clause *y);
 clause* duplicate_check(kb *collection, long time, clause *c, int check_distrusted);
-void free_clause(clause *c);
-void copy_clause_structure(clause *orignal, clause *copy);
-void set_variable_ids(clause *c, int id_from_name, int non_escaping_only, binding_list *bs_bindings, long long *id_count);
-void nodes_to_clauses(kb *collection, alma_node *trees, int num_trees, tommy_array *clauses, int print, kb_logger *logger);
 void* clause_lookup(kb *collection, clause *c);
 clause* mapping_access(void *mapping, if_tag tag, int index);
 int mapping_num_clauses(void *mapping, if_tag tag);
-int counts_match(clause *x, clause *y);
 
 struct backsearch_task;
 void process_res_tasks(kb *collection, long time, tommy_array *tasks, tommy_array *new_arr, struct backsearch_task *bs, kb_logger *logger);
+struct alma_proc;
 void process_new_clauses(kb *collection, struct alma_proc *procs, long time, kb_logger *logger, int make_tasks);
 void make_single_task(clause *c, alma_function *c_lit, clause *other, tommy_array *tasks, int use_bif, int pos);
 void make_res_tasks(clause *c, int count, alma_function **c_lits, tommy_hashlin *map, tommy_array *tasks, int use_bif, int pos);
 void res_tasks_from_clause(kb *collection, clause *c, int process_negatives);
+
 clause* assert_formula(kb *collection, char *string, int print, kb_logger *logger);
 int delete_formula(kb *collection, long time, char *string, int print, kb_logger *logger);
 int update_formula(kb *collection, long time, char *string, kb_logger *logger);
-void transfer_parent(clause *target, clause *source, int add_children);
 
 void free_predname_mapping(void *arg);
 int pm_compare(const void *arg, const void *obj);
-int flags_negative(clause *c);
-long flag_min(clause *c);
+
 void func_from_long(alma_term *t, long l);
-char* name_with_arity(char *name, int arity);
 
 #endif
