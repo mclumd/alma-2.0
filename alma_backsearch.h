@@ -34,6 +34,7 @@ void generate_backsearch_tasks(kb *collection, long time, backsearch_task *bt);
 void process_backsearch_tasks(kb *collection, long time, tommy_list *backsearch_tasks, kb_logger *logger);
 void backsearch_halt(backsearch_task *t);
 
+int idling_backsearch(tommy_list *backsearch_tasks);
 int bm_compare(const void *arg, const void *obj);
 
 #endif

@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <sys/time.h>
+#include <string.h>
 #include "alma_command.h"
 #include "tommy.h"
 #include "alma_formula.h"
@@ -22,6 +23,50 @@ static char* now(long t) {
   return str;
 }
 
+static void new_beliefs_to_agent(alma *reasoner) {
+  for (tommy_size_t i = 0; i < tommy_array_size(&reasoner->core_kb->new_clauses); i++) {
+    clause *c = tommy_array_get(&reasoner->core_kb->new_clauses, i);
+    // Must be literal of form bel(const, "...")
+    if (c->pos_count == 1 && c->neg_count == 0 && strcmp(c->pos_lits[0]->name, "bel") == 0
+        && c->pos_lits[0]->term_count == 2 && c->pos_lits[0]->terms[0].type == FUNCTION && c->pos_lits[0]->terms[0].function->term_count == 0
+        && c->pos_lits[0]->terms[1].type == QUOTE && c->pos_lits[0]->terms[1].quote->type == CLAUSE) {
+      char *agent_name = c->pos_lits[0]->terms[0].function->name;
+
+      kb *agent_collection = NULL;
+      // Search for matching agent KB
+      for (int j = 0; j < reasoner->agent_count; j++) {
+        if (strcmp(reasoner->agents_kb[i]->prefix, agent_name) == 0) {
+          agent_collection = reasoner->agents_kb[i];
+          break;
+        }
+      }
+
+      // If a matching agent KB doesn't exist, create it
+      if (agent_collection == NULL) {
+        reasoner->agent_count++;
+        reasoner->agents_kb = realloc(reasoner->agents_kb, sizeof(*reasoner->agents_kb)*reasoner->agent_count);
+        reasoner->agents_kb[reasoner->agent_count-1] = malloc(sizeof(*reasoner->agents_kb[reasoner->agent_count-1]));
+        agent_collection = reasoner->agents_kb[reasoner->agent_count-1];
+        kb_init(agent_collection, reasoner->core_kb->verbose);
+        agent_collection->prefix = malloc(strlen(agent_name)+1);
+        strcpy(agent_collection->prefix, agent_name);
+      }
+
+      // Create copy of quoted belief, add to agent KB's new_clauses
+      clause *unquoted = malloc(sizeof(*unquoted));
+      copy_clause_structure(c->pos_lits[0]->terms[1].quote->clause_quote, unquoted);
+      decrement_quote_level(unquoted, 1);
+      // Initialize equivalence links for pair
+      unquoted->equiv_belief = c;
+      c->equiv_belief = unquoted;
+      set_variable_ids(unquoted, 1, 0, NULL, &agent_collection->variable_id_count);
+
+      tommy_array_insert(&agent_collection->new_clauses, unquoted);
+    }
+  }
+}
+
+
 // Caller will need to free reasoner with alma_halt
 void alma_init(alma *reasoner, char **files, int file_count, char *agent, char *trialnum, char *log_dir, int verbose, kb_str *buf, int logon) {
   reasoner->time = 0;
@@ -30,7 +75,7 @@ void alma_init(alma *reasoner, char **files, int file_count, char *agent, char *
   reasoner->idling = 0;
   reasoner->core_kb = malloc(sizeof(*reasoner->core_kb));
   kb_init(reasoner->core_kb, verbose);
-  reasoner->agents_count = 0;
+  reasoner->agent_count = 0;
   reasoner->agents_kb = NULL;
   tommy_list_init(&reasoner->backsearch_tasks);
   const alma_proc procs[17] = {{"neg_int", 1}, {"neg_int_spec", 1}, {"neg_int_gen", 1}, {"pos_int", 1}, {"pos_int_spec", 1},
@@ -113,42 +158,21 @@ void alma_init(alma *reasoner, char **files, int file_count, char *agent, char *
   reasoner->prev = now(reasoner->time);
   assert_formula(reasoner->core_kb, reasoner->prev, 0, &logger);
 
-  fif_to_front(&reasoner->core_kb->new_clauses);
-  // Insert starting clauses
-  process_new_clauses(reasoner->core_kb, reasoner->procs, reasoner->time, &logger, 0);
-  // Second pass of process_new_clauses for late-added meta-formulas like contra from end of first pass
-  process_new_clauses(reasoner->core_kb, reasoner->procs, reasoner->time, &logger, 0);
+  new_beliefs_to_agent(reasoner);
 
-  // Generate starting tasks
-  tommy_node *i = tommy_list_head(&reasoner->core_kb->clauses);
-  while (i) {
-    clause *c = ((index_mapping*)i->data)->value;
-    if (c->tag == FIF)
-      fif_task_map_init(reasoner->core_kb, reasoner->procs, &reasoner->core_kb->fif_tasks, c, 0);
-    else {
-      res_tasks_from_clause(reasoner->core_kb, c, 0);
-      fif_tasks_from_clause(&reasoner->core_kb->fif_tasks, c);
-    }
-    i = i->next;
+  kb_task_init(reasoner->core_kb, reasoner->procs, reasoner->time, &logger);
+
+  for (int i = 0; i < reasoner->agent_count; i++) {
+    kb_task_init(reasoner->agents_kb[i], reasoner->procs, reasoner->time, &logger);
   }
 }
 
-// System idles if there are no resolution tasks, backsearch tasks, or to_unify fif values
-// First of these is true when no new clauses (source of res tasks) exist
-// To_unify values are all removed in current implementation each step from exhaustive fif
-// Thus, answer is either from having new_clauses OR finding tasks in backsearch
-static int idling_check(alma *reasoner, int new_clauses) {
-  if (!new_clauses) {
-    tommy_node *i = tommy_list_head(&reasoner->backsearch_tasks);
-    while (i) {
-      backsearch_task *bt = i->data;
-      if (tommy_array_size(&bt->to_resolve) > 0)
-        return 0;
-      i = i->next;
-    }
-    return 1;
+// Sync beliefs between agent KBs and core KB
+static void belief_sync(alma *reasoner) {
+  new_beliefs_to_agent(reasoner);
+  for (int i = 0; i < reasoner->agent_count; i++) {
+    new_beliefs_from_agent(reasoner->agents_kb[i], reasoner->core_kb);
   }
-  return 0;
 }
 
 void alma_step(alma *reasoner, kb_str *buf) {
@@ -158,30 +182,38 @@ void alma_step(alma *reasoner, kb_str *buf) {
 
   reasoner->time++;
 
-  // Move delayed clauses into new_clauses
-  for (tommy_size_t i = 0; i < tommy_array_size(&reasoner->core_kb->timestep_delay_clauses); i++) {
-    clause *c = tommy_array_get(&reasoner->core_kb->timestep_delay_clauses, i);
-    tommy_array_insert(&reasoner->core_kb->new_clauses, c);
+  // Process tasks in all KB areas
+  kb_task_process(reasoner->core_kb, reasoner->procs, reasoner->time, &logger);
+  for (int i = 0; i < reasoner->agent_count; i++) {
+    kb_task_process(reasoner->agents_kb[i], reasoner->procs, reasoner->time, &logger);
   }
-  tommy_array_done(&reasoner->core_kb->timestep_delay_clauses);
-  tommy_array_init(&reasoner->core_kb->timestep_delay_clauses);
-
-  process_res_tasks(reasoner->core_kb, reasoner->time, &reasoner->core_kb->res_tasks, &reasoner->core_kb->new_clauses, NULL, &logger);
-  process_fif_tasks(reasoner->core_kb, reasoner->procs, &logger);
   process_backsearch_tasks(reasoner->core_kb, reasoner->time, &reasoner->backsearch_tasks, &logger);
 
-  int newc = tommy_array_size(&reasoner->core_kb->new_clauses) > 0;
-  process_new_clauses(reasoner->core_kb, reasoner->procs, reasoner->time, &logger, 1);
+  belief_sync(reasoner);
 
-  // New clock rules go last
+  // Process new clauses first pass
+  int has_new_clauses = tommy_array_size(&reasoner->core_kb->new_clauses) > 0;
+  process_new_clauses(reasoner->core_kb, reasoner->procs, reasoner->time, &logger, 1);
+  for (int i = 0; i < reasoner->agent_count; i++) {
+    process_new_clauses(reasoner->agents_kb[i], reasoner->procs, reasoner->time, &logger, 1);
+    if (tommy_array_size(&reasoner->agents_kb[i]->new_clauses) > 0)
+      has_new_clauses = 1;
+  }
+
+  belief_sync(reasoner);
+
+  // New clock rules go into core KB last
   reasoner->now = now(reasoner->time);
   assert_formula(reasoner->core_kb, reasoner->now, 0, &logger);
   delete_formula(reasoner->core_kb, reasoner->time, reasoner->prev, 0, &logger);
   free(reasoner->prev);
   reasoner->prev = reasoner->now;
 
-  // Second pass of process_new_clauses covers clock rules as well as late-added meta-formulas like contra from end of first pass
+  // Process new clauses second pass; covers clock rules as well as late-added meta-formulas like contra from end of first pass
   process_new_clauses(reasoner->core_kb, reasoner->procs, reasoner->time, &logger, 1);
+  for (int i = 0; i < reasoner->agent_count; i++) {
+    process_new_clauses(reasoner->agents_kb[i], reasoner->procs, reasoner->time, &logger, 1);
+  }
 
   tommy_node *i = tommy_list_head(&reasoner->backsearch_tasks);
   while (i) {
@@ -189,7 +221,11 @@ void alma_step(alma *reasoner, kb_str *buf) {
     i = i->next;
   }
 
-  reasoner->idling = idling_check(reasoner, newc);
+  // System idles if there are no resolution tasks, backsearch tasks, or to_unify fif values
+  // First of these is true when no new clauses (source of res tasks) exist
+  // To_unify values are all removed in current implementation each step from exhaustive fif
+  // Thus, idling when there are no new_clauses AND not finding tasks in backsearch
+  reasoner->idling = !has_new_clauses && idling_backsearch(&reasoner->backsearch_tasks);
   if (reasoner->idling)
     tee_alt("-a: Idling...\n", &logger);
 }
@@ -201,11 +237,18 @@ void alma_print(alma *reasoner, kb_str *buf) {
 
   kb_print(reasoner->core_kb, &logger);
 
+  if (reasoner->agent_count > 0)
+    tee_alt("Agent belief models:\n", &logger);
+  for (int i = 0; i < reasoner->agent_count; i++) {
+    tee_alt("%s:\n", &logger, reasoner->agents_kb[i]->prefix);
+    kb_print(reasoner->agents_kb[i], &logger);
+  }
+
   tommy_node* i = tommy_list_head(&reasoner->backsearch_tasks);
   if (i) {
     tee_alt("Back searches:\n", &logger);
     for (int count = 0; i != NULL; i = i->next, count++) {
-      tee_alt("%d\n",  &logger, count);
+      tee_alt("bs %d\n",  &logger, count);
       backsearch_task *t = i->data;
       for (tommy_size_t j = 0; j < tommy_array_size(&t->clauses); j++) {
         clause *c = tommy_array_get(&t->clauses, j);
@@ -233,50 +276,12 @@ void alma_halt(alma *reasoner) {
   if (reasoner->now == NULL)
     free(reasoner->prev);
 
-  for (tommy_size_t i = 0; i < tommy_array_size(&reasoner->core_kb->new_clauses); i++)
-    free_clause(tommy_array_get(&reasoner->core_kb->new_clauses, i));
-  tommy_array_done(&reasoner->core_kb->new_clauses);
-  tommy_array_done(&reasoner->core_kb->timestep_delay_clauses);
-
-  tommy_array_done(&reasoner->core_kb->distrust_set);
-  tommy_array_done(&reasoner->core_kb->distrust_parents);
-  tommy_array_done(&reasoner->core_kb->handle_set);
-  tommy_array_done(&reasoner->core_kb->handle_parents);
-  tommy_array_done(&reasoner->core_kb->retire_set);
-  tommy_array_done(&reasoner->core_kb->retire_parents);
-
-  tommy_array_done(&reasoner->core_kb->pos_lit_reinstates);
-  tommy_array_done(&reasoner->core_kb->neg_lit_reinstates);
-
-  tommy_array_done(&reasoner->core_kb->trues);
-
-  tommy_node *curr = tommy_list_head(&reasoner->core_kb->clauses);
-  while (curr) {
-    index_mapping *data = curr->data;
-    curr = curr->next;
-    free_clause(data->value);
-    free(data);
+  kb_halt(reasoner->core_kb);
+  for (int i = 0; i < reasoner->agent_count; i++) {
+    kb_halt(reasoner->agents_kb[i]);
   }
-  tommy_hashlin_done(&reasoner->core_kb->index_map);
-
-  tommy_list_foreach(&reasoner->core_kb->pos_list, free_predname_mapping);
-  tommy_hashlin_done(&reasoner->core_kb->pos_map);
-
-  tommy_list_foreach(&reasoner->core_kb->neg_list, free_predname_mapping);
-  tommy_hashlin_done(&reasoner->core_kb->neg_map);
-
-  tommy_hashlin_foreach(&reasoner->core_kb->fif_map, free_fif_mapping);
-  tommy_hashlin_done(&reasoner->core_kb->fif_map);
-
-  // Res task pointers are aliases to those freed from reasoner->clauses, so only free overall task here
-  for (tommy_size_t i = 0; i < tommy_array_size(&reasoner->core_kb->res_tasks); i++)
-    free(tommy_array_get(&reasoner->core_kb->res_tasks, i));
-  tommy_array_done(&reasoner->core_kb->res_tasks);
-
-  tommy_hashlin_foreach(&reasoner->core_kb->fif_tasks, free_fif_task_mapping);
-  tommy_hashlin_done(&reasoner->core_kb->fif_tasks);
-
-  curr = tommy_list_head(&reasoner->backsearch_tasks);
+  free(reasoner->agents_kb);
+  tommy_node *curr = tommy_list_head(&reasoner->backsearch_tasks);
   while (curr) {
     backsearch_task *data = curr->data;
     curr = curr->next;
@@ -287,7 +292,6 @@ void alma_halt(alma *reasoner) {
     fclose(reasoner->almalog);
   }
 
-  free(reasoner->core_kb);
   free(reasoner);
 
   parse_cleanup();

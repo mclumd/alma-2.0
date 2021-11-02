@@ -12,7 +12,7 @@ typedef struct alma {
 
   int idling; // Boolean for idle reasoner state, from each KB idling
   kb *core_kb; // Core KB contains all beliefs except backsearches and agent models
-  int agents_count; // Number of agents modeled
+  int agent_count; // Number of agents modeled
   kb **agents_kb; // List of KBs for agent models
   tommy_list backsearch_tasks; // Stores tasks for backsearch
   alma_proc procs[17]; // Procedure info array

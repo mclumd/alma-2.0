@@ -10,38 +10,6 @@ static void add_lit(int *count, alma_function ***lits, alma_function *new_lit) {
   quote_convert_func((*lits)[*count-1]);
 }
 
-static void make_clause_rec(alma_node *node, clause *c, int invert) {
-  // Note: predicate null assignment necessary for freeing of nodes without losing predicates
-  if (node != NULL) {
-    if (node->type == FOL) {
-      // Neg lit case for NOT
-      if (node->fol->op == NOT) {
-        if (invert)
-          add_lit(&c->pos_count, &c->pos_lits, node->fol->arg1->predicate);
-        else
-          add_lit(&c->neg_count, &c->neg_lits, node->fol->arg1->predicate);
-        node->fol->arg1->predicate = NULL;
-      }
-      // Case if node is OR (or AND when processing FIF fragments)
-      else {
-        make_clause_rec(node->fol->arg1, c, invert);
-        make_clause_rec(node->fol->arg2, c, invert);
-      }
-      if (c->tag == NONE)
-        c->tag = node->fol->tag;
-    }
-    // Otherwise, only pos lit left
-    else {
-      if (invert)
-        add_lit(&c->neg_count, &c->neg_lits, node->predicate);
-      else
-        add_lit(&c->pos_count, &c->pos_lits, node->predicate);
-      node->predicate = NULL;
-    }
-  }
-}
-
-
 static void init_record_tree(record_tree *records, int quote_level, record_tree *parent) {
   records->quote_level = quote_level;
   records->next_level_count = 0;
@@ -304,12 +272,44 @@ static void make_fif_conclusions(alma_node *node, clause *c) {
   }
 }
 
+static void make_clause_rec(alma_node *node, clause *c, int invert) {
+  // Note: predicate null assignment necessary for freeing of nodes without losing predicates
+  if (node != NULL) {
+    if (node->type == FOL) {
+      // Neg lit case for NOT
+      if (node->fol->op == NOT) {
+        if (invert)
+          add_lit(&c->pos_count, &c->pos_lits, node->fol->arg1->predicate);
+        else
+          add_lit(&c->neg_count, &c->neg_lits, node->fol->arg1->predicate);
+        node->fol->arg1->predicate = NULL;
+      }
+      // Case if node is OR (or AND when processing FIF fragments)
+      else {
+        make_clause_rec(node->fol->arg1, c, invert);
+        make_clause_rec(node->fol->arg2, c, invert);
+      }
+      if (c->tag == NONE)
+        c->tag = node->fol->tag;
+    }
+    // Otherwise, only pos lit left
+    else {
+      if (invert)
+        add_lit(&c->neg_count, &c->neg_lits, node->predicate);
+      else
+        add_lit(&c->pos_count, &c->pos_lits, node->predicate);
+      node->predicate = NULL;
+    }
+  }
+}
+
 void make_clause(alma_node *node, clause *c) {
   c->pos_count = c->neg_count = 0;
   c->pos_lits = c->neg_lits = NULL;
   c->parent_set_count = c->children_count = 0;
   c->parents = NULL;
   c->children = NULL;
+  c->equiv_belief = NULL;
   c->tag = NONE;
   c->fif = NULL;
 
@@ -389,7 +389,7 @@ void free_clause(clause *c) {
 }
 
 // Space for copy must be allocated before call
-// Does not copy parents/children/index/acquired
+// Does not copy parents/children/index/acquired/equiv_belief
 void copy_clause_structure(clause *original, clause *copy) {
   copy->pos_count = original->pos_count;
   copy->neg_count = original->neg_count;
@@ -406,6 +406,7 @@ void copy_clause_structure(clause *original, clause *copy) {
   copy->parent_set_count = copy->children_count = 0;
   copy->parents = NULL;
   copy->children = NULL;
+  copy->equiv_belief = NULL;
   copy->tag = original->tag;
   if (copy->tag == FIF) {
     copy->fif = malloc(sizeof(*copy->fif));

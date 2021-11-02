@@ -18,6 +18,7 @@ typedef struct clause {
   int children_count;
   struct parent_set *parents; // Use more efficient structure for as needed
   struct clause **children; // Use more efficient structure for as needed
+  struct clause *equiv_belief; // Indicates a belief linked to another clause (i.e. p(X) to bel(A, "p(X)"))
   if_tag tag;
   struct fif_info *fif; // Data used to store additional fif information; non-null only if FIF tagged
   long index; // Index of clause, used as key in index_map of KB

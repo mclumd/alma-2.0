@@ -152,7 +152,8 @@ void clause_print(clause *c, kb_logger *logger) {
       lits_print(c->pos_lits, c->pos_count, "\\/", 0, logger);
     }
   }
-  if (c->parents != NULL || c->children != NULL) {
+
+  if (c->parents != NULL || c->children != NULL || c->equiv_belief != NULL) {
     tee_alt(" (", logger);
     if (c->parents != NULL) {
       tee_alt("parents: ", logger);
@@ -167,7 +168,7 @@ void clause_print(clause *c, kb_logger *logger) {
         if (i < c->parent_set_count-1)
           tee_alt(", ", logger);
       }
-      if (c->children != NULL)
+      if (c->children != NULL || c->equiv_belief != NULL)
         tee_alt(", ", logger);
     }
     if (c->children != NULL) {
@@ -177,6 +178,11 @@ void clause_print(clause *c, kb_logger *logger) {
         if (i < c->children_count-1)
           tee_alt(", ", logger);
       }
+      if (c->equiv_belief != NULL)
+        tee_alt(", ", logger);
+    }
+    if (c->equiv_belief != NULL) {
+      tee_alt("equiv: %ld", logger, c->equiv_belief->index);
     }
     tee_alt(")", logger);
   }
@@ -239,8 +245,8 @@ void print_bindings(binding_list *theta, int print_all, int last_newline, kb_log
       print_matches(theta->quoted_var_matches, logger);
     }
   }
-    if (last_newline)
-      tee_alt("\n", logger);
+  if (last_newline)
+    tee_alt("\n", logger);
 }
 
 void tee_alt(char const *content, ...) {

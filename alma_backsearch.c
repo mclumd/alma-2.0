@@ -174,6 +174,17 @@ void backsearch_halt(backsearch_task *t) {
   free(t);
 }
 
+int idling_backsearch(tommy_list *backsearch_tasks) {
+  tommy_node *i = tommy_list_head(backsearch_tasks);
+  while (i) {
+    backsearch_task *bt = i->data;
+    if (tommy_array_size(&bt->to_resolve) > 0)
+      return 0;
+    i = i->next;
+  }
+  return 1;
+}
+
 // Compare function to be used by tommy_hashlin_search for binding_mapping
 // Compares long arg to key of binding_mapping
 int bm_compare(const void *arg, const void *obj) {
