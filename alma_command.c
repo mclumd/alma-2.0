@@ -23,20 +23,32 @@ static char* now(long t) {
   return str;
 }
 
+// Checks if c is literal of form bel(const_name, "...") or its negation
+static int is_bel_literal(clause *c, int positive) {
+  int count = positive ? c->pos_count : c->neg_count;
+  int other_count = positive ? c->neg_count : c->pos_count;
+
+  if (count == 1 && other_count == 0) {
+    alma_function *lit = positive ? c->pos_lits[0] : c->neg_lits[0];
+
+    return strcmp(lit->name, "bel") == 0 && lit->term_count == 2 && lit->terms[0].type == FUNCTION
+        && lit->terms[0].function->term_count == 0 && lit->terms[1].type == QUOTE && lit->terms[1].quote->type == CLAUSE;
+  }
+  return 0;
+
+}
+
 static void new_beliefs_to_agent(alma *reasoner) {
   for (tommy_size_t i = 0; i < tommy_array_size(&reasoner->core_kb->new_clauses); i++) {
     clause *c = tommy_array_get(&reasoner->core_kb->new_clauses, i);
-    // Must be literal of form bel(const, "...")
-    if (c->pos_count == 1 && c->neg_count == 0 && strcmp(c->pos_lits[0]->name, "bel") == 0
-        && c->pos_lits[0]->term_count == 2 && c->pos_lits[0]->terms[0].type == FUNCTION && c->pos_lits[0]->terms[0].function->term_count == 0
-        && c->pos_lits[0]->terms[1].type == QUOTE && c->pos_lits[0]->terms[1].quote->type == CLAUSE) {
+    if (is_bel_literal(c, 1)) {
       char *agent_name = c->pos_lits[0]->terms[0].function->name;
 
       kb *agent_collection = NULL;
       // Search for matching agent KB
       for (int j = 0; j < reasoner->agent_count; j++) {
-        if (strcmp(reasoner->agents_kb[i]->prefix, agent_name) == 0) {
-          agent_collection = reasoner->agents_kb[i];
+        if (strcmp(reasoner->agents_kb[j]->prefix, agent_name) == 0) {
+          agent_collection = reasoner->agents_kb[j];
           break;
         }
       }
@@ -125,13 +137,9 @@ void alma_init(alma *reasoner, char **files, int file_count, char *agent, char *
   // Given a file argument, obtain other initial clauses from
   if (files != NULL) {
     for (int i = 0; i < file_count; i++) {
-      alma_node *trees;
-      int num_trees;
-
-      if (formulas_from_source(files[i], 1, &num_trees, &trees,  &logger)) {
-        tommy_array temp;
-        tommy_array_init(&temp);
-        nodes_to_clauses(trees, num_trees, &temp, 0, &reasoner->core_kb->variable_id_count, &logger);
+      tommy_array temp;
+      tommy_array_init(&temp);
+      if (clauses_from_source(files[i], 1, &temp, &reasoner->core_kb->variable_id_count, &logger)) {
         for (tommy_size_t j = 0; j < tommy_array_size(&temp); j++) {
           tommy_array_insert(&reasoner->core_kb->new_clauses, tommy_array_get(&temp, j));
         }
@@ -147,12 +155,12 @@ void alma_init(alma *reasoner, char **files, int file_count, char *agent, char *
   }
   if (agent != NULL) {
     int namelen = strlen(agent);
-    char *sentence = malloc(10 + namelen + 3);
-    strcpy(sentence, "agentname(");
-    strcpy(sentence + 10, agent);
-    strcpy(sentence + 10 + namelen, ").");
-    assert_formula(reasoner->core_kb, sentence, 0, &logger);
-    free(sentence);
+    char *namestr = malloc(10 + namelen + 3);
+    strcpy(namestr, "agentname(");
+    strcpy(namestr + 10, agent);
+    strcpy(namestr + 10 + namelen, ").");
+    assert_formula(reasoner->core_kb, namestr, 0, &logger);
+    free(namestr);
   }
 
   reasoner->prev = now(reasoner->time);
@@ -173,6 +181,17 @@ static void belief_sync(alma *reasoner) {
   for (int i = 0; i < reasoner->agent_count; i++) {
     new_beliefs_from_agent(reasoner->agents_kb[i], reasoner->core_kb);
   }
+}
+
+// Checks whether any KB area has time-delay clauses to be added next timestep
+static int has_delay_clauses(alma *reasoner) {
+  if (tommy_array_size(&reasoner->core_kb->timestep_delay_clauses) > 0)
+    return 1;
+  for (int i = 0; i < reasoner->agent_count; i++) {
+    if (tommy_array_size(&reasoner->agents_kb[i]->timestep_delay_clauses) > 0)
+      return 1;
+  }
+  return 0;
 }
 
 void alma_step(alma *reasoner, kb_str *buf) {
@@ -213,6 +232,8 @@ void alma_step(alma *reasoner, kb_str *buf) {
   process_new_clauses(reasoner->core_kb, reasoner->procs, reasoner->time, &logger, 1);
   for (int i = 0; i < reasoner->agent_count; i++) {
     process_new_clauses(reasoner->agents_kb[i], reasoner->procs, reasoner->time, &logger, 1);
+    if (tommy_array_size(&reasoner->agents_kb[i]->new_clauses) > 0)
+      has_new_clauses = 1;
   }
 
   tommy_node *i = tommy_list_head(&reasoner->backsearch_tasks);
@@ -225,7 +246,7 @@ void alma_step(alma *reasoner, kb_str *buf) {
   // First of these is true when no new clauses (source of res tasks) exist
   // To_unify values are all removed in current implementation each step from exhaustive fif
   // Thus, idling when there are no new_clauses AND not finding tasks in backsearch
-  reasoner->idling = !has_new_clauses && idling_backsearch(&reasoner->backsearch_tasks);
+  reasoner->idling = !has_new_clauses && idling_backsearch(&reasoner->backsearch_tasks) && !has_delay_clauses(reasoner);
   if (reasoner->idling)
     tee_alt("-a: Idling...\n", &logger);
 }
@@ -324,12 +345,9 @@ void alma_observe(alma *reasoner, char *string, kb_str *buf) {
   logger.buf = buf;
 
   // Parse string into clauses
-  alma_node *formulas;
-  int formula_count;
-  if (formulas_from_source(string, 0, &formula_count, &formulas, &logger)) {
-    tommy_array arr;
-    tommy_array_init(&arr);
-    nodes_to_clauses(formulas, formula_count, &arr, 0, &reasoner->core_kb->variable_id_count, &logger);
+  tommy_array arr;
+  tommy_array_init(&arr);
+  if (clauses_from_source(string, 0, &arr, &reasoner->core_kb->variable_id_count, &logger)) {
 
     for (int i = 0; i < tommy_array_size(&arr); i++) {
       clause *c = tommy_array_get(&arr, i);
@@ -358,14 +376,9 @@ void alma_backsearch(alma *reasoner, char *string, kb_str *buf) {
   logger.log = reasoner->almalog;
   logger.buf = buf;
 
-  // Parse string into clauses
-  alma_node *formulas;
-  int formula_count;
-  if (formulas_from_source(string, 0, &formula_count, &formulas, &logger)) {
-    tommy_array arr;
-    tommy_array_init(&arr);
-    nodes_to_clauses(formulas, formula_count, &arr, 0, &reasoner->core_kb->variable_id_count, &logger);
-
+  tommy_array arr;
+  tommy_array_init(&arr);
+  if (clauses_from_source(string, 0, &arr, &reasoner->core_kb->variable_id_count, &logger)) {
     clause *c = tommy_array_get(&arr, 0);
     // Free all after first
     for (int i = 1; i < tommy_array_size(&arr); i++)

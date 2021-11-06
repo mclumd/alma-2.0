@@ -86,9 +86,9 @@ void res_tasks_from_clause(kb *collection, clause *c, int process_negatives);
 void process_res_tasks(kb *collection, long time, tommy_array *tasks, tommy_array *new_arr, struct backsearch_task *bs, kb_logger *logger);
 void process_new_clauses(kb *collection, struct alma_proc *procs, long time, kb_logger *logger, int make_tasks);
 
-clause* assert_formula(kb *collection, char *string, int print, kb_logger *logger);
-int delete_formula(kb *collection, long time, char *string, int print, kb_logger *logger);
-int update_formula(kb *collection, long time, char *string, kb_logger *logger);
+void assert_formula(kb *collection, char *string, int print, kb_logger *logger);
+void delete_formula(kb *collection, long time, char *string, int print, kb_logger *logger);
+void update_formula(kb *collection, long time, char *string, kb_logger *logger);
 
 clause* mapping_access(void *mapping, if_tag tag, int index);
 int mapping_num_clauses(void *mapping, if_tag tag);

@@ -68,8 +68,9 @@ typedef struct alma_quasiquote {
   alma_variable *variable;
 } alma_quasiquote;
 
-int fol_from_source(char *source, int file_src, int *formula_count, alma_node **formulas, int *error_count, alma_node **errors);
-void make_cnf(alma_node *node);
+struct kb_logger;
+int fol_from_source(char *source, int file_src, alma_node **formulas, struct kb_logger *logger);
+alma_node* cnf_copy(alma_node *original);
 void quote_convert_func(alma_function *func);
 
 void free_function(alma_function *func);
@@ -80,8 +81,6 @@ void free_alma_tree(alma_node *node);
 void copy_alma_var(alma_variable *original, alma_variable *copy);
 void copy_alma_function(alma_function *original, alma_function *copy);
 void copy_alma_quote(alma_quote *original, alma_quote *copy);
-void copy_alma_quasiquote(alma_quasiquote *original, alma_quasiquote *copy);
 void copy_alma_term(alma_term *original, alma_term *copy);
-void copy_alma_tree(alma_node *original, alma_node *copy);
 
 #endif

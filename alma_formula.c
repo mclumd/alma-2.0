@@ -2,6 +2,7 @@
 #include <string.h>
 #include <stdio.h>
 #include "alma_formula.h"
+#include "alma_print.h"
 #include "alma_clause.h"
 #include "alma_parser.h"
 #include "mpc/mpc.h"
@@ -178,59 +179,58 @@ static int alma_tree_init(alma_node *alma_tree, int quote_level, mpc_ast_t *ast)
   return 0;
 }
 
-// Top-level, given an AST for entire ALMA file parse
-// alma_trees must be freed by caller
-static void generate_alma_trees(mpc_ast_t *ast, alma_node **alma_trees, int *size, alma_node **error_trees, int *error_size) {
-  // Expects almaformula production to be children of top level of AST
-  // If the grammar changes so top-level rule doesn't lead to almaformula, this must be changed
-  *size = 0;
-  // Only count children that contain an almaformula production
-  for (int i = 0; i < ast->children_num; i++) {
-    if (strstr(ast->children[i]->tag, "almaformula") != NULL)
-      (*size)++;
-  }
-  *alma_trees = malloc(sizeof(**alma_trees) * *size);
+static void make_cnf(alma_node *node);
 
-  int index = 0;
-  *error_size = 0;
-  for (int i = 0; i < ast->children_num; i++) {
-    if (strstr(ast->children[i]->tag, "almaformula") != NULL) {
-      int ret = alma_tree_init(*alma_trees + index, 0, ast->children[i]->children[0]);
-      // Error return due to excess quasi-quotation, print message about
-      if (!ret) {
-        (*error_size)++;
-        *error_trees = realloc(*error_trees, sizeof(**error_trees) * *error_size);
-        (*error_trees)[*error_size-1] = (*alma_trees)[index];
-        (*alma_trees)[index].fol = NULL;
-      }
-      index++;
-    }
-  }
-
-  // If any trees moved to error_trees, adjust alma_trees to remove NULLs
-  if (*error_size > 0) {
-    alma_node *no_error = malloc(sizeof(*no_error) * (*size - *error_size));
-    index = 0;
-    for (int i = 0; i < *size && index < *size - *error_size; i++) {
-      if ((*alma_trees)[i].fol != NULL) {
-        no_error[index] = (*alma_trees)[i];
-        index++;
-      }
-    }
-    free(*alma_trees);
-    *alma_trees = no_error;
-    *size = *size - *error_size;
-  }
-}
-
-// Boolean return based on success of parsing
-int fol_from_source(char *source, int file_src, int *formula_count, alma_node **formulas, int *error_count, alma_node **errors) {
+// Returns the number of formulas obtained, based on success of parsing/traversing MPC's AST
+// Formulas must be freed by caller if returns nonzero count
+int fol_from_source(char *source, int file_src, alma_node **formulas, kb_logger *logger) {
   mpc_ast_t *ast;
   if (file_src ? parse_file(source, &ast) : parse_string(source, &ast)) {
-    // Obtain ALMA tree representations from MPC's AST
-    generate_alma_trees(ast, formulas, formula_count, errors, error_count);
+    // Expects almaformula production to be children of top AST level; only count those containing it
+    // If the grammar changes so top-level rule doesn't lead to almaformula, this must be changed
+    int max_size = 0;
+    for (int i = 0; i < ast->children_num; i++) {
+      if (strstr(ast->children[i]->tag, "almaformula") != NULL)
+        max_size++;
+    }
+
+    *formulas = malloc(sizeof(**formulas) * max_size);
+    int size = 0;
+    for (int i = 0; i < ast->children_num; i++) {
+      if (strstr(ast->children[i]->tag, "almaformula") != NULL) {
+        if (alma_tree_init(*formulas + size, 0, ast->children[i]->children[0])) {
+          size++;
+        }
+        else {
+          // Error return due to excess quasi-quotation, print message about
+          tee_alt("Error: quasi-quotation marks exceed level of quotation in ", logger);
+          alma_fol_print(*formulas + size, logger);
+          tee_alt("\n", logger);
+          free_alma_tree(*formulas + size);
+        }
+      }
+    }
     mpc_ast_delete(ast);
-    return 1;
+
+    if (size == 0) {
+      free(*formulas);
+    }
+    else if (size < max_size) {
+      *formulas = realloc(*formulas, sizeof(**formulas) * size);
+    }
+
+    // Convert ALMA FOL to CNF formulas, except for fif cases
+    for (int i = 0; i < size; i++) {
+      if ((*formulas)[i].type != FOL || (*formulas)[i].fol->tag != FIF)
+        make_cnf(*formulas+i);
+    }
+    //tee_alt("Standardized equivalents:\n", logger);
+    /*for (int i = 0; i < size; i++) {
+      alma_fol_print(formulas+i, logger);
+      tee_alt("\n", logger);
+    }*/
+
+    return size;
   }
   return 0;
 }
@@ -323,50 +323,12 @@ void copy_alma_function(alma_function *original, alma_function *copy) {
   }
 }
 
-void copy_alma_quote(alma_quote *original, alma_quote *copy) {
-  copy->type = original->type;
-  if (copy->type == SENTENCE) {
-    copy->sentence = malloc(sizeof(*copy->sentence));
-    copy_alma_tree(original->sentence, copy->sentence);
-  }
-  else {
-    copy->clause_quote = malloc(sizeof(*copy->clause_quote));
-    copy_clause_structure(original->clause_quote, copy->clause_quote);
-  }
-}
-
-void copy_alma_quasiquote(alma_quasiquote *original, alma_quasiquote *copy) {
-  copy->backtick_count = original->backtick_count;
-  copy->variable = malloc(sizeof(*copy->variable));
-  copy_alma_var(original->variable, copy->variable);
-}
-
-// Space for copy must be allocated before call
-void copy_alma_term(alma_term *original, alma_term *copy) {
-  copy->type = original->type;
-  if (original->type == VARIABLE) {
-    copy->variable = malloc(sizeof(*copy->variable));
-    copy_alma_var(original->variable, copy->variable);
-  }
-  else if (original->type == FUNCTION) {
-    copy->function = malloc(sizeof(*copy->function));
-    copy_alma_function(original->function, copy->function);
-  }
-  else if (original->type == QUOTE) {
-    copy->quote = malloc(sizeof(*copy->quote));
-    copy_alma_quote(original->quote, copy->quote);
-  }
-  else {
-    copy->quasiquote = malloc(sizeof(*copy->quasiquote));
-    copy_alma_quasiquote(original->quasiquote, copy->quasiquote);
-  }
-}
 
 // Space for copy must be allocated before call
 // If original is null and space is allocated for copy, probably will have memory issues
 // So may make sense to just crash on null dereference instead of checking that
 // TODO: Error return for failure?
-void copy_alma_tree(alma_node *original, alma_node *copy) {
+static void copy_alma_tree(alma_node *original, alma_node *copy) {
   copy->type = original->type;
   // FOL case
   if (original->type == FOL) {
@@ -401,6 +363,45 @@ void copy_alma_tree(alma_node *original, alma_node *copy) {
     }
     else
       copy->predicate = NULL;
+  }
+}
+
+void copy_alma_quote(alma_quote *original, alma_quote *copy) {
+  copy->type = original->type;
+  if (copy->type == SENTENCE) {
+    copy->sentence = malloc(sizeof(*copy->sentence));
+    copy_alma_tree(original->sentence, copy->sentence);
+  }
+  else {
+    copy->clause_quote = malloc(sizeof(*copy->clause_quote));
+    copy_clause_structure(original->clause_quote, copy->clause_quote);
+  }
+}
+
+static void copy_alma_quasiquote(alma_quasiquote *original, alma_quasiquote *copy) {
+  copy->backtick_count = original->backtick_count;
+  copy->variable = malloc(sizeof(*copy->variable));
+  copy_alma_var(original->variable, copy->variable);
+}
+
+// Space for copy must be allocated before call
+void copy_alma_term(alma_term *original, alma_term *copy) {
+  copy->type = original->type;
+  if (original->type == VARIABLE) {
+    copy->variable = malloc(sizeof(*copy->variable));
+    copy_alma_var(original->variable, copy->variable);
+  }
+  else if (original->type == FUNCTION) {
+    copy->function = malloc(sizeof(*copy->function));
+    copy_alma_function(original->function, copy->function);
+  }
+  else if (original->type == QUOTE) {
+    copy->quote = malloc(sizeof(*copy->quote));
+    copy_alma_quote(original->quote, copy->quote);
+  }
+  else {
+    copy->quasiquote = malloc(sizeof(*copy->quasiquote));
+    copy_alma_quasiquote(original->quasiquote, copy->quasiquote);
   }
 }
 
@@ -603,8 +604,15 @@ static void dist_or_over_and(alma_node *node) {
 }
 
 // Converts node from general FOL into CNF
-void make_cnf(alma_node *node) {
+static void make_cnf(alma_node *node) {
   eliminate_conditionals(node);
   negation_inwards(node);
   dist_or_over_and(node);
+}
+
+alma_node* cnf_copy(alma_node *original) {
+  alma_node *copy = malloc(sizeof(*copy));
+  copy_alma_tree(original, copy);
+  make_cnf(copy);
+  return copy;
 }

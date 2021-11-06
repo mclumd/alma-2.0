@@ -98,6 +98,8 @@ static void free_predname_mapping(void *arg) {
 }
 
 void kb_halt(kb *collection) {
+  free(collection->prefix);
+
   for (tommy_size_t i = 0; i < tommy_array_size(&collection->new_clauses); i++)
     free_clause(tommy_array_get(&collection->new_clauses, i));
   tommy_array_done(&collection->new_clauses);
@@ -790,10 +792,8 @@ static void handle_true(kb *collection, clause *truth, kb_logger *logger) {
     tommy_array_init(&unquoted);
     // Raw sentence must be converted into clauses
     if (quote->type == SENTENCE) {
-      alma_node *sentence_copy = malloc(sizeof(*sentence_copy));
-      copy_alma_tree(quote->sentence, sentence_copy);
-      make_cnf(sentence_copy);
-      nodes_to_clauses(sentence_copy, 1, &unquoted, 0, &collection->variable_id_count, logger);
+      alma_node *sentence_copy = cnf_copy(quote->sentence);
+      nodes_to_clauses(sentence_copy, 1, &unquoted, &collection->variable_id_count);
     }
     // Quote clause can be extracted directly
     else {
@@ -1035,7 +1035,6 @@ void process_new_clauses(kb *collection, alma_proc *procs, long time, kb_logger 
     else {
       // Fix equiv_beliefs before printing to avoid dangling pointer dereference
       if (c->equiv_belief != NULL) {
-
         // Change pointer to c to point to existing_clause, so it won't dangle
         // Only done when c's equiv clause currently points back to c
         if (c->equiv_belief->equiv_belief == c) {
@@ -1050,7 +1049,10 @@ void process_new_clauses(kb *collection, alma_proc *procs, long time, kb_logger 
 
       if (collection->verbose) {
         tee_alt("-a: Duplicate clause ", logger);
+        clause *temp = c->equiv_belief;
+        c->equiv_belief = NULL;
         clause_print(c, logger);
+        c->equiv_belief = temp;
         tee_alt(" merged into %ld\n", logger, existing_clause->index);
       }
 
@@ -1161,21 +1163,21 @@ void process_new_clauses(kb *collection, alma_proc *procs, long time, kb_logger 
 
 // Returns boolean based on success of string parse
 // If parses successfully, adds to collection's new_clauses
-// Returns pointer to first clause asserted, if any
-clause* assert_formula(kb *collection, char *string, int print, kb_logger *logger) {
-  alma_node *formulas;
-  int formula_count;
-  if (formulas_from_source(string, 0, &formula_count, &formulas, logger)) {
-    tommy_array temp;
-    tommy_array_init(&temp);
-    nodes_to_clauses(formulas, formula_count, &temp, print, &collection->variable_id_count, logger);
-    clause *ret = tommy_array_size(&temp) > 0 ? tommy_array_get(&temp, 0) : NULL;
-    for (tommy_size_t i = 0; i < tommy_array_size(&temp); i++)
-      tommy_array_insert(&collection->new_clauses, tommy_array_get(&temp, i));
-    tommy_array_done(&temp);
-    return ret;
+void assert_formula(kb *collection, char *string, int print, kb_logger *logger) {
+  tommy_array temp;
+  tommy_array_init(&temp);
+  if (clauses_from_source(string, 0, &temp, &collection->variable_id_count, logger)) {
+    for (tommy_size_t i = 0; i < tommy_array_size(&temp); i++) {
+      clause *c = tommy_array_get(&temp, i);
+      tommy_array_insert(&collection->new_clauses, c);
+      if (print) {
+        tee_alt("-a: ", logger);
+        clause_print(c, logger);
+        tee_alt(" added\n", logger);
+      }
+    }
   }
-  return NULL;
+  tommy_array_done(&temp);
 }
 
 
@@ -1317,15 +1319,10 @@ static void remove_clause(kb *collection, clause *c) {
   free_clause(c);
 }
 
-int delete_formula(kb *collection, long time, char *string, int print, kb_logger *logger) {
-  alma_node *formulas;
-  int formula_count;
-  if (formulas_from_source(string, 0, &formula_count, &formulas, logger)) {
-    // Convert formulas to clause array
-    tommy_array clauses;
-    tommy_array_init(&clauses);
-    nodes_to_clauses(formulas, formula_count, &clauses, 0, &collection->variable_id_count, logger);
-
+void delete_formula(kb *collection, long time, char *string, int print, kb_logger *logger) {
+  tommy_array clauses;
+  tommy_array_init(&clauses);
+  if (clauses_from_source(string, 0, &clauses, &collection->variable_id_count, logger)) {
     // Process and remove each clause
     for (tommy_size_t i = 0; i < tommy_array_size(&clauses); i++) {
       clause *curr = tommy_array_get(&clauses, i);
@@ -1345,38 +1342,29 @@ int delete_formula(kb *collection, long time, char *string, int print, kb_logger
       }
       free_clause(curr);
     }
-
-    tommy_array_done(&clauses);
-
-    return 1;
   }
-  return 0;
+  tommy_array_done(&clauses);
 }
 
-int update_formula(kb *collection, long time, char *string, kb_logger *logger) {
-  alma_node *formulas;
-  int formula_count;
-  if (formulas_from_source(string, 0, &formula_count, &formulas, logger)) {
-    // Must supply two formula arguments to update
-    if (formula_count != 2) {
-      for (int i = 0; i < formula_count; i++)
-        free_alma_tree(formulas+i);
-      free(formulas);
+void update_formula(kb *collection, long time, char *string, kb_logger *logger) {
+  tommy_array clauses;
+  tommy_array_init(&clauses);
+  if (clauses_from_source(string, 0, &clauses, &collection->variable_id_count, logger)) {
+    if (tommy_array_size(&clauses) != 2) {
       tee_alt("-a: Incorrect number of arguments to update\n", logger);
-      return 0;
+      for (tommy_size_t i = 0; i < tommy_array_size(&clauses); i++) {
+        free_clause(tommy_array_get(&clauses, i));
+      }
+      tommy_array_done(&clauses);
+      return;
     }
 
-    // Convert formulas to clause array
-    tommy_array clauses;
-    tommy_array_init(&clauses);
-    nodes_to_clauses(formulas, formula_count, &clauses, 0, &collection->variable_id_count, logger);
-
-    int update_fail = 0;
     clause *target = tommy_array_get(&clauses, 0);
     clause *update = tommy_array_get(&clauses, 1);
     tommy_array_done(&clauses);
     clause *t_dupe;
-    clause *u_dupe;
+
+    int update_fail = 0;
     if (target->tag == FIF || update->tag == FIF) {
       tee_alt("-a: Cannot update with fif clause\n", logger);
       update_fail = 1;
@@ -1387,7 +1375,7 @@ int update_formula(kb *collection, long time, char *string, kb_logger *logger) {
       tee_alt(" to update not present\n", logger);
       update_fail = 1;
     }
-    else if ((u_dupe = duplicate_check(collection, time, update, 1)) != NULL) {
+    else if (duplicate_check(collection, time, update, 1) != NULL) {
       tee_alt("-a: New version of clause already present\n", logger);
       update_fail = 1;
     }
@@ -1395,7 +1383,7 @@ int update_formula(kb *collection, long time, char *string, kb_logger *logger) {
     if (update_fail) {
       free_clause(target);
       free_clause(update);
-      return 0;
+      return;
     }
     else {
       // Clear out res and fif tasks with old version of clause
@@ -1439,10 +1427,8 @@ int update_formula(kb *collection, long time, char *string, kb_logger *logger) {
         map_add_clause(&collection->neg_map, &collection->neg_list, t_dupe->neg_lits[j], t_dupe);
 
       free_clause(update);
-      return 1;
     }
   }
-  return 0;
 }
 
 

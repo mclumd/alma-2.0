@@ -36,7 +36,7 @@ typedef struct parent_set {
 } parent_set;
 
 void set_variable_ids(clause *c, int id_from_name, int non_escaping_only, binding_list *bs_bindings, long long *id_count);
-int formulas_from_source(char *source, int file_src, int *formula_count, alma_node **formulas, kb_logger *logger);
+int clauses_from_source(char *source, int file_src, tommy_array *clauses, long long *id_count, kb_logger *logger);
 void make_clause(alma_node *node, clause *c);
 void free_clause(clause *c);
 void copy_clause_structure(clause *orignal, clause *copy);
@@ -45,7 +45,7 @@ void transfer_parent(clause *target, clause *source, int add_children);
 void add_child(clause *parent, clause *child);
 void remove_child(clause *p, clause *c);
 
-void nodes_to_clauses(alma_node *trees, int num_trees, tommy_array *clauses, int print, long long *id_count, kb_logger *logger);
+void nodes_to_clauses(alma_node *trees, int num_trees, tommy_array *clauses, long long *id_count);
 int clauses_differ(clause *x, clause *y);
 
 int flags_negative(clause *c);

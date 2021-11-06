@@ -226,34 +226,14 @@ static void init_ordering(fif_info *info, alma_node *node) {
   init_ordering_rec(info, node->fol->arg1, &next, &pos, &neg);
 }
 
-int formulas_from_source(char *source, int file_src, int *formula_count, alma_node **formulas, kb_logger *logger) {
-  alma_node *errors = NULL;
-  int error_count;
-  int ret = fol_from_source(source, file_src, formula_count, formulas, &error_count, &errors);
-  if (ret) {
-    // Print messages and free error cases
-    for (int i = 0; i < error_count; i++) {
-      tee_alt("Error: quasi-quotation marks exceed level of quotation in ", logger);
-      alma_fol_print(errors + i, logger);
-      tee_alt("\n", logger);
-      free_alma_tree(errors+i);
-    }
-    free(errors);
+int clauses_from_source(char *source, int file_src, tommy_array *clauses, long long *id_count, kb_logger *logger) {
+  alma_node *formulas;
+  int formula_count = fol_from_source(source, file_src, &formulas, logger);
+  if (formula_count == 0)
+    return 0;
 
-    // Convert ALMA FOL to CNF formulas, except for fif cases
-    for (int i = 0; i < *formula_count; i++) {
-      if ((*formulas)[i].type != FOL || (*formulas)[i].fol->tag != FIF)
-        make_cnf(*formulas+i);
-    }
-    //tee_alt("Standardized equivalents:\n", logger);
-    /*for (int i = 0; i < *formula_count; i++) {
-      alma_fol_print(*formulas+i, logger);
-      tee_alt("\n", logger);
-    }*/
-    return 1;
-  }
-  else
-    return ret;
+  nodes_to_clauses(formulas, formula_count, clauses, id_count);
+  return 1;
 }
 
 static void make_fif_conclusions(alma_node *node, clause *c) {
@@ -303,6 +283,7 @@ static void make_clause_rec(alma_node *node, clause *c, int invert) {
   }
 }
 
+// Converts a node into a clause destructively (leaves are moved to the clause literals)
 void make_clause(alma_node *node, clause *c) {
   c->pos_count = c->neg_count = 0;
   c->pos_lits = c->neg_lits = NULL;
@@ -517,7 +498,7 @@ void remove_child(clause *p, clause *c) {
 
 // Flattens trees into set of clauses (tommy_array must be initialized prior)
 // trees argument freed here
-void nodes_to_clauses(alma_node *trees, int num_trees, tommy_array *clauses, int print, long long *id_count, kb_logger *logger) {
+void nodes_to_clauses(alma_node *trees, int num_trees, tommy_array *clauses, long long *id_count) {
   for (int i = 0; i < num_trees; i++) {
     flatten_node(trees+i, clauses);
     free_alma_tree(trees+i);
@@ -526,12 +507,6 @@ void nodes_to_clauses(alma_node *trees, int num_trees, tommy_array *clauses, int
   for (int i = 0; i < tommy_array_size(clauses); i++) {
     clause *c = tommy_array_get(clauses, i);
     set_variable_ids(c, 1, 0, NULL, id_count);
-
-    if (print) {
-      tee_alt("-a: ", logger);
-      clause_print(c, logger);
-      tee_alt(" added\n", logger);
-    }
   }
 }
 
