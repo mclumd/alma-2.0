@@ -23,57 +23,62 @@ static char* now(long t) {
   return str;
 }
 
-// Checks if c is literal of form bel(const_name, "...") or its negation
-static int is_bel_literal(clause *c, int positive) {
-  int count = positive ? c->pos_count : c->neg_count;
-  int other_count = positive ? c->neg_count : c->pos_count;
-
-  if (count == 1 && other_count == 0) {
-    alma_function *lit = positive ? c->pos_lits[0] : c->neg_lits[0];
-
-    return strcmp(lit->name, "bel") == 0 && lit->term_count == 2 && lit->terms[0].type == FUNCTION
-        && lit->terms[0].function->term_count == 0 && lit->terms[1].type == QUOTE && lit->terms[1].quote->type == CLAUSE;
-  }
-  return 0;
-
+// Given a literal's function, checks for form bel(const_name, "...")
+static int is_bel_literal(alma_function *lit) {
+  return strcmp(lit->name, "bel") == 0 && lit->term_count == 2 && lit->terms[0].type == FUNCTION
+      && lit->terms[0].function->term_count == 0 && lit->terms[1].type == QUOTE && lit->terms[1].quote->type == CLAUSE;
 }
 
-static void new_beliefs_to_agent(alma *reasoner) {
+static void agent_kb_init(agent_kb *agent, char* name, int verbose) {
+  agent->name = malloc(strlen(name)+1);
+  strcpy(agent->name, name);
+  agent->pos = malloc(sizeof(*agent->pos));
+  kb_init(agent->pos, verbose);
+  agent->neg = malloc(sizeof(*agent->neg));
+  kb_init(agent->neg, verbose);
+}
+
+static void new_beliefs_to_agents(alma *reasoner) {
   for (tommy_size_t i = 0; i < tommy_array_size(&reasoner->core_kb->new_clauses); i++) {
     clause *c = tommy_array_get(&reasoner->core_kb->new_clauses, i);
-    if (is_bel_literal(c, 1)) {
-      char *agent_name = c->pos_lits[0]->terms[0].function->name;
+    if (c->pos_count + c->neg_count == 1) {
+      int positive = (c->pos_count == 1);
+      alma_function *lit = positive ? c->pos_lits[0] : c->neg_lits[0];
+      if (is_bel_literal(lit)) {
+        char *agent_name = lit->terms[0].function->name;
 
-      kb *agent_collection = NULL;
-      // Search for matching agent KB
-      for (int j = 0; j < reasoner->agent_count; j++) {
-        if (strcmp(reasoner->agents_kb[j]->prefix, agent_name) == 0) {
-          agent_collection = reasoner->agents_kb[j];
-          break;
+        agent_kb *agent = NULL;
+        // Search for matching agent KB
+        for (int j = 0; j < reasoner->agent_count; j++) {
+          if (strcmp(reasoner->agents[j].name, agent_name) == 0) {
+            agent = reasoner->agents + j;
+            break;
+          }
+        }
+        // If a matching agent KB doesn't exist, create it
+        if (agent == NULL) {
+          reasoner->agent_count++;
+          reasoner->agents = realloc(reasoner->agents, sizeof(*reasoner->agents) * reasoner->agent_count);
+          agent = reasoner->agents + (reasoner->agent_count-1);
+          agent_kb_init(agent, agent_name, reasoner->core_kb->verbose);
+        }
+
+        // Create copy of quoted belief, add to agent's appropriate KB
+        clause *unquoted = malloc(sizeof(*unquoted));
+        copy_clause_structure(lit->terms[1].quote->clause_quote, unquoted);
+        decrement_quote_level(unquoted, 1);
+        // Initialize equivalence links for pair
+        unquoted->equiv_belief = c;
+        c->equiv_belief = unquoted;
+        if (positive) {
+          set_variable_ids(unquoted, 1, 0, NULL, &agent->pos->variable_id_count);
+          tommy_array_insert(&agent->pos->new_clauses, unquoted);
+        }
+        else {
+          set_variable_ids(unquoted, 1, 0, NULL, &agent->neg->variable_id_count);
+          tommy_array_insert(&agent->neg->new_clauses, unquoted);
         }
       }
-
-      // If a matching agent KB doesn't exist, create it
-      if (agent_collection == NULL) {
-        reasoner->agent_count++;
-        reasoner->agents_kb = realloc(reasoner->agents_kb, sizeof(*reasoner->agents_kb)*reasoner->agent_count);
-        reasoner->agents_kb[reasoner->agent_count-1] = malloc(sizeof(*reasoner->agents_kb[reasoner->agent_count-1]));
-        agent_collection = reasoner->agents_kb[reasoner->agent_count-1];
-        kb_init(agent_collection, reasoner->core_kb->verbose);
-        agent_collection->prefix = malloc(strlen(agent_name)+1);
-        strcpy(agent_collection->prefix, agent_name);
-      }
-
-      // Create copy of quoted belief, add to agent KB's new_clauses
-      clause *unquoted = malloc(sizeof(*unquoted));
-      copy_clause_structure(c->pos_lits[0]->terms[1].quote->clause_quote, unquoted);
-      decrement_quote_level(unquoted, 1);
-      // Initialize equivalence links for pair
-      unquoted->equiv_belief = c;
-      c->equiv_belief = unquoted;
-      set_variable_ids(unquoted, 1, 0, NULL, &agent_collection->variable_id_count);
-
-      tommy_array_insert(&agent_collection->new_clauses, unquoted);
     }
   }
 }
@@ -88,7 +93,7 @@ void alma_init(alma *reasoner, char **files, int file_count, char *agent, char *
   reasoner->core_kb = malloc(sizeof(*reasoner->core_kb));
   kb_init(reasoner->core_kb, verbose);
   reasoner->agent_count = 0;
-  reasoner->agents_kb = NULL;
+  reasoner->agents = NULL;
   tommy_list_init(&reasoner->backsearch_tasks);
   const alma_proc procs[17] = {{"neg_int", 1}, {"neg_int_spec", 1}, {"neg_int_gen", 1}, {"pos_int", 1}, {"pos_int_spec", 1},
                    {"pos_int_gen", 1}, {"acquired", 2}, {"pos_int_past", 3}, {"neg_int_past", 3}, {"ancestor", 3}, {"non_ancestor", 3},
@@ -166,20 +171,22 @@ void alma_init(alma *reasoner, char **files, int file_count, char *agent, char *
   reasoner->prev = now(reasoner->time);
   assert_formula(reasoner->core_kb, reasoner->prev, 0, &logger);
 
-  new_beliefs_to_agent(reasoner);
+  new_beliefs_to_agents(reasoner);
 
   kb_task_init(reasoner->core_kb, reasoner->procs, reasoner->time, &logger);
 
   for (int i = 0; i < reasoner->agent_count; i++) {
-    kb_task_init(reasoner->agents_kb[i], reasoner->procs, reasoner->time, &logger);
+    kb_task_init(reasoner->agents[i].pos, reasoner->procs, reasoner->time, &logger);
+    kb_task_init(reasoner->agents[i].neg, reasoner->procs, reasoner->time, &logger);
   }
 }
 
 // Sync beliefs between agent KBs and core KB
 static void belief_sync(alma *reasoner) {
-  new_beliefs_to_agent(reasoner);
+  new_beliefs_to_agents(reasoner);
   for (int i = 0; i < reasoner->agent_count; i++) {
-    new_beliefs_from_agent(reasoner->agents_kb[i], reasoner->core_kb);
+    new_beliefs_from_agent(reasoner->agents[i].pos, 1, reasoner->agents[i].name, reasoner->core_kb);
+    new_beliefs_from_agent(reasoner->agents[i].neg, 0, reasoner->agents[i].name, reasoner->core_kb);
   }
 }
 
@@ -188,7 +195,8 @@ static int has_delay_clauses(alma *reasoner) {
   if (tommy_array_size(&reasoner->core_kb->timestep_delay_clauses) > 0)
     return 1;
   for (int i = 0; i < reasoner->agent_count; i++) {
-    if (tommy_array_size(&reasoner->agents_kb[i]->timestep_delay_clauses) > 0)
+    if (tommy_array_size(&reasoner->agents[i].pos->timestep_delay_clauses) > 0 ||
+        tommy_array_size(&reasoner->agents[i].neg->timestep_delay_clauses) > 0)
       return 1;
   }
   return 0;
@@ -204,7 +212,8 @@ void alma_step(alma *reasoner, kb_str *buf) {
   // Process tasks in all KB areas
   kb_task_process(reasoner->core_kb, reasoner->procs, reasoner->time, &logger);
   for (int i = 0; i < reasoner->agent_count; i++) {
-    kb_task_process(reasoner->agents_kb[i], reasoner->procs, reasoner->time, &logger);
+    kb_task_process(reasoner->agents[i].pos, reasoner->procs, reasoner->time, &logger);
+    kb_task_process(reasoner->agents[i].neg, reasoner->procs, reasoner->time, &logger);
   }
   process_backsearch_tasks(reasoner->core_kb, reasoner->time, &reasoner->backsearch_tasks, &logger);
 
@@ -214,8 +223,10 @@ void alma_step(alma *reasoner, kb_str *buf) {
   int has_new_clauses = tommy_array_size(&reasoner->core_kb->new_clauses) > 0;
   process_new_clauses(reasoner->core_kb, reasoner->procs, reasoner->time, &logger, 1);
   for (int i = 0; i < reasoner->agent_count; i++) {
-    process_new_clauses(reasoner->agents_kb[i], reasoner->procs, reasoner->time, &logger, 1);
-    if (tommy_array_size(&reasoner->agents_kb[i]->new_clauses) > 0)
+    process_new_clauses(reasoner->agents[i].pos, reasoner->procs, reasoner->time, &logger, 1);
+    process_new_clauses(reasoner->agents[i].neg, reasoner->procs, reasoner->time, &logger, 1);
+    if (tommy_array_size(&reasoner->agents[i].pos->new_clauses) > 0 ||
+        tommy_array_size(&reasoner->agents[i].neg->new_clauses) > 0)
       has_new_clauses = 1;
   }
 
@@ -231,8 +242,10 @@ void alma_step(alma *reasoner, kb_str *buf) {
   // Process new clauses second pass; covers clock rules as well as late-added meta-formulas like contra from end of first pass
   process_new_clauses(reasoner->core_kb, reasoner->procs, reasoner->time, &logger, 1);
   for (int i = 0; i < reasoner->agent_count; i++) {
-    process_new_clauses(reasoner->agents_kb[i], reasoner->procs, reasoner->time, &logger, 1);
-    if (tommy_array_size(&reasoner->agents_kb[i]->new_clauses) > 0)
+    process_new_clauses(reasoner->agents[i].pos, reasoner->procs, reasoner->time, &logger, 1);
+    process_new_clauses(reasoner->agents[i].neg, reasoner->procs, reasoner->time, &logger, 1);
+    if (tommy_array_size(&reasoner->agents[i].pos->new_clauses) > 0 ||
+        tommy_array_size(&reasoner->agents[i].neg->new_clauses) > 0)
       has_new_clauses = 1;
   }
 
@@ -261,8 +274,10 @@ void alma_print(alma *reasoner, kb_str *buf) {
   if (reasoner->agent_count > 0)
     tee_alt("Agent belief models:\n", &logger);
   for (int i = 0; i < reasoner->agent_count; i++) {
-    tee_alt("%s:\n", &logger, reasoner->agents_kb[i]->prefix);
-    kb_print(reasoner->agents_kb[i], &logger);
+    tee_alt("%s pos:\n", &logger, reasoner->agents[i].name);
+    kb_print(reasoner->agents[i].pos, &logger);
+    tee_alt("%s neg:\n", &logger, reasoner->agents[i].name);
+    kb_print(reasoner->agents[i].neg, &logger);
   }
 
   tommy_node* i = tommy_list_head(&reasoner->backsearch_tasks);
@@ -299,9 +314,11 @@ void alma_halt(alma *reasoner) {
 
   kb_halt(reasoner->core_kb);
   for (int i = 0; i < reasoner->agent_count; i++) {
-    kb_halt(reasoner->agents_kb[i]);
+    kb_halt(reasoner->agents[i].pos);
+    kb_halt(reasoner->agents[i].neg);
+    free(reasoner->agents[i].name);
   }
-  free(reasoner->agents_kb);
+  free(reasoner->agents);
   tommy_node *curr = tommy_list_head(&reasoner->backsearch_tasks);
   while (curr) {
     backsearch_task *data = curr->data;

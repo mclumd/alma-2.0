@@ -11,7 +11,6 @@
 typedef struct kb {
   long long variable_id_count;
   long next_index;
-  char *prefix; // String prefix for indices when printing / agent name
   int verbose; // Boolean flag for printing extra output
 
   tommy_list clauses; // Linked list storing index_mappings, keeps track of all clauses
@@ -74,7 +73,7 @@ void kb_task_process(kb *collection, struct alma_proc *procs, long time, kb_logg
 void kb_print(kb *collection, kb_logger *logger);
 void kb_halt(kb *collection);
 
-void new_beliefs_from_agent(kb *agent, kb *core);
+void new_beliefs_from_agent(kb *agent, int positive, char *name, kb *core);
 
 void* clause_lookup(kb *collection, clause *c);
 clause* duplicate_check(kb *collection, long time, clause *c, int check_distrusted);

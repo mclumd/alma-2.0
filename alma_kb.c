@@ -10,7 +10,6 @@
 void kb_init(kb* collection, int verbose) {
   collection->variable_id_count = 0;
   collection->next_index = 0;
-  collection->prefix = NULL;
   collection->verbose = verbose;
 
   tommy_list_init(&collection->clauses);
@@ -98,8 +97,6 @@ static void free_predname_mapping(void *arg) {
 }
 
 void kb_halt(kb *collection) {
-  free(collection->prefix);
-
   for (tommy_size_t i = 0; i < tommy_array_size(&collection->new_clauses); i++)
     free_clause(tommy_array_get(&collection->new_clauses, i));
   tommy_array_done(&collection->new_clauses);
@@ -150,7 +147,7 @@ void kb_halt(kb *collection) {
 static clause* make_meta_literal(kb *collection, char *predname, clause *c, long time);
 
 // For each new formula in new_clauses of agent kb, makes equivalent bel(...) formula for core kb
-void new_beliefs_from_agent(kb *agent, kb *core) {
+void new_beliefs_from_agent(kb *agent, int positive, char *name, kb *core) {
   for (tommy_size_t i = 0; i < tommy_array_size(&agent->new_clauses); i++) {
     clause *c = tommy_array_get(&agent->new_clauses, i);
 
@@ -162,12 +159,20 @@ void new_beliefs_from_agent(kb *agent, kb *core) {
       bel->pos_lits[0]->terms[1].quote = bel->pos_lits[0]->terms[0].quote;
       bel->pos_lits[0]->terms[0].type = FUNCTION;
       bel->pos_lits[0]->terms[0].function = malloc(sizeof(*bel->pos_lits[0]->terms[0].function));
-      bel->pos_lits[0]->terms[0].function->name = malloc(strlen(agent->prefix)+1);
-      strcpy(bel->pos_lits[0]->terms[0].function->name, agent->prefix);
+      bel->pos_lits[0]->terms[0].function->name = malloc(strlen(name)+1);
+      strcpy(bel->pos_lits[0]->terms[0].function->name, name);
       bel->pos_lits[0]->terms[0].function->term_count = 0;
       bel->pos_lits[0]->terms[0].function->terms = NULL;
 
       increment_quote_level(bel->pos_lits[0]->terms[1].quote->clause_quote, 1); // Needed??
+
+      // Make literal negated if necessary
+      if (!positive) {
+        bel->neg_count = bel->pos_count;
+        bel->pos_count = 0;
+        bel->neg_lits = bel->pos_lits;
+        bel->pos_lits = NULL;
+      }
 
       // Initialize equivalence links for pair
       bel->equiv_belief = c;
