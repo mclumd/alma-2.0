@@ -83,6 +83,52 @@ static void new_beliefs_to_agents(alma *reasoner) {
   }
 }
 
+// Boolean return based on if KB had any new (non-now) clauses this step
+static int process_new_reasoner_clauses(alma *reasoner, kb_logger *logger, int make_tasks) {
+  int has_new_clauses = tommy_array_size(&reasoner->core_kb->new_clauses) > 0;
+  for (int i = 0; i < reasoner->agent_count; i++) {
+    if (!has_new_clauses && (tommy_array_size(&reasoner->agents[i].pos->new_clauses) > 0 ||
+        tommy_array_size(&reasoner->agents[i].neg->new_clauses) > 0))
+      has_new_clauses = 1;
+  }
+
+  // Continue processing clauses until KB segments have new_clauses exhausted
+  int unprocessed_clauses = 0;
+  do {
+    // Sync beliefs between agent KBs and core KB
+    new_beliefs_to_agents(reasoner);
+    for (int i = 0; i < reasoner->agent_count; i++) {
+      new_beliefs_from_agent(reasoner->agents[i].pos, 1, reasoner->agents[i].name, reasoner->core_kb);
+      new_beliefs_from_agent(reasoner->agents[i].neg, 0, reasoner->agents[i].name, reasoner->core_kb);
+    }
+
+    process_new_clauses(reasoner->core_kb, reasoner->procs, reasoner->time, logger, make_tasks);
+    unprocessed_clauses = tommy_array_size(&reasoner->core_kb->new_clauses) > 0;
+    for (int i = 0; i < reasoner->agent_count; i++) {
+      process_new_clauses(reasoner->agents[i].pos, reasoner->procs, reasoner->time, logger, make_tasks);
+      process_new_clauses(reasoner->agents[i].neg, reasoner->procs, reasoner->time, logger, make_tasks);
+      if (!unprocessed_clauses && (tommy_array_size(&reasoner->agents[i].pos->new_clauses) > 0 ||
+          tommy_array_size(&reasoner->agents[i].neg->new_clauses) > 0))
+        unprocessed_clauses = 1;
+    }
+  } while (unprocessed_clauses);
+
+  // Clock rule goes into core KB last
+  char *timestep = now(reasoner->time);
+  assert_formula(reasoner->core_kb, timestep, 0, logger);
+  if (reasoner->prev == NULL) {
+    reasoner->prev = timestep;
+  }
+  else {
+    reasoner->now = timestep;
+    delete_formula(reasoner->core_kb, reasoner->time, reasoner->prev, 0, logger);
+    free(reasoner->prev);
+    reasoner->prev = reasoner->now;
+  }
+  process_new_clauses(reasoner->core_kb, reasoner->procs, reasoner->time, logger, make_tasks);
+
+  return has_new_clauses;
+}
 
 // Caller will need to free reasoner with alma_halt
 void alma_init(alma *reasoner, char **files, int file_count, char *agent, char *trialnum, char *log_dir, int verbose, kb_str *buf, int logon) {
@@ -168,25 +214,12 @@ void alma_init(alma *reasoner, char **files, int file_count, char *agent, char *
     free(namestr);
   }
 
-  reasoner->prev = now(reasoner->time);
-  assert_formula(reasoner->core_kb, reasoner->prev, 0, &logger);
-
-  new_beliefs_to_agents(reasoner);
+  process_new_reasoner_clauses(reasoner, &logger, 0);
 
   kb_task_init(reasoner->core_kb, reasoner->procs, reasoner->time, &logger);
-
   for (int i = 0; i < reasoner->agent_count; i++) {
     kb_task_init(reasoner->agents[i].pos, reasoner->procs, reasoner->time, &logger);
     kb_task_init(reasoner->agents[i].neg, reasoner->procs, reasoner->time, &logger);
-  }
-}
-
-// Sync beliefs between agent KBs and core KB
-static void belief_sync(alma *reasoner) {
-  new_beliefs_to_agents(reasoner);
-  for (int i = 0; i < reasoner->agent_count; i++) {
-    new_beliefs_from_agent(reasoner->agents[i].pos, 1, reasoner->agents[i].name, reasoner->core_kb);
-    new_beliefs_from_agent(reasoner->agents[i].neg, 0, reasoner->agents[i].name, reasoner->core_kb);
   }
 }
 
@@ -217,37 +250,7 @@ void alma_step(alma *reasoner, kb_str *buf) {
   }
   process_backsearch_tasks(reasoner->core_kb, reasoner->time, &reasoner->backsearch_tasks, &logger);
 
-  belief_sync(reasoner);
-
-  // Process new clauses first pass
-  int has_new_clauses = tommy_array_size(&reasoner->core_kb->new_clauses) > 0;
-  process_new_clauses(reasoner->core_kb, reasoner->procs, reasoner->time, &logger, 1);
-  for (int i = 0; i < reasoner->agent_count; i++) {
-    process_new_clauses(reasoner->agents[i].pos, reasoner->procs, reasoner->time, &logger, 1);
-    process_new_clauses(reasoner->agents[i].neg, reasoner->procs, reasoner->time, &logger, 1);
-    if (tommy_array_size(&reasoner->agents[i].pos->new_clauses) > 0 ||
-        tommy_array_size(&reasoner->agents[i].neg->new_clauses) > 0)
-      has_new_clauses = 1;
-  }
-
-  belief_sync(reasoner);
-
-  // New clock rules go into core KB last
-  reasoner->now = now(reasoner->time);
-  assert_formula(reasoner->core_kb, reasoner->now, 0, &logger);
-  delete_formula(reasoner->core_kb, reasoner->time, reasoner->prev, 0, &logger);
-  free(reasoner->prev);
-  reasoner->prev = reasoner->now;
-
-  // Process new clauses second pass; covers clock rules as well as late-added meta-formulas like contra from end of first pass
-  process_new_clauses(reasoner->core_kb, reasoner->procs, reasoner->time, &logger, 1);
-  for (int i = 0; i < reasoner->agent_count; i++) {
-    process_new_clauses(reasoner->agents[i].pos, reasoner->procs, reasoner->time, &logger, 1);
-    process_new_clauses(reasoner->agents[i].neg, reasoner->procs, reasoner->time, &logger, 1);
-    if (tommy_array_size(&reasoner->agents[i].pos->new_clauses) > 0 ||
-        tommy_array_size(&reasoner->agents[i].neg->new_clauses) > 0)
-      has_new_clauses = 1;
-  }
+  int has_new_clauses = process_new_reasoner_clauses(reasoner, &logger, 1);
 
   tommy_node *i = tommy_list_head(&reasoner->backsearch_tasks);
   while (i) {

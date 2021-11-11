@@ -488,8 +488,7 @@ static int check_default_parents(clause *c, kb *alma, kb_logger *logger) {
                 && premise->terms->type == QUOTE && premise->terms->quote->type == CLAUSE
                 && premise->terms->quote->clause_quote->neg_count == 0
                 && premise->terms->quote->clause_quote->pos_count == 1
-                && strcmp(premise->terms->quote->clause_quote->pos_lits[0]->name, "abnormal") == 0
-                && premise->terms->quote->clause_quote->pos_lits[0]->term_count == 3) {
+                && strcmp(premise->terms->quote->clause_quote->pos_lits[0]->name, "abnormal") == 0) {
               default_fif = 1;
               if (alma->verbose)
                 tee_alt(" Default parent found\n", logger);
@@ -590,9 +589,9 @@ static int parents_defaults(alma_term *arg, alma_term *time, binding_list *bindi
     }
     else {
       if (invert)
-        tee_alt("Failed to find non-default parent\n\n", logger);
+        tee_alt("Failed to find non-default parent\n", logger);
       else
-        tee_alt("Failed to find all parents defaults\n\n", logger);
+        tee_alt("Failed to find all parents defaults\n", logger);
     }
   }
 
@@ -601,7 +600,7 @@ static int parents_defaults(alma_term *arg, alma_term *time, binding_list *bindi
 
 // Returns true if digit value of x is less than digit value of y
 // Else, incuding cases where types differ, false
-static int less_than(alma_term *x, alma_term *y, binding_list *bindings) {
+static int less_than(alma_term *x, alma_term *y, binding_list *bindings, kb *alma, kb_logger *logger) {
   char *x_str;
   char *y_str;
   if (x->type == VARIABLE) {
@@ -626,6 +625,10 @@ static int less_than(alma_term *x, alma_term *y, binding_list *bindings) {
     return 0;
 
   long xval, yval;
+  if (alma->verbose) {
+    tee_alt("Testing less than\n", logger);
+  }
+
   if (!str_to_long(x_str, &xval) || !str_to_long(y_str, &yval))
     return 0;
   else
@@ -635,7 +638,7 @@ static int less_than(alma_term *x, alma_term *y, binding_list *bindings) {
 // If first argument is a bound variable, constructs a quotation term out of term it's bound to, if able
 // If variable is bound to a function, this is treated as standing for a singleton clause
 // If variable is bound to a quote, this can be used directly with no difference
-static int quote_cons(alma_term *to_quote, alma_variable *result, binding_list *bindings, kb *alma) {
+static int quote_cons(alma_term *to_quote, alma_variable *result, binding_list *bindings, kb *alma, kb_logger *logger) {
   binding *res = bindings_contain(bindings, to_quote->variable);
   if (res == NULL) {
     return 0;
@@ -648,6 +651,10 @@ static int quote_cons(alma_term *to_quote, alma_variable *result, binding_list *
   }
   else if (res->term->type != FUNCTION) {
     return 0;
+  }
+
+  if (alma->verbose) {
+    tee_alt("Performing quote_cons\n", logger);
   }
 
   alma_function *func = res->term->function;
@@ -677,6 +684,7 @@ static int quote_cons(alma_term *to_quote, alma_variable *result, binding_list *
   formula->parent_set_count = formula->children_count = 0;
   formula->parents = NULL;
   formula->children = NULL;
+  formula->equiv_belief = NULL;
   formula->tag = NONE;
   formula->fif = NULL;
 
@@ -716,7 +724,15 @@ static int not_equal(alma_term *arg1, alma_term *arg2, binding_list *bindings, k
       tee_alt("\"\n", logger);
     }
 
-    not_equal = clauses_differ(arg1_copy->quote->clause_quote, arg2_copy->quote->clause_quote);
+    not_equal = clauses_differ(arg1_copy->quote->clause_quote, arg2_copy->quote->clause_quote, 1);
+    if (alma->verbose) {
+      if (not_equal) {
+        tee_alt("Unequal\n", logger);
+      }
+      else {
+        tee_alt("Equal\n", logger);
+      }
+    }
   }
 
   free_term(arg1_copy);
@@ -786,22 +802,22 @@ int proc_run(alma_function *proc, binding_list *bindings, fif_task *task, kb *al
   else if (strcmp(proc->name, "parents_defaults") == 0) {
     // Must match (given_bindings) the schema parents_defaults("...", Time)
     if (proc->term_count == 2 || proc->term_count == 3)
-      return parents_defaults(proc->terms+0, proc->terms+1,bindings, alma, logger, 0);
+      return parents_defaults(proc->terms+0, proc->terms+1, bindings, alma, logger, 0);
   }
   else if (strcmp(proc->name, "parent_non_default") == 0) {
     // Must match (given_bindings) the schema parent_non_default("...", Time)
     if (proc->term_count == 2 || proc->term_count == 3)
-      return parents_defaults(proc->terms+0, proc->terms+1,bindings, alma, logger, 1);
+      return parents_defaults(proc->terms+0, proc->terms+1, bindings, alma, logger, 1);
   }
   else if (strcmp(proc->name, "less_than") == 0) {
     if (proc->term_count == 2 || proc->term_count == 3)
-      return less_than(proc->terms+0, proc->terms+1, bindings);
+      return less_than(proc->terms+0, proc->terms+1, bindings, alma, logger);
   }
   else if (strcmp(proc->name, "quote_cons") == 0) {
     if ((proc->term_count == 2 || proc->term_count == 3)
         && proc->terms[0].type == VARIABLE && proc->terms[1].type == VARIABLE
         && !bindings_contain(bindings, proc->terms[1].variable))
-      return quote_cons(proc->terms+0, (proc->terms+1)->variable, bindings, alma);
+      return quote_cons(proc->terms+0, (proc->terms+1)->variable, bindings, alma, logger);
   }
   else if (strcmp(proc->name, "not_equal") == 0) {
     if (proc->term_count == 2)

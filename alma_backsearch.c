@@ -79,7 +79,7 @@ void backsearch_from_clause(tommy_list *backsearch_tasks, clause *c) {
 static clause* backsearch_duplicate_check(backsearch_task *task, clause *c) {
   for (int i = 0; i < tommy_array_size(&task->clauses); i++) {
     clause *compare = tommy_array_get(&task->clauses, i);
-    if (compare->tag == c->tag && !clauses_differ(c, compare))
+    if (compare->tag == c->tag && !clauses_differ(c, compare, 0))
       return compare;
   }
   return NULL;

@@ -40,13 +40,6 @@ void kb_init(kb* collection, int verbose) {
 }
 
 void kb_task_init(kb *collection, alma_proc *procs, long time, kb_logger *logger) {
-
-  fif_to_front(&collection->new_clauses);
-  // Insert starting clauses
-  process_new_clauses(collection, procs, time, logger, 0);
-  // Second pass of process_new_clauses for late-added meta-formulas like contra from end of first pass
-  process_new_clauses(collection, procs, time, logger, 0);
-
   // Generate starting tasks
   tommy_node *i = tommy_list_head(&collection->clauses);
   while (i) {
@@ -270,7 +263,7 @@ clause* duplicate_check(kb *collection, long time, clause *c, int check_distrust
     fif_mapping *result = tommy_hashlin_search(&collection->fif_map, fifm_compare, name, tommy_hash_u64(0, name, strlen(name)));
     if (result != NULL) {
       for (int i = 0; i < result->num_clauses; i++) {
-        if (c->tag == result->clauses[i]->tag && !clauses_differ(c, result->clauses[i]))
+        if (c->tag == result->clauses[i]->tag && !clauses_differ(c, result->clauses[i], 0))
           return result->clauses[i];
       }
     }
@@ -301,7 +294,7 @@ clause* duplicate_check(kb *collection, long time, clause *c, int check_distrust
       for (int i = 0; i < result->num_clauses; i++) {
         // A clause distrusted this timestep is still checked against
         if ((check_distrusted || flags_negative(result->clauses[i]) || flag_min(result->clauses[i]) == time) &&
-            c->tag == result->clauses[i]->tag && !clauses_differ(c, result->clauses[i]))
+            c->tag == result->clauses[i]->tag && !clauses_differ(c, result->clauses[i], 0))
           return result->clauses[i];
       }
     }
@@ -526,7 +519,7 @@ static clause* make_meta_literal(kb *collection, char *predname, clause *c, long
   return res;
 }
 
-static void distrust_recursive(kb *collection, clause *c, clause *contra, long time) {
+static void distrust_recursive(kb *collection, clause *c, clause *contra, long time, tommy_array *clauses) {
   // Formula becomes distrusted at current time
   c->distrusted = time;
 
@@ -536,13 +529,13 @@ static void distrust_recursive(kb *collection, clause *c, clause *contra, long t
   // Assert atomic distrusted() formula
   clause *d = make_meta_literal(collection, "distrusted", c, time);
   init_single_parent(d, contra);
-  tommy_array_insert(&collection->new_clauses, d);
+  tommy_array_insert(clauses, d);
 
   // Recursively distrust children
   if (c->children != NULL) {
     for (int i = 0; i < c->children_count; i++) {
       if (c->children[i]->distrusted < 0 && derivations_distrusted(c->children[i])) {
-        distrust_recursive(collection, c->children[i], contra, time);
+        distrust_recursive(collection, c->children[i], contra, time, clauses);
       }
     }
   }
@@ -557,7 +550,7 @@ static void binding_subst(binding_list *target, binding_list *theta) {
     subst_term(theta, target->list[i].term, 0);
 }
 
-static void make_contra(kb *collection, clause *contradictand_pos, clause *contradictand_neg, long time) {
+static void make_contra(kb *collection, clause *contradictand_pos, clause *contradictand_neg, long time, tommy_array *clauses) {
   clause *contra = malloc(sizeof(*contra));
   contra->pos_count = 1;
   contra->neg_count = 0;
@@ -578,7 +571,7 @@ static void make_contra(kb *collection, clause *contradictand_pos, clause *contr
   contra->tag = NONE;
   contra->fif = NULL;
   set_variable_ids(contra, 1, 0, NULL, &collection->variable_id_count);
-  tommy_array_insert(&collection->new_clauses, contra);
+  tommy_array_insert(clauses, contra);
 
   clause *contradicting = malloc(sizeof(*contradicting));
   copy_clause_structure(contra, contradicting);
@@ -586,7 +579,7 @@ static void make_contra(kb *collection, clause *contradictand_pos, clause *contr
   strcpy(contradicting->pos_lits[0]->name, "contradicting");
   init_single_parent(contradicting, contra);
   set_variable_ids(contradicting, 1, 0, NULL, &collection->variable_id_count);
-  tommy_array_insert(&collection->new_clauses, contradicting);
+  tommy_array_insert(clauses, contradicting);
 
   tommy_array_insert(&collection->distrust_set, contradictand_pos);
   tommy_array_insert(&collection->distrust_parents, contra);
@@ -726,7 +719,7 @@ void process_res_tasks(kb *collection, long time, tommy_array *tasks, tommy_arra
             }
             // If not a backward search, empty resolution result indicates a contradiction between clauses
             else
-              make_contra(collection, current_task->x, current_task->y, time);
+              make_contra(collection, current_task->x, current_task->y, time, &collection->new_clauses);
           }
         }
         if (collection->verbose)
@@ -932,7 +925,7 @@ static void handle_reinstate(kb *collection, clause *reinstate, long time) {
 
 // Special semantic operator: update
 // Updating succeeds if given a quote matching KB formula(s) and a quote for the updated clause
-static void handle_update(kb *collection, clause *update) {
+static void handle_update(kb *collection, clause *update, tommy_array *clauses) {
   alma_term *arg1 = update->pos_lits[0]->terms+0;
   alma_term *arg2 = update->pos_lits[0]->terms+1;
 
@@ -956,7 +949,7 @@ static void handle_update(kb *collection, clause *update) {
 
           subst_clause(theta, update_clause, 0);
           set_variable_ids(update_clause, 1, 0, NULL, &collection->variable_id_count);
-          tommy_array_insert(&collection->new_clauses, update_clause);
+          tommy_array_insert(clauses, update_clause);
 
           tommy_array_insert(&collection->distrust_set, jth);
           tommy_array_insert(&collection->distrust_parents, update);
@@ -972,6 +965,9 @@ static void handle_update(kb *collection, clause *update) {
 // Special handling for true, reinstate, distrust, update
 void process_new_clauses(kb *collection, alma_proc *procs, long time, kb_logger *logger, int make_tasks) {
   fif_to_front(&collection->new_clauses);
+
+  tommy_array next_pass_clauses;
+  tommy_array_init(&next_pass_clauses);
 
   for (tommy_size_t i = 0; i < tommy_array_size(&collection->new_clauses); i++) {
     clause *c = tommy_array_get(&collection->new_clauses, i);
@@ -1015,7 +1011,7 @@ void process_new_clauses(kb *collection, alma_proc *procs, long time, kb_logger 
         if (c->tag == NONE && c->pos_lits[0]->term_count == 2 && c->pos_lits[0]->terms[0].type == QUOTE &&
             c->pos_lits[0]->terms[0].quote->type == CLAUSE && c->pos_lits[0]->terms[1].type == QUOTE &&
             c->pos_lits[0]->terms[1].quote->type == CLAUSE) {
-          handle_update(collection, c);
+          handle_update(collection, c, &next_pass_clauses);
         }
       }
       // Non-reinstate/non-update sentences generate tasks
@@ -1070,8 +1066,6 @@ void process_new_clauses(kb *collection, alma_proc *procs, long time, kb_logger 
       tommy_array_set(&collection->new_clauses, i, NULL);
     }
   }
-  tommy_array_done(&collection->new_clauses);
-  tommy_array_init(&collection->new_clauses);
 
   // Process reinstatements of literals to look for contradictory reinstatements between them
   for (tommy_size_t i = 0; i < tommy_array_size(&collection->pos_lit_reinstates); i++) {
@@ -1088,7 +1082,7 @@ void process_new_clauses(kb *collection, alma_proc *procs, long time, kb_logger 
 
         // If unification succeeds, then they're contradictory reinstatement targets
         if (pred_unify(pos, neg, theta, 0)) {
-          make_contra(collection, reinstate, reinstate_neg, time);
+          make_contra(collection, reinstate, reinstate_neg, time, &next_pass_clauses);
           contradictory = 1;
         }
         cleanup_bindings(theta);
@@ -1123,7 +1117,7 @@ void process_new_clauses(kb *collection, alma_proc *procs, long time, kb_logger 
   for (tommy_size_t i = 0; i < tommy_array_size(&collection->distrust_set); i++) {
     clause *c = tommy_array_get(&collection->distrust_set, i);
     clause *parent = tommy_array_get(&collection->distrust_parents, i);
-    distrust_recursive(collection, c, parent, time);
+    distrust_recursive(collection, c, parent, time, &next_pass_clauses);
   }
   tommy_array_done(&collection->distrust_set);
   tommy_array_init(&collection->distrust_set);
@@ -1137,7 +1131,7 @@ void process_new_clauses(kb *collection, alma_proc *procs, long time, kb_logger 
     c->handled = time;
     clause *handled = make_meta_literal(collection, "handled", c, time);
     init_single_parent(handled, parent);
-    tommy_array_insert(&collection->new_clauses, handled);
+    tommy_array_insert(&next_pass_clauses, handled);
   }
   tommy_array_done(&collection->handle_set);
   tommy_array_init(&collection->handle_set);
@@ -1163,6 +1157,8 @@ void process_new_clauses(kb *collection, alma_proc *procs, long time, kb_logger 
   tommy_array_done(&collection->trues);
   tommy_array_init(&collection->trues);
 
+  tommy_array_done(&collection->new_clauses);
+  collection->new_clauses = next_pass_clauses;
 }
 
 

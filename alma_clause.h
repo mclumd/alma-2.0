@@ -46,7 +46,7 @@ void add_child(clause *parent, clause *child);
 void remove_child(clause *p, clause *c);
 
 void nodes_to_clauses(alma_node *trees, int num_trees, tommy_array *clauses, long long *id_count);
-int clauses_differ(clause *x, clause *y);
+int clauses_differ(clause *x, clause *y, int quote_level);
 
 int flags_negative(clause *c);
 long flag_min(clause *c);

@@ -587,10 +587,10 @@ static int functions_differ(alma_function *x, alma_function *y, var_match_set *m
 // Equality of variables is that there is a one-to-one correspondence in the sets of variables x and y use,
 // based on each location where a variable maps to another
 // Thus a(X, X) and a(X, Y) are here considered different
-int clauses_differ(clause *x, clause *y) {
+int clauses_differ(clause *x, clause *y, int quote_level) {
     var_match_set matches;
     var_match_init(&matches);
-    if (clauses_differ_rec(x, y, &matches, 0))
+    if (clauses_differ_rec(x, y, &matches, quote_level))
       return release_matches(&matches, 1);
     // All literals compared as equal; return 0
     return release_matches(&matches, 0);
