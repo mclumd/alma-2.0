@@ -19,12 +19,16 @@ And similarly for the testing set.
 
 import argparse
 import numpy as np
+
+import alma_utils
 import resolution_prebuffer
 import alma
-from gnn_starter import explosion, res_task_lits
+from utils import explosion, res_task_lits
 import sys
 import pickle
 from sklearn.utils import shuffle
+
+from utils import kb_to_subjects_list
 
 def get_dataset(network, training_percent):
     X = network.Xbuffer
@@ -96,41 +100,85 @@ def main():
     parser = argparse.ArgumentParser(description="Collect dataset for offline learning.")
     parser.add_argument("num_observations", type=int, default=10)
     parser.add_argument("reasoning_steps", type=int, default=500)
+    parser.add_argument("num_trajectories", type=int, default=5)
     parser.add_argument("outfile", type=str)
+    parser.add_argument("--text_kb", action='store_true')
     parser.add_argument("--training_percent", type=float, default=0.8)
-    parser.add_argument("--gnn_nodes", type=int, default=50)
+    parser.add_argument("--gnn_nodes", type=int, default=-1)
     parser.add_argument("--kb", action='store', required=False, default="test1_kb.pl")
     parser.add_argument("--dgl_gnn", action='store_true')
-    args = parser.parse_args()    
-    network = resolution_prebuffer.res_prebuffer(['a', 'b', 'distanceAt', 'distanceBetweenBoundedBy'], [], debug=True, use_gnn=True, gnn_nodes=args.gnn_nodes)
-    alma_inst, _ = alma.init(1,args.kb, '0', 1, 1000, [], [])
-    exp = explosion(args.num_observations, args.kb, alma_inst)
-    res_tasks = exp[0]
-    res_lits = res_task_lits(exp[2])
-    res_task_input = [x[:2] for x in res_tasks]
-    res_task_input = [x[:2] for x in res_tasks]
-    network.save_batch(res_task_input, res_lits)
-    priorities = 1 - network.get_priorities(res_task_input)
-    alma.set_priors_prb(alma_inst, priorities.flatten().tolist())
-    alma.prb_to_res_task(alma_inst, 1.0)
-    for step in range(args.reasoning_steps):
-        alma.astep(alma_inst)
-        prb = alma.prebuf(alma_inst)
-        res_tasks = prb[0]
-        if len(res_tasks) > 0:
-            res_lits = res_task_lits(prb[2])
-            res_task_input = [x[:2] for x in res_tasks]
-            network.save_batch(res_task_input, res_lits)
-            print("rti len is", len(res_task_input))
-            print("At reasoning step {}, network has {} samples, {} of which are positive".format(step, len(network.ybuffer), network.ypos_count))
-            priorities = 1 - network.get_priorities(res_task_input)
-            alma.set_priors_prb(alma_inst, priorities.flatten().tolist())
-            alma.prb_to_res_task(alma_inst, 1.0)
+    args = parser.parse_args()
+    subject_list = kb_to_subjects_list(args.kb)
+    collect(args.reasoning_steps, args.num_observations, args.num_trajectories,
+            args.outfile, subject_list,
+            kb = args.kb, gnn_nodes = args.gnn_nodes, gnn=args.gnn_nodes != -1,
+            training_percent=args.training_percent,
+            text_kb = args.text_kb
+            )
 
-    saved_dict = get_dataset(network, args.training_percent)
-    print("Final result has {} positive, {} negative, {} total samples.   Writing to {}".format(saved_dict['total_pos'],saved_dict['total_neg'],saved_dict['total'], args.outfile))
-    with open(args.outfile, "wb") as pkl_file:
-        pickle.dump(saved_dict, pkl_file)
+
+
+
+def collect(reasoning_steps, num_observations, num_trajectories, outfile, subject_list,
+            kb=None, gnn_nodes=-1, gnn=True, text_kb=False,
+            training_percent=0.8):
+    trajectories = []
+    for tnum in range(num_trajectories):
+        network = resolution_prebuffer.res_prebuffer(subject_list, [], debug=True, use_tf=True,   # Torch not working at time of writing
+                                                     use_gnn=gnn, gnn_nodes=gnn_nodes)
+        alma_inst, _ = alma.init(1,kb, '0', 1, 1000, [], [])
+        exp = explosion(num_observations, kb, alma_inst)
+        res_tasks = exp[0]
+        res_lits = res_task_lits(exp[2])
+        res_task_input = [x[:2] for x in res_tasks]
+        res_task_input = [x[:2] for x in res_tasks]
+        if text_kb:  # random walk
+            priorities = np.random.uniform(size = len(res_task_input))
+            kb_over_time = []
+            kb_over_time.append(alma_utils.current_kb_text(alma_inst))
+            total = 1
+        else:
+            network.save_batch(res_task_input, res_lits)
+            priorities = 1 - network.get_priorities(res_task_input)
+        alma.set_priors_prb(alma_inst, priorities.flatten().tolist())
+        alma.prb_to_res_task(alma_inst, 1.0)
+        # Get the next action
+        actions = []
+        actions.append(alma_utils.next_action(alma_inst))
+        for step in range(reasoning_steps):
+            alma.astep(alma_inst)
+            prb = alma.prebuf(alma_inst)
+            res_tasks = prb[0]
+            if len(res_tasks) > 0:
+                res_lits = res_task_lits(prb[2])
+                res_task_input = [x[:2] for x in res_tasks]
+                if text_kb:
+                    priorities = np.random.uniform(size = len(res_task_input))
+                    kb_over_time.append(alma_utils.current_kb_text(alma_inst))
+                    total += 1
+                else:
+                    network.save_batch(res_task_input, res_lits)
+                    print("rti len is", len(res_task_input))
+                    print("At reasoning step {}, network has {} samples, {} of which are positive".format(step, len(network.ybuffer), network.ypos_count))
+                    priorities = 1 - network.get_priorities(res_task_input)
+                alma.set_priors_prb(alma_inst, priorities.flatten().tolist())
+                alma.prb_to_res_task(alma_inst, 1.0)
+                actions.append(alma_utils.next_action(alma_inst))
+        text_actions = [  (alma_utils.alma_tree_to_str(x[0]), alma_utils.alma_tree_to_str(x[1])) for x in actions]
+        if text_kb:
+            trajectory = {
+                'total': total,
+                'kb': kb_over_time,
+                'actions': text_actions
+                }
+        else:
+            trajectory = get_dataset(network, training_proportion)
+            print("Final result has {} positive, {} negative, {} total samples.   Writing to {}".format(trajectory['total_pos'],trajectory['total_neg'],trajectory['total'], outfile))
+        trajectories.append(trajectory)
+        alma.halt(alma_inst)
+    
+    with open(outfile, "wb") as pkl_file:
+        pickle.dump(trajectories, pkl_file)
 
 
 if __name__ == "__main__":
