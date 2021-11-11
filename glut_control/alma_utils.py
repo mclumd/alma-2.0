@@ -1,6 +1,7 @@
 import alma
 import math
 
+
 def prebuf_print(alma_inst, print_size=math.inf):
     prb = alma.prebuf(alma_inst)[0]
     print("prb size: ", len(prb))
@@ -37,13 +38,25 @@ def kb_print(alma_inst):
         print(s)
 
 
+def next_action(alma_inst):        
+    res_task_buffer = alma.res_task_buf(alma_inst)
+    next_action = res_task_buffer[0][0]
+    return next_action
+
+def current_kb_text(alma_inst):
+    L = alma.kb_to_pyobject(alma_inst)
+    return [alma_tree_to_str(x) for x in L]
+
 def alma_tree_to_str(tree):
     if len(tree) == 0:
         return ""
     elif tree[0] == 'if':
         return alma_tree_to_str(tree[1]) + " --> " + alma_tree_to_str(tree[2])
     elif tree[0] == 'func':
-        return tree[1] + '(' + ''.join([alma_tree_to_str(term) for term in tree[2]   ]) + ')'
+        if len(tree[2]) > 0:
+            return tree[1] + '(' + ''.join([alma_tree_to_str(term) + ', ' for term in tree[2]   ])[:-2] + ')'
+        else:
+            return tree[1]
     elif tree[0] == 'var':
         return tree[1]
     elif tree[0] == 'a':
