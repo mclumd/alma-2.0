@@ -6,17 +6,6 @@ Currently, the following are planned:
   b) 
   c) 
 """
-import tensorflow as tf
-
-#tf.config.gpu.set_per_process_memory_fraction(0.25)
-#tf.config.gpu.set_per_process_memory_growth(True)
-
-from tensorflow import keras
-from tensorflow.keras.models import Model
-from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.losses import BinaryCrossentropy
-from tensorflow.keras.metrics import BinaryAccuracy
-from tensorflow.keras.layers import Dense, Dropout
 
 #from spektral.layers import GCNConv, GlobalSumPool
 #from spektral.data.graph import Graph
@@ -35,34 +24,41 @@ from vectorization import graph_representation, unifies, vectorize_bow1, vectori
 #from memory_profiler import profile
 #import dgl_network
 
+def tf_imports():
+    global tf, keras, Model, Adam, BinaryCrossentropy, BinaryAccuracy, Dense, Dropout
+    import tensorflow as tf
+    #tf.config.gpu.set_per_process_memory_fraction(0.25)
+    #tf.config.gpu.set_per_process_memory_growth(True)
+    from tensorflow import keras
+    from tensorflow.keras.models import Model
+    from tensorflow.keras.optimizers import Adam
+    from tensorflow.keras.losses import BinaryCrossentropy
+    from tensorflow.keras.metrics import BinaryAccuracy
+    from tensorflow.keras.layers import Dense, Dropout
+
+def torch_imports():
+    global torch
+    import torch
+    
 import ctypes 
 class PyObject(ctypes.Structure):
     _fields_ = [("refcnt", ctypes.c_long)]
+
+
+    
     
 def forward_model(use_tf = False, num_subjects=0):
-    # TODO:  fix use_tf code to return everything if this ever gets used.
+
     if use_tf:
-        model  = tf.keras.models.Sequential([
-            tf.keras.Input(shape=( (  2*num_subjects,)) ),    # One input for each term
-            tf.keras.layers.Dense(32, activation='relu'),
-            tf.keras.layers.Dropout(0.2),
-            tf.keras.layers.Dense(1),
-            tf.keras.layers.Softmax()
-        ])
-        loss_object = tf.keras.losses.BinaryCrossentropy(from_logits=True)
-        optimizer = tf.keras.optimizers.Adam()
-        train_loss = tf.keras.metrics.Mean(name='train_loss')
-        train_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(name='train_accuracy')
-        test_loss = tf.keras.metrics.Mean(name='test_loss')
-        test_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(name='test_accuracy')
-        print("Model summary:", self.model.summary())
-    else:
         model = keras.models.Sequential()
         model.add(keras.Input(shape=( (  2*num_subjects,)) ))    # One input for each term
         model.add(keras.layers.Dense(8, activation='tanh'))
         model.add(keras.layers.Dense(8, activation='tanh'))
         model.add(keras.layers.Dense(1, activation='sigmoid'))
         model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy', 'binary_crossentropy'])
+    else:
+        # Pytorch model
+        pass
     return model
 
 class history_struct:
@@ -129,7 +125,8 @@ class history_struct:
 
 
 class gnn_model_zero():
-    def __init__(self, max_nodes=20, num_features=20, use_state = False, debugging=False, tb_log_dir = "/tmp"):
+    def __init__(self, max_nodes=20, num_features=20, use_state = False, debugging=False,
+                 tb_log_dir = "/tmp", pytorch = False):
         #gnn_model.__init__(self, max_nodes)
         self.debugging = debugging
         input_size = (2*max_nodes)**2 + (2*max_nodes*num_features)
@@ -137,6 +134,14 @@ class gnn_model_zero():
         self.input_size = input_size
         self.max_nodes = max_nodes
         self.num_features = num_features
+
+        self.use_pytorch = pytorch
+        self.use_tf = not pytorch
+        if self.use_tf:
+            tf_imports()
+        else:
+            torch_imports()
+            
         # Function API version; don't use this for now
         # input = keras.Input(shape=(input_size,))
         # x1 = keras.layers.Dense(8, activation='tanh')(input)
@@ -146,20 +151,50 @@ class gnn_model_zero():
 
         # If we are encoding state, we will *separately* encode the KB,
         # concatenate it with the action and feed the result into self.model
-        self.model_input = keras.Input(shape=( (  input_size,)), name="action_input")
+            
+
         self.use_state = use_state
+        self.pytorch_backend = pytorch
+        self.tensorflow_backend = not pytorch
+
+
+
+        
+        if self.tensorflow_backend:
+            tf_imports()
+            self.model_input = keras.Input(shape=((input_size,)), name="action_input")
+        else:
+            torch_imports()
+
+
         if use_state:
             self.state_input_size = (max_nodes)**2 + (max_nodes*num_features) # We'll feed in KB formulae one at a time
-            self.state_input = keras.Input(shape=(None, self.state_input_size), name="state_input")
-            #self.state_embedding = keras.layers.Embedding(1000, 512)(self.state_input)
-            self.state_features = 0.1*keras.layers.LSTM(16)(self.state_input)
-            self.emb_input = 0.9*keras.layers.concatenate([self.state_features, self.model_input])
+            if self.tensorflow_backend:
+                self.state_input = keras.Input(shape=(None, self.state_input_size), name="state_input")
+                #self.state_embedding = keras.layers.Embedding(1000, 512)(self.state_input)
+                self.state_features = 0.1*keras.layers.LSTM(16)(self.state_input)
+                self.emb_input = 0.9*keras.layers.concatenate([self.state_features, self.model_input])
+            else:
+                
+                #keras.Input(shape=(None, self.state_input_size), name="state_input")
+                #self.state_embedding = keras.layers.Embedding(1000, 512)(self.state_input)
+                #self.state_features = 0.1*keras.layers.LSTM(16)(self.state_input)
+                #self.emb_input = 0.9*keras.layers.concatenate([self.state_features, self.model_input])
+                self.state_feature = torch.nn.LSTM(input_size = self.state_input_size, hidden_size=64, batch_first=True)
+                self.emb_input = torch.cat( (self.state_feature, self.model_input), 1)
+                
         else:
             self.emb_input = self.model_input
 
-        self.dense1 = keras.layers.Dense(8, activation='tanh')(self.emb_input)
-        self.dense2 = keras.layers.Dense(8, activation='tanh')(self.dense1)
-        self.output = keras.layers.Dense(1, activation='sigmoid')(self.dense2)
+        if self.tensorflow_backend:
+            self.dense1 = keras.layers.Dense(8, activation='tanh')(self.emb_input)
+            self.dense2 = keras.layers.Dense(8, activation='tanh')(self.dense1)
+            self.output = keras.layers.Dense(1, activation='sigmoid')(self.dense2)
+        else:
+            self.dense1 = torch.nn.linear(out_features = 8)(self.emb_input)
+            #self.dense1 = keras.layers.Dense(8, activation='tanh')(self.emb_input)
+            self.dense2 = torch.nn.linear(out_features=8, activation='tanh')(self.dense1)
+            self.output = keras.layers.Dense(out_features1, activation='sigmoid')(self.dense2)
 
         if False:
             self.model = keras.models.Sequential()
@@ -263,6 +298,10 @@ class gnn_model_zero():
 class res_prebuffer:
     def __init__(self, subjects, words, use_tf=False, debug=True, use_gnn=False, gnn_nodes = 2000, bow_algorithm='bow1', use_gpu = False):
         self.use_tf = use_tf
+        if self.use_tf:
+            tf_imports()
+        else:
+            torch_imports()
 
         self.subjects = subjects
         self.words = words
@@ -300,7 +339,9 @@ class res_prebuffer:
             self.graph_buffer = None
             self.graph_rep = graph_representation(self.subjects_dict, self.max_gnn_nodes)
 
-        self.model = forward_model(use_tf, len(self.subjects_dict)+1) if not use_gnn else gnn_model_zero(self.max_gnn_nodes,self.graph_rep.feature_len, use_state=True, debugging=debug)
+        self.model = forward_model(use_tf, len(self.subjects_dict)+1) if not use_gnn else gnn_model_zero(self.max_gnn_nodes,
+                                                                                                         self.graph_rep.feature_len, use_state=True,
+                                                                                                         debugging=debug, pytorch=not self.use_tf)
         self.dgl_gnn = False # Overridden in dgl_heuristic
         self.use_gpu = use_gpu
     
