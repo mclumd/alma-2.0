@@ -13,15 +13,17 @@ import os
 model_prefix = "no_index/models"
 class rpb_dqn(res_prebuffer):
     def __init__(self, max_reward, reward_fn, subjects=[], words=[],
-                 use_tf=False, debug=True, use_gnn=True, gnn_nodes=20,
+                 debug=True, use_gnn=True, gnn_nodes=20,
                  seed=0, gamma=0.99, epsilon=1.0, eps_min=0.1,
                  eps_max=1.0, batch_size=16, starting_episode=0, use_state = False,
-                 done_reward=0, debugging=False):
+                 done_reward=0, debugging=False, pytorch_backend=False):
         """
         Params:
           max_reward:  maximum reward for an episode; used to scale rewards for Q-function
+          pytorch_backend:  use PyTorch if true; else use tensorflow
 
         """
+        use_tf = not pytorch_backend
         super().__init__(subjects, words, use_tf, debug, use_gnn, gnn_nodes)
         self.seed=seed
         self.gamma=gamma
@@ -33,20 +35,29 @@ class rpb_dqn(res_prebuffer):
 
         self.batch_size = batch_size
         self.debugging=debugging
+
+        
+        self.pytorch = pytorch_backend
+        self.tensorflow = not pytorch_backend
+        
         self.log_dir = "logs/fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         if use_state:
-            self.current_model = gnn_model_zero(self.max_gnn_nodes,self.graph_rep.feature_len, True, self.debugging)
-            self.target_model =  gnn_model_zero(self.max_gnn_nodes,self.graph_rep.feature_len, True, self.debugging)
+            self.current_model = gnn_model_zero(self.max_gnn_nodes,self.graph_rep.feature_len, True,
+                                                self.debugging, pytorch=self.pytorch)
+            self.target_model =  gnn_model_zero(self.max_gnn_nodes,self.graph_rep.feature_len, True,
+                                                self.debugging, pytorch=self.pytorch)
         else:
             self.current_model = self.model
-            self.target_model =  gnn_model_zero(self.max_gnn_nodes,self.graph_rep.feature_len, self.debugging)
+            self.target_model =  gnn_model_zero(self.max_gnn_nodes,self.graph_rep.feature_len,
+                                                self.debugging, pytorch=self.pytorch)
         #self.loss_fn = keras.losses.Huber()
         self.bellman_loss = keras.losses.MeanSquaredError()
         self.optimizer = keras.optimizers.Adam(learning_rate=0.00025, clipnorm=1.0)
         self.max_reward = max_reward
         #self.acc_fn = CategoricalAccuracy()
 
-        if self.debugging:
+
+        if self.debugging and self.tensorflow:
             self.tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=self.log_dir, histogram_freq=1,
                                                                        write_graph=True, write_images=True, profile_batch='500,520')
         else:
