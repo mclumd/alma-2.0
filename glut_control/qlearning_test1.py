@@ -21,11 +21,6 @@ import time, datetime
 #import tracemalloc
 #from memory_profiler import profile
 import psutil
-import tensorflow as tf
-
-physical_devices = tf.config.list_physical_devices('GPU') 
-tf.config.experimental.set_memory_growth(physical_devices[0], True)
-tf.config.experimental.set_memory_growth(physical_devices[1], True)
 
 
 
@@ -78,7 +73,8 @@ def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000,
     else:
         reward_fn = get_rewards_test1
     network = rpb_dqn(100, reward_fn, subjects, [], use_gnn=use_gnn,
-                      gnn_nodes=gnn_nodes, use_state=False, debugging=debugging) if prior_network is None else prior_network    # Use max_reward of 10K
+                      gnn_nodes=gnn_nodes, use_state=True,
+                      debugging=debugging, pytorch_backend = use_pytorch) if prior_network is None else prior_network    # Use max_reward of 10K
     replay_buffer = rl_dataset.experience_replay_buffer()
     start_time = time.time()
     if tboard:
@@ -166,6 +162,7 @@ def main():
     parser.add_argument("--exhaustive", action='store_true')
     parser.add_argument("--kb", default='/home/justin/alma-2.0/glut_control/qlearning2.pl', action='store')
     parser.add_argument("--debugging", action='store_true')
+    parser.add_argument("--pytorch", help="use pytorch as backend (default is tensorflow)", action='store_true')
 
     args = parser.parse_args()
     print("Running with arguments ", args)
@@ -174,6 +171,21 @@ def main():
         # TODO:  This may need to be done before any tensorflow imports
         os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
     import resolution_prebuffer as rpb 
+
+    global use_tensorflow
+    global use_pytorch
+    use_pytorch = args.pytorch
+    use_tensorflow = not use_pytorch
+    
+
+    if use_tensorflow:
+        import tensorflow as tf
+        physical_devices = tf.config.list_physical_devices('GPU') 
+        tf.config.experimental.set_memory_growth(physical_devices[0], True)
+        tf.config.experimental.set_memory_growth(physical_devices[1], True)
+    else:
+        import torch
+
 
 
     if args.kb == 'qlearning3.pl':
