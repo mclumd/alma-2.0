@@ -26,8 +26,8 @@ def explosion(size, kb, alma_inst):
         # elif "ps_test_search.pl" in kb:
         alma.astep(alma_inst)
     r = alma.prebuf(alma_inst)
-    print("Explosion done.")
-    print("="*80)
+    #print("Explosion done.")
+    #print("="*80)
     return r
 
 def res_task_lits(lit_str):

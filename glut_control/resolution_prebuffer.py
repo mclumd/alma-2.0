@@ -329,7 +329,7 @@ class res_prebuffer:
         self.ybuffer = []
         self.yneg_count = 0
         self.ypos_count = 0
-        print("Subjects dictionary:", self.subjects_dict)
+        #print("Subjects dictionary:", self.subjects_dict)
 
         self.use_gnn = use_gnn
         self.max_gnn_nodes = gnn_nodes
