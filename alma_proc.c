@@ -684,7 +684,7 @@ static int quote_cons(alma_term *to_quote, alma_variable *result, binding_list *
   formula->parent_set_count = formula->children_count = 0;
   formula->parents = NULL;
   formula->children = NULL;
-  formula->equiv_belief = NULL;
+  formula->equiv_bel_up = formula->equiv_bel_down = NULL;
   formula->tag = NONE;
   formula->fif = NULL;
 

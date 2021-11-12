@@ -153,7 +153,8 @@ void clause_print(clause *c, kb_logger *logger) {
     }
   }
 
-  if (c->parents != NULL || c->children != NULL || c->equiv_belief != NULL) {
+  if (c->parents != NULL || c->children != NULL ||
+      c->equiv_bel_up != NULL || c->equiv_bel_down != NULL) {
     tee_alt(" (", logger);
     if (c->parents != NULL) {
       tee_alt("parents: ", logger);
@@ -168,7 +169,7 @@ void clause_print(clause *c, kb_logger *logger) {
         if (i < c->parent_set_count-1)
           tee_alt(", ", logger);
       }
-      if (c->children != NULL || c->equiv_belief != NULL)
+      if (c->children != NULL ||   c->equiv_bel_up != NULL || c->equiv_bel_down != NULL)
         tee_alt(", ", logger);
     }
     if (c->children != NULL) {
@@ -178,11 +179,20 @@ void clause_print(clause *c, kb_logger *logger) {
         if (i < c->children_count-1)
           tee_alt(", ", logger);
       }
-      if (c->equiv_belief != NULL)
+      if (c->equiv_bel_up != NULL || c->equiv_bel_down != NULL)
         tee_alt(", ", logger);
     }
-    if (c->equiv_belief != NULL) {
-      tee_alt("equiv: %ld", logger, c->equiv_belief->index);
+    if (c->equiv_bel_up != NULL || c->equiv_bel_down != NULL) {
+      tee_alt("equiv: ", logger);
+      if (c->equiv_bel_up != NULL && c->equiv_bel_down == NULL) {
+        tee_alt("%ld", logger, c->equiv_bel_up->index);
+      }
+      else if (c->equiv_bel_up == NULL && c->equiv_bel_down != NULL) {
+        tee_alt("%ld", logger, c->equiv_bel_down->index);
+      }
+      else {
+        tee_alt("%ld, %ld", logger, c->equiv_bel_up->index, c->equiv_bel_down->index);
+      }
     }
     tee_alt(")", logger);
   }

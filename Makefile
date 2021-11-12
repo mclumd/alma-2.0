@@ -58,7 +58,7 @@ alma_proc.o: alma_proc.c alma_kb.h alma_formula.h alma_unify.h alma_print.h alma
 alma_fif.o: alma_fif.c alma_kb.h alma_formula.h alma_unify.h alma_proc.h alma_clause.h alma_print.h alma_fif.h tommy.h
 	$(CC) $(CFLAGS) -c alma_fif.c
 
-alma_backsearch.o: alma_backsearch.c alma_kb.h alma_formula.h alma_unify.h alma_backsearch.h tommy.h
+alma_backsearch.o: alma_backsearch.c alma_kb.h alma_formula.h alma_clause.h alma_unify.h alma_backsearch.h tommy.h
 	$(CC) $(CFLAGS) -c alma_backsearch.c
 
 clean:

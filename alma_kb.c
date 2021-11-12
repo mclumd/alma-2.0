@@ -144,7 +144,7 @@ void new_beliefs_from_agent(kb *agent, int positive, char *name, kb *core) {
   for (tommy_size_t i = 0; i < tommy_array_size(&agent->new_clauses); i++) {
     clause *c = tommy_array_get(&agent->new_clauses, i);
 
-    if (c->equiv_belief == NULL) {
+    if (c->equiv_bel_up == NULL) {
       clause *bel = make_meta_literal(agent, "bel", c, 0);
       // Restructure with quote as second arg, and first as agent name
       free_function(bel->pos_lits[0]->terms[1].function);
@@ -168,8 +168,8 @@ void new_beliefs_from_agent(kb *agent, int positive, char *name, kb *core) {
       }
 
       // Initialize equivalence links for pair
-      bel->equiv_belief = c;
-      c->equiv_belief = bel;
+      bel->equiv_bel_down = c;
+      c->equiv_bel_up = bel;
       set_variable_ids(bel, 1, 0, NULL, &core->variable_id_count);
 
       tommy_array_insert(&core->new_clauses, bel);
@@ -508,11 +508,10 @@ static clause* make_meta_literal(kb *collection, char *predname, clause *c, long
   quote_from_clause(res->pos_lits[0]->terms+0, c);
   func_from_long(res->pos_lits[0]->terms+1, time);
   res->neg_lits = NULL;
-  res->parent_set_count = 0;
-  res->children_count = 0;
+  res->parent_set_count = res->children_count = 0;
   res->parents = NULL;
   res->children = NULL;
-  res->equiv_belief = NULL;
+  res->equiv_bel_up = res->equiv_bel_down = NULL;
   res->tag = NONE;
   res->fif = NULL;
   set_variable_ids(res, 1, 0, NULL, &collection->variable_id_count);
@@ -567,7 +566,7 @@ static void make_contra(kb *collection, clause *contradictand_pos, clause *contr
   contra->parent_set_count = contra->children_count = 0;
   contra->parents = NULL;
   contra->children = NULL;
-  contra->equiv_belief = NULL;
+  contra->equiv_bel_up = contra->equiv_bel_down = NULL;
   contra->tag = NONE;
   contra->fif = NULL;
   set_variable_ids(contra, 1, 0, NULL, &collection->variable_id_count);
@@ -683,7 +682,7 @@ void process_res_tasks(kb *collection, long time, tommy_array *tasks, tommy_arra
             res_result->parents[0].clauses[1] = current_task->y;
             res_result->children_count = 0;
             res_result->children = NULL;
-            res_result->equiv_belief = NULL;
+            res_result->equiv_bel_up = res_result->equiv_bel_down = NULL;
 
             set_variable_ids(res_result, 0, 0, x_bindings, &collection->variable_id_count);
 
@@ -1034,26 +1033,40 @@ void process_new_clauses(kb *collection, alma_proc *procs, long time, kb_logger 
       }
     }
     else {
-      // Fix equiv_beliefs before printing to avoid dangling pointer dereference
-      if (c->equiv_belief != NULL) {
+      // Fix equiv beliefs before printing to avoid dangling pointer dereference
+      if (c->equiv_bel_up != NULL) {
         // Change pointer to c to point to existing_clause, so it won't dangle
         // Only done when c's equiv clause currently points back to c
-        if (c->equiv_belief->equiv_belief == c) {
-          c->equiv_belief->equiv_belief = existing_clause;
+        if (c->equiv_bel_up->equiv_bel_down == c) {
+          c->equiv_bel_up->equiv_bel_down = existing_clause;
         }
 
-        if (existing_clause->equiv_belief == NULL) {
-          existing_clause->equiv_belief = c->equiv_belief;
+        if (existing_clause->equiv_bel_up == NULL) {
+          existing_clause->equiv_bel_up = c->equiv_bel_up;
+          existing_clause->dirty_bit = 1;
+        }
+      }
+      if (c->equiv_bel_down != NULL) {
+        // Change pointer to c to point to existing_clause, so it won't dangle
+        // Only done when c's equiv clause currently points back to c
+        if (c->equiv_bel_down->equiv_bel_up == c) {
+          c->equiv_bel_down->equiv_bel_up = existing_clause;
+        }
+
+        if (existing_clause->equiv_bel_down == NULL) {
+          existing_clause->equiv_bel_down = c->equiv_bel_down;
           existing_clause->dirty_bit = 1;
         }
       }
 
       if (collection->verbose) {
         tee_alt("-a: Duplicate clause ", logger);
-        clause *temp = c->equiv_belief;
-        c->equiv_belief = NULL;
+        clause *temp = c->equiv_bel_up;
+        clause *temp_u = c->equiv_bel_down;
+        c->equiv_bel_up = c->equiv_bel_down = NULL;
         clause_print(c, logger);
-        c->equiv_belief = temp;
+        c->equiv_bel_up = temp;
+        c->equiv_bel_down = temp_u;
         tee_alt(" merged into %ld\n", logger, existing_clause->index);
       }
 

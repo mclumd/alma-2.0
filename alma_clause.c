@@ -290,7 +290,7 @@ void make_clause(alma_node *node, clause *c) {
   c->parent_set_count = c->children_count = 0;
   c->parents = NULL;
   c->children = NULL;
-  c->equiv_belief = NULL;
+  c->equiv_bel_up = c->equiv_bel_down = NULL;
   c->tag = NONE;
   c->fif = NULL;
 
@@ -370,7 +370,7 @@ void free_clause(clause *c) {
 }
 
 // Space for copy must be allocated before call
-// Does not copy parents/children/index/acquired/equiv_belief
+// Does not copy parents/children/index/acquired/equiv_bels
 void copy_clause_structure(clause *original, clause *copy) {
   copy->pos_count = original->pos_count;
   copy->neg_count = original->neg_count;
@@ -387,7 +387,7 @@ void copy_clause_structure(clause *original, clause *copy) {
   copy->parent_set_count = copy->children_count = 0;
   copy->parents = NULL;
   copy->children = NULL;
-  copy->equiv_belief = NULL;
+  copy->equiv_bel_up = copy->equiv_bel_down = NULL;
   copy->tag = original->tag;
   if (copy->tag == FIF) {
     copy->fif = malloc(sizeof(*copy->fif));

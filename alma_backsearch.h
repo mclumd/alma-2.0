@@ -3,6 +3,7 @@
 
 #include "tommy.h"
 #include "alma_formula.h"
+#include "alma_clause.h"
 #include "alma_kb.h"
 
 // Used to keep track of binding lists for given clause of backsearch

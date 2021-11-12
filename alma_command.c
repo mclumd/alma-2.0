@@ -68,8 +68,8 @@ static void new_beliefs_to_agents(alma *reasoner) {
         copy_clause_structure(lit->terms[1].quote->clause_quote, unquoted);
         decrement_quote_level(unquoted, 1);
         // Initialize equivalence links for pair
-        unquoted->equiv_belief = c;
-        c->equiv_belief = unquoted;
+        unquoted->equiv_bel_up = c;
+        c->equiv_bel_down = unquoted;
         if (positive) {
           set_variable_ids(unquoted, 1, 0, NULL, &agent->pos->variable_id_count);
           tommy_array_insert(&agent->pos->new_clauses, unquoted);
@@ -199,6 +199,7 @@ void alma_init(alma *reasoner, char **files, int file_count, char *agent, char *
       // If any file cannot parse, cleanup and exit
       else {
         free(files);
+        tommy_array_done(&temp);
         alma_halt(reasoner);
         exit(0);
       }
