@@ -178,12 +178,6 @@ void new_beliefs_from_agent(kb *agent, int positive, char *name, kb *core) {
 }
 
 
-// Compare function to be used by tommy_hashlin_search for index_mapping
-// Compares long arg to key of index_mapping
-static int im_compare(const void *arg, const void *obj) {
-  return *(const long*)arg - ((const index_mapping*)obj)->key;
-}
-
 // Returns a mapping holding a set of clauses that contains those unifiable with clause c
 // Return type is a fif_mapping or predname_mapping depending on c's tag
 // For predname_mapping, looks up mapping for a predicate appearing as a literal in clause c;
@@ -255,7 +249,7 @@ static void remove_dupe_literals(int *count, alma_function ***triple) {
 }
 
 // If c is found to be a clause's duplicate, returns a pointer to that clause; null otherwise
-// See comments preceding clauses_differ function for further detail
+// See comments on clauses_differ function for further detail
 // Check_distrusted flag determines whether distrusted clauses are used for dupe comparison as well
 clause* duplicate_check(kb *collection, long time, clause *c, int check_distrusted) {
   if (c->tag == FIF) {
@@ -518,6 +512,23 @@ static clause* make_meta_literal(kb *collection, char *predname, clause *c, long
   return res;
 }
 
+// Recursively apply pause to formula, its descendants, and down equivalence links
+static void pause_recursive(clause *c, long time) {
+  c->paused = time;
+
+  if (c->children != NULL) {
+    for (int i = 0; i < c->children_count; i++) {
+      if (c->children[i]->paused < 0) {
+        pause_recursive(c->children[i], time);
+      }
+    }
+  }
+
+  if (c->equiv_bel_down != NULL) {
+    pause_recursive(c->equiv_bel_down, time);
+  }
+}
+
 static void distrust_recursive(kb *collection, clause *c, clause *contra, long time, tommy_array *clauses) {
   // Formula becomes distrusted at current time
   c->distrusted = time;
@@ -537,6 +548,17 @@ static void distrust_recursive(kb *collection, clause *c, clause *contra, long t
         distrust_recursive(collection, c->children[i], contra, time, clauses);
       }
     }
+  }
+
+  if (c->equiv_bel_down != NULL) {
+    clause *bel_down = c->equiv_bel_down;
+    // Recursively distrust equiv_bel_up versions of the children of equiv_bel_down
+    for (int i = 0; i < bel_down->children_count; i++) {
+      distrust_recursive(collection, bel_down->children[i]->equiv_bel_up, contra, time, clauses);
+    }
+
+    // Recursively pause following down equivalence links
+    pause_recursive(c->equiv_bel_down, time);
   }
 }
 
@@ -743,6 +765,7 @@ static void add_clause(kb *collection, clause *c, long time) {
   c->index = ientry->key = collection->next_index++;
   c->acquired = time;
   c->distrusted = -1;
+  c->paused = -1;
   c->retired = -1;
   c->handled = -1;
   c->dirty_bit = (char) 1;
@@ -855,9 +878,27 @@ static int all_digits(char *str) {
   return 1;
 }
 
+// Recursively removes pause from formula, its descendants, and down equivalence links
+static void unpause_recursive(clause *c, tommy_array *unpaused) {
+  c->paused = -1;
+  tommy_array_insert(unpaused, c);
+
+  if (c->children != NULL) {
+    for (int i = 0; i < c->children_count; i++) {
+      if (c->children[i]->paused > 0) {
+        unpause_recursive(c->children[i], unpaused);
+      }
+    }
+  }
+
+  if (c->equiv_bel_down != NULL) {
+    unpause_recursive(c->equiv_bel_down, unpaused);
+  }
+}
+
 // Special semantic operator: reinstate
 // Reinstatement succeeds if given args of a quote matching distrusted formula(s) and a matching timestep for when distrusted
-static void handle_reinstate(kb *collection, clause *reinstate, long time) {
+static void handle_reinstate(kb *collection, clause *reinstate, long time, tommy_array *unpaused) {
   alma_term *arg1 = reinstate->pos_lits[0]->terms+0;
   alma_term *arg2 = reinstate->pos_lits[0]->terms+1;
 
@@ -866,21 +907,25 @@ static void handle_reinstate(kb *collection, clause *reinstate, long time) {
     alma_quote *q = malloc(sizeof(*q));
     q->type = CLAUSE;
 
-    for (int j = mapping_num_clauses(mapping, arg1->quote->clause_quote->tag)-1; j >= 0; j--) {
-      clause *jth = mapping_access(mapping, arg1->quote->clause_quote->tag, j);
-      if (jth->distrusted == atol(arg2->function->name) && counts_match(jth, arg1->quote->clause_quote)) {
-        q->clause_quote = jth;
+    for (int i = mapping_num_clauses(mapping, arg1->quote->clause_quote->tag)-1; i >= 0; i--) {
+      clause *ith = mapping_access(mapping, arg1->quote->clause_quote->tag, i);
+      if (ith->distrusted == atol(arg2->function->name) && counts_match(ith, arg1->quote->clause_quote)) {
+        q->clause_quote = ith;
         binding_list *theta = malloc(sizeof(*theta));
         init_bindings(theta);
 
         // Unification succeeded, create and add the reinstatement clause
         if (quote_term_unify(arg1->quote, q, theta)) {
           clause *reinstatement = malloc(sizeof(*reinstatement));
-          copy_clause_structure(jth, reinstatement);
-          copy_parents(jth, reinstatement);
+          copy_clause_structure(ith, reinstatement);
+          copy_parents(ith, reinstatement);
           subst_clause(theta, reinstatement, 0);
           set_variable_ids(reinstatement, 1, 0, NULL, &collection->variable_id_count);
           tommy_array_insert(&collection->timestep_delay_clauses, reinstatement);
+
+          if (ith->equiv_bel_down != NULL) {
+            unpause_recursive(ith->equiv_bel_down, unpaused);
+          }
 
           if (reinstatement->pos_count + reinstatement->neg_count == 1 && reinstatement->fif == NULL) {
             // Look for contradicting() instances with reinstate target as a contradictand, to be handled()
@@ -933,10 +978,10 @@ static void handle_update(kb *collection, clause *update, tommy_array *clauses) 
     alma_quote *q = malloc(sizeof(*q));
     q->type = CLAUSE;
 
-    for (int j = mapping_num_clauses(mapping, arg1->quote->clause_quote->tag)-1; j >= 0; j--) {
-      clause *jth = mapping_access(mapping, arg1->quote->clause_quote->tag, j);
-      if (jth->distrusted < 0 && counts_match(jth, arg1->quote->clause_quote)) {
-        q->clause_quote = jth;
+    for (int i = mapping_num_clauses(mapping, arg1->quote->clause_quote->tag)-1; i >= 0; i--) {
+      clause *ith = mapping_access(mapping, arg1->quote->clause_quote->tag, i);
+      if (ith->distrusted < 0 && counts_match(ith, arg1->quote->clause_quote)) {
+        q->clause_quote = ith;
         binding_list *theta = malloc(sizeof(*theta));
         init_bindings(theta);
 
@@ -950,7 +995,7 @@ static void handle_update(kb *collection, clause *update, tommy_array *clauses) 
           set_variable_ids(update_clause, 1, 0, NULL, &collection->variable_id_count);
           tommy_array_insert(clauses, update_clause);
 
-          tommy_array_insert(&collection->distrust_set, jth);
+          tommy_array_insert(&collection->distrust_set, ith);
           tommy_array_insert(&collection->distrust_parents, update);
         }
         cleanup_bindings(theta);
@@ -962,7 +1007,7 @@ static void handle_update(kb *collection, clause *update, tommy_array *clauses) 
 
 // Processing of new clauses: inserts non-duplicates derived, makes new tasks from if flag is active
 // Special handling for true, reinstate, distrust, update
-void process_new_clauses(kb *collection, alma_proc *procs, long time, kb_logger *logger, int make_tasks) {
+void process_new_clauses(kb *collection, alma_proc *procs, long time, int make_tasks, tommy_array *unpaused, kb_logger *logger) {
   fif_to_front(&collection->new_clauses);
 
   tommy_array next_pass_clauses;
@@ -1001,7 +1046,7 @@ void process_new_clauses(kb *collection, alma_proc *procs, long time, kb_logger 
             tommy_array_set(&collection->new_clauses, i, NULL);
           }
           else
-            handle_reinstate(collection, c, time);
+            handle_reinstate(collection, c, time, unpaused);
         }
       }
       // Case for update
@@ -1080,6 +1125,11 @@ void process_new_clauses(kb *collection, alma_proc *procs, long time, kb_logger 
     }
   }
 
+  tommy_array_done(&collection->new_clauses);
+  collection->new_clauses = next_pass_clauses;
+}
+
+void process_meta_clauses(kb *collection, long time, tommy_array *unpaused, kb_logger *logger) {
   // Process reinstatements of literals to look for contradictory reinstatements between them
   for (tommy_size_t i = 0; i < tommy_array_size(&collection->pos_lit_reinstates); i++) {
     clause *reinstate = tommy_array_get(&collection->pos_lit_reinstates, i);
@@ -1095,7 +1145,7 @@ void process_new_clauses(kb *collection, alma_proc *procs, long time, kb_logger 
 
         // If unification succeeds, then they're contradictory reinstatement targets
         if (pred_unify(pos, neg, theta, 0)) {
-          make_contra(collection, reinstate, reinstate_neg, time, &next_pass_clauses);
+          make_contra(collection, reinstate, reinstate_neg, time, &collection->new_clauses);
           contradictory = 1;
         }
         cleanup_bindings(theta);
@@ -1103,7 +1153,7 @@ void process_new_clauses(kb *collection, alma_proc *procs, long time, kb_logger 
     }
     // If found no contra iterating the negative reinstate literals, handle to fully reinstate
     if (!contradictory)
-      handle_reinstate(collection, reinstate, time);
+      handle_reinstate(collection, reinstate, time, unpaused);
   }
   for (tommy_size_t i = 0; i < tommy_array_size(&collection->neg_lit_reinstates); i++) {
     clause *reinstate = tommy_array_get(&collection->neg_lit_reinstates, i);
@@ -1119,7 +1169,7 @@ void process_new_clauses(kb *collection, alma_proc *procs, long time, kb_logger 
 
     // If negative reinstate literal is not distrusted from earlier contra, handle to fully reinstate
     if (!contradictory)
-      handle_reinstate(collection, reinstate, time);
+      handle_reinstate(collection, reinstate, time, unpaused);
   }
   tommy_array_done(&collection->pos_lit_reinstates);
   tommy_array_init(&collection->pos_lit_reinstates);
@@ -1130,7 +1180,7 @@ void process_new_clauses(kb *collection, alma_proc *procs, long time, kb_logger 
   for (tommy_size_t i = 0; i < tommy_array_size(&collection->distrust_set); i++) {
     clause *c = tommy_array_get(&collection->distrust_set, i);
     clause *parent = tommy_array_get(&collection->distrust_parents, i);
-    distrust_recursive(collection, c, parent, time, &next_pass_clauses);
+    distrust_recursive(collection, c, parent, time, &collection->new_clauses);
   }
   tommy_array_done(&collection->distrust_set);
   tommy_array_init(&collection->distrust_set);
@@ -1144,7 +1194,7 @@ void process_new_clauses(kb *collection, alma_proc *procs, long time, kb_logger 
     c->handled = time;
     clause *handled = make_meta_literal(collection, "handled", c, time);
     init_single_parent(handled, parent);
-    tommy_array_insert(&next_pass_clauses, handled);
+    tommy_array_insert(&collection->new_clauses, handled);
   }
   tommy_array_done(&collection->handle_set);
   tommy_array_init(&collection->handle_set);
@@ -1169,9 +1219,6 @@ void process_new_clauses(kb *collection, alma_proc *procs, long time, kb_logger 
   }
   tommy_array_done(&collection->trues);
   tommy_array_init(&collection->trues);
-
-  tommy_array_done(&collection->new_clauses);
-  collection->new_clauses = next_pass_clauses;
 }
 
 
@@ -1468,6 +1515,12 @@ int mapping_num_clauses(void *mapping, if_tag tag) {
 // Compares string arg to predname of predname_mapping
 int pm_compare(const void *arg, const void *obj) {
   return strcmp((const char*)arg, ((const predname_mapping*)obj)->predname);
+}
+
+// Compare function to be used by tommy_hashlin_search for index_mapping
+// Compares long arg to key of index_mapping
+int im_compare(const void *arg, const void *obj) {
+  return *(const long*)arg - ((const index_mapping*)obj)->key;
 }
 
 void func_from_long(alma_term *t, long l) {

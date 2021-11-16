@@ -195,6 +195,10 @@ void clause_print(clause *c, kb_logger *logger) {
       }
     }
     tee_alt(")", logger);
+
+    if (c->paused >= 0) {
+      tee_alt(" [pause]", logger);
+    }
   }
   c->dirty_bit = 0;
   //tee_alt(" (L%ld)", c->acquired);

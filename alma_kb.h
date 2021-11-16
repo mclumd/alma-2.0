@@ -83,7 +83,8 @@ void make_single_task(clause *c, alma_function *c_lit, clause *other, tommy_arra
 void make_res_tasks(clause *c, int count, alma_function **c_lits, tommy_hashlin *map, tommy_array *tasks, int use_bif, int pos);
 void res_tasks_from_clause(kb *collection, clause *c, int process_negatives);
 void process_res_tasks(kb *collection, long time, tommy_array *tasks, tommy_array *new_arr, struct backsearch_task *bs, kb_logger *logger);
-void process_new_clauses(kb *collection, struct alma_proc *procs, long time, kb_logger *logger, int make_tasks);
+void process_new_clauses(kb *collection, struct alma_proc *procs, long time, int make_tasks, tommy_array *unpaused, kb_logger *logger);
+void process_meta_clauses(kb *collection, long time, tommy_array *unpaused, kb_logger *logger);
 
 void assert_formula(kb *collection, char *string, int print, kb_logger *logger);
 void delete_formula(kb *collection, long time, char *string, int print, kb_logger *logger);
@@ -92,6 +93,7 @@ void update_formula(kb *collection, long time, char *string, kb_logger *logger);
 clause* mapping_access(void *mapping, if_tag tag, int index);
 int mapping_num_clauses(void *mapping, if_tag tag);
 int pm_compare(const void *arg, const void *obj);
+int im_compare(const void *arg, const void *obj);
 void func_from_long(alma_term *t, long l);
 
 #endif

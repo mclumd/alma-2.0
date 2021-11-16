@@ -25,6 +25,7 @@ typedef struct clause {
   long index; // Index of clause, used as key in index_map of KB
   long acquired; // Time asserted to KB
   long distrusted; // Distrust status; if nonzero the time it was distrusted
+  long paused; // Paused status; much like distrusted but for nested agent beliefs on pause pending contra reasoning
   long retired; // Retired status; if nonzero the time it was retired
   long handled; // Handled status; if nonzero the time that it was handled
   int dirty_bit;

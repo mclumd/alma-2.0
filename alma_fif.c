@@ -481,7 +481,7 @@ alma_function* fif_access(clause *c, int i) {
     return c->pos_lits[next];
 }
 
-// Removes fif from fif_map, and deletes all fif tasks using it
+// Deletes all fif tasks using c
 void remove_fif_tasks(tommy_hashlin *fif_tasks, clause *c) {
   for (int i = 0; i < c->fif->premise_count; i++) {
     alma_function *f = fif_access(c, i);

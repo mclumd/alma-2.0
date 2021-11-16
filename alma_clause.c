@@ -597,9 +597,9 @@ int clauses_differ(clause *x, clause *y, int quote_level) {
 }
 
 
-// Returns true if clause is not distrusted, retired, or handled
+// Returns true if clause is not distrusted, paused, retired, or handled
 int flags_negative(clause *c) {
-  return c->distrusted < 0 && c->retired < 0 && c->handled < 0;
+  return c->distrusted < 0 && c->paused < 0 && c->retired < 0 && c->handled < 0;
 }
 
 // Returns minimum among the flags of value >= 0
@@ -607,6 +607,8 @@ long flag_min(clause *c) {
   long min = LONG_MAX;
   if (c->distrusted >= 0)
     min = c->distrusted;
+  if (c->paused >= 0 && c->paused < min)
+    min = c->paused;
   if (c->retired >= 0 && c->retired < min)
     min = c->retired;
   if (c->handled >= 0 && c->handled < min)
