@@ -103,7 +103,7 @@ static void lits_print(alma_function **lits, int count, char *delimiter, int neg
   }
 }
 
-void clause_print(clause *c, kb_logger *logger) {
+static void clause_print_full(clause *c, kb_logger *logger, int print_extra) {
   // Print fif in original format
   if (c->tag == FIF) {
     for (int i = 0; i < c->fif->premise_count; i++) {
@@ -124,7 +124,7 @@ void clause_print(clause *c, kb_logger *logger) {
     for (int i = 0; i < c->fif->num_conclusions; i++) {
       if (c->fif->conclusions[i]->tag == FIF)
         tee_alt("(", logger);
-      clause_print(c->fif->conclusions[i], logger);
+      non_kb_clause_print(c->fif->conclusions[i], logger);
       if (c->fif->conclusions[i]->tag == FIF)
         tee_alt(")", logger);
       if (i < c->fif->num_conclusions-1)
@@ -154,7 +154,7 @@ void clause_print(clause *c, kb_logger *logger) {
   }
 
   if (c->parents != NULL || c->children != NULL ||
-      c->equiv_bel_up != NULL || c->equiv_bel_down != NULL) {
+    (print_extra && (c->equiv_bel_up != NULL || c->equiv_bel_down != NULL))) {
     tee_alt(" (", logger);
     if (c->parents != NULL) {
       tee_alt("parents: ", logger);
@@ -169,7 +169,7 @@ void clause_print(clause *c, kb_logger *logger) {
         if (i < c->parent_set_count-1)
           tee_alt(", ", logger);
       }
-      if (c->children != NULL ||   c->equiv_bel_up != NULL || c->equiv_bel_down != NULL)
+      if (c->children != NULL || (print_extra && (c->equiv_bel_up != NULL || c->equiv_bel_down != NULL)))
         tee_alt(", ", logger);
     }
     if (c->children != NULL) {
@@ -179,10 +179,10 @@ void clause_print(clause *c, kb_logger *logger) {
         if (i < c->children_count-1)
           tee_alt(", ", logger);
       }
-      if (c->equiv_bel_up != NULL || c->equiv_bel_down != NULL)
+      if (print_extra && (c->equiv_bel_up != NULL || c->equiv_bel_down != NULL))
         tee_alt(", ", logger);
     }
-    if (c->equiv_bel_up != NULL || c->equiv_bel_down != NULL) {
+    if (print_extra && (c->equiv_bel_up != NULL || c->equiv_bel_down != NULL)) {
       tee_alt("equiv: ", logger);
       if (c->equiv_bel_up != NULL && c->equiv_bel_down == NULL) {
         tee_alt("%ld", logger, c->equiv_bel_up->index);
@@ -196,12 +196,20 @@ void clause_print(clause *c, kb_logger *logger) {
     }
     tee_alt(")", logger);
 
-    if (c->paused >= 0) {
+    if (print_extra && c->paused >= 0) {
       tee_alt(" [pause]", logger);
     }
   }
   c->dirty_bit = 0;
   //tee_alt(" (L%ld)", c->acquired);
+}
+
+void non_kb_clause_print(clause *c, kb_logger *logger) {
+  clause_print_full(c, logger, 0);
+}
+
+void clause_print(clause *c, kb_logger *logger) {
+  clause_print_full(c, logger, 1);
 }
 
 void print_unify(alma_function *pos, long pos_idx, alma_function *neg, long neg_idx, kb_logger *logger) {

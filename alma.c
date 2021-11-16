@@ -23,8 +23,8 @@ int main(int argc, char **argv) {
   char **files = NULL;
   char *agent = NULL;
 
-  logs_on = (char) 1;
-  python_mode = (char) 0;
+  logs_on = 1;
+  python_mode = 0;
 
   int c;
   while ((c = getopt(argc, argv, "rxvf:a:")) != -1)

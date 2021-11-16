@@ -424,11 +424,11 @@ void alma_observe(alma *reasoner, char *string, kb_str *buf) {
         func_from_long(lit->terms+(lit->term_count-1), reasoner->time+1);
         tommy_array_insert(&reasoner->core_kb->new_clauses, c);
         tee_alt("-a: ", &logger);
-        clause_print(c, &logger);
+        non_kb_clause_print(c, &logger);
         tee_alt(" observed\n", &logger);
       }
       else {
-        clause_print(c, &logger);
+        non_kb_clause_print(c, &logger);
         tee_alt(" has too many literals\n", &logger);
         free_clause(c);
       }
@@ -459,7 +459,7 @@ void alma_backsearch(alma *reasoner, char *string, kb_str *buf) {
         reasoner->idling = 0;
         backsearch_from_clause(&reasoner->backsearch_tasks, c);
         tee_alt("-a: Backsearch initiated for ", &logger);
-        clause_print(c, &logger);
+        non_kb_clause_print(c, &logger);
         tee_alt("\n", &logger);
       }
     }

@@ -190,7 +190,7 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *alma, kb_l
       tee_alt("Performing pos_int_past on \"", logger);
     else if (kind == NEG_INT_PAST)
       tee_alt("Performing neg_int_past on \"", logger);
-    clause_print(search_term->quote->clause_quote, logger);
+    non_kb_clause_print(search_term->quote->clause_quote, logger);
     tee_alt("\"\n", logger);
   }
 
@@ -328,9 +328,9 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time,
       descendant_copy->type == QUOTE && descendant_copy->quote->type == CLAUSE) {
     if (alma->verbose) {
       tee_alt("Performing ancestor proc on descendant \"", logger);
-      clause_print(descendant_copy->quote->clause_quote, logger);
+      non_kb_clause_print(descendant_copy->quote->clause_quote, logger);
       tee_alt("\" for ancestor \"", logger);
-      clause_print(ancestor_copy->quote->clause_quote, logger);
+      non_kb_clause_print(ancestor_copy->quote->clause_quote, logger);
       tee_alt("\"\n", logger);
     }
 
@@ -458,9 +458,10 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time,
 }
 
 // Helper function to check a specific clause
-// Returns 1 if each derivation has default parent out of the parent set
-// Parent set must all be current beliefs to count toward result
-static int check_default_parents(clause *c, kb *alma, kb_logger *logger) {
+// Parents are defaults if all trusted use neg_int(introspect), and there doesn’t exist a down link to a clause with unpaused parents
+// Parents are non-defaults if there's trusted one without neg_int(introspect), or there's a down link to a close with unpaused parents
+// Only current belief parents may count as defaults
+static int check_default_parents(clause *c, kb *alma, kb_logger *logger, int check_default) {
   for (int i = 0; i < c->parent_set_count; i++) {
     if (alma->verbose)
       tee_alt("Processing parent set %d\n", logger, i);
@@ -476,7 +477,7 @@ static int check_default_parents(clause *c, kb *alma, kb_logger *logger) {
       if (alma->verbose)
         tee_alt("Flags negative\n", logger);
       // Then check for presence of default
-      int default_fif = 0;
+      int found_default_fif = 0;
       for (int j = 0; j < c->parents[i].count; j++) {
         if (alma->verbose)
           tee_alt(" Processing parent index %ld\n", logger, c->parents[i].clauses[j]->index);
@@ -489,7 +490,7 @@ static int check_default_parents(clause *c, kb *alma, kb_logger *logger) {
                 && premise->terms->quote->clause_quote->neg_count == 0
                 && premise->terms->quote->clause_quote->pos_count == 1
                 && strcmp(premise->terms->quote->clause_quote->pos_lits[0]->name, "abnormal") == 0) {
-              default_fif = 1;
+              found_default_fif = 1;
               if (alma->verbose)
                 tee_alt(" Default parent found\n", logger);
               break;
@@ -497,19 +498,45 @@ static int check_default_parents(clause *c, kb *alma, kb_logger *logger) {
           }
         }
       }
-      if (!default_fif) {
-        return 0;
+      if (!found_default_fif) {
         if (alma->verbose)
-          tee_alt(" No default parent found; failing\n", logger);
+          tee_alt(" No default parent found\n", logger);
+        return !check_default;
       }
     }
   }
-  return 1;
+
+  // Traverse down equiv links for unpaused parent sets
+  // Equivalent formulas to c which have such parents have a non-default derivation (from bel(...) instead)
+  while (c->equiv_bel_down != NULL) {
+    for (int i = 0; i < c->equiv_bel_down->parent_set_count; i++) {
+      int unpaused_parents = 1;
+      for (int j = 0; j < c->equiv_bel_down->parents[i].count; j++) {
+        if (alma->verbose)
+          tee_alt(" Processing equiv's parent index %ld\n", logger, c->equiv_bel_down->parents[i].clauses[j]->index);
+
+        if (c->equiv_bel_down->parents[i].clauses[j]->paused > 0) {
+          unpaused_parents = 0;
+          break;
+        }
+      }
+
+      if (unpaused_parents) {
+        if (alma->verbose)
+          tee_alt(" Non-default parent found\n", logger);
+        return !check_default;
+      }
+    }
+
+    c = c->equiv_bel_down;
+  }
+
+  return check_default;
 }
 
 // parents_defaults(F, T) returns true if each derivation of F has a default fif as an immediate parent
 // parent_non_default(F, T) returns true if there exists a derivation of F without default fif as an immediate parent
-static int parents_defaults(alma_term *arg, alma_term *time, binding_list *bindings, kb *alma, kb_logger *logger, int invert) {
+static int parents_defaults(alma_term *arg, alma_term *time, binding_list *bindings, kb *alma, kb_logger *logger, int check_default) {
   // Ensure time argument is correctly constructed: either a numeric constant, or a variable bound to one
   binding *res;
   if (time->type == VARIABLE && (res = bindings_contain(bindings, time->variable))) {
@@ -531,11 +558,11 @@ static int parents_defaults(alma_term *arg, alma_term *time, binding_list *bindi
   int result = 0;
   if (arg_copy->type == QUOTE && arg_copy->quote->type == CLAUSE) {
     if (alma->verbose) {
-      if (invert)
-        tee_alt("Performing parent_non_default proc on \"", logger);
-      else
+      if (check_default)
         tee_alt("Performing parents_default proc on \"", logger);
-      clause_print(arg_copy->quote->clause_quote, logger);
+      else
+        tee_alt("Performing parent_non_default proc on \"", logger);
+      non_kb_clause_print(arg_copy->quote->clause_quote, logger);
       tee_alt("\"\n", logger);
     }
 
@@ -562,8 +589,7 @@ static int parents_defaults(alma_term *arg, alma_term *time, binding_list *bindi
               tee_alt("\"\n", logger);
             }
 
-            int check = check_default_parents(ith, alma, logger);
-            if ((check && !invert) || (!check && invert)) {
+            if (check_default_parents(ith, alma, logger, check_default)) {
               swap_bindings(arg_bindings, bindings);
               cleanup_bindings(arg_bindings);
               result = 1;
@@ -582,16 +608,16 @@ static int parents_defaults(alma_term *arg, alma_term *time, binding_list *bindi
 
   if (alma->verbose) {
     if (result) {
-      if (invert)
-        tee_alt("Has non-default parents\n", logger);
-      else
+      if (check_default)
         tee_alt("All parents default\n", logger);
+      else
+        tee_alt("Has non-default parents\n", logger);
     }
     else {
-      if (invert)
-        tee_alt("Failed to find non-default parent\n", logger);
-      else
+      if (check_default)
         tee_alt("Failed to find all parents defaults\n", logger);
+      else
+        tee_alt("Failed to find non-default parent\n", logger);
     }
   }
 
@@ -718,9 +744,9 @@ static int not_equal(alma_term *arg1, alma_term *arg2, binding_list *bindings, k
       arg2_copy->type == QUOTE && arg2_copy->quote->type == CLAUSE) {
     if (alma->verbose) {
       tee_alt("Testing not-equal on \"", logger);
-      clause_print(arg1_copy->quote->clause_quote, logger);
+      non_kb_clause_print(arg1_copy->quote->clause_quote, logger);
       tee_alt("\" and \"", logger);
-      clause_print(arg2_copy->quote->clause_quote, logger);
+      non_kb_clause_print(arg2_copy->quote->clause_quote, logger);
       tee_alt("\"\n", logger);
     }
 
@@ -802,12 +828,12 @@ int proc_run(alma_function *proc, binding_list *bindings, fif_task *task, kb *al
   else if (strcmp(proc->name, "parents_defaults") == 0) {
     // Must match (given_bindings) the schema parents_defaults("...", Time)
     if (proc->term_count == 2 || proc->term_count == 3)
-      return parents_defaults(proc->terms+0, proc->terms+1, bindings, alma, logger, 0);
+      return parents_defaults(proc->terms+0, proc->terms+1, bindings, alma, logger, 1);
   }
   else if (strcmp(proc->name, "parent_non_default") == 0) {
     // Must match (given_bindings) the schema parent_non_default("...", Time)
     if (proc->term_count == 2 || proc->term_count == 3)
-      return parents_defaults(proc->terms+0, proc->terms+1, bindings, alma, logger, 1);
+      return parents_defaults(proc->terms+0, proc->terms+1, bindings, alma, logger, 0);
   }
   else if (strcmp(proc->name, "less_than") == 0) {
     if (proc->term_count == 2 || proc->term_count == 3)

@@ -293,6 +293,7 @@ void make_clause(alma_node *node, clause *c) {
   c->equiv_bel_up = c->equiv_bel_down = NULL;
   c->tag = NONE;
   c->fif = NULL;
+  c->paused = -1;
 
   if (node->type == FOL && node->fol->tag == FIF) {
     // Clause pos and neg lits initialize from fif premises
@@ -337,7 +338,7 @@ static void flatten_node(alma_node *node, tommy_array *clauses) {
   else {
     clause *c = malloc(sizeof(*c));
     c->dirty_bit = 1;
-    c->pyobject_bit = (char) 1;
+    c->pyobject_bit = 1;
     make_clause(node, c);
     tommy_array_insert(clauses, c);
   }

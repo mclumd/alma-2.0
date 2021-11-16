@@ -515,6 +515,7 @@ static clause* make_meta_literal(kb *collection, char *predname, clause *c, long
 // Recursively apply pause to formula, its descendants, and down equivalence links
 static void pause_recursive(clause *c, long time) {
   c->paused = time;
+  c->dirty_bit = 1;
 
   if (c->children != NULL) {
     for (int i = 0; i < c->children_count; i++) {
@@ -768,8 +769,8 @@ static void add_clause(kb *collection, clause *c, long time) {
   c->paused = -1;
   c->retired = -1;
   c->handled = -1;
-  c->dirty_bit = (char) 1;
-  c->pyobject_bit = (char) 1;
+  c->dirty_bit = 1;
+  c->pyobject_bit = 1;
   ientry->value = c;
   tommy_list_insert_tail(&collection->clauses, &ientry->list_node, ientry);
   tommy_hashlin_insert(&collection->index_map, &ientry->hash_node, ientry, tommy_hash_u64(0, &ientry->key, sizeof(ientry->key)));
@@ -881,6 +882,7 @@ static int all_digits(char *str) {
 // Recursively removes pause from formula, its descendants, and down equivalence links
 static void unpause_recursive(clause *c, tommy_array *unpaused) {
   c->paused = -1;
+  c->dirty_bit = 1;
   tommy_array_insert(unpaused, c);
 
   if (c->children != NULL) {
@@ -1106,12 +1108,7 @@ void process_new_clauses(kb *collection, alma_proc *procs, long time, int make_t
 
       if (collection->verbose) {
         tee_alt("-a: Duplicate clause ", logger);
-        clause *temp = c->equiv_bel_up;
-        clause *temp_u = c->equiv_bel_down;
-        c->equiv_bel_up = c->equiv_bel_down = NULL;
-        clause_print(c, logger);
-        c->equiv_bel_up = temp;
-        c->equiv_bel_down = temp_u;
+        non_kb_clause_print(c, logger);
         tee_alt(" merged into %ld\n", logger, existing_clause->index);
       }
 
@@ -1233,7 +1230,7 @@ void assert_formula(kb *collection, char *string, int print, kb_logger *logger) 
       tommy_array_insert(&collection->new_clauses, c);
       if (print) {
         tee_alt("-a: ", logger);
-        clause_print(c, logger);
+        non_kb_clause_print(c, logger);
         tee_alt(" added\n", logger);
       }
     }
@@ -1398,7 +1395,7 @@ void delete_formula(kb *collection, long time, char *string, int print, kb_logge
       }
       else if (print) {
         tee_alt("-a: ", logger);
-        clause_print(curr, logger);
+        non_kb_clause_print(curr, logger);
         tee_alt(" not found\n", logger);
       }
       free_clause(curr);
@@ -1432,7 +1429,7 @@ void update_formula(kb *collection, long time, char *string, kb_logger *logger) 
     }
     else if ((t_dupe = duplicate_check(collection, time, target, 1)) == NULL) {
       tee_alt("-a: Clause ", logger);
-      clause_print(target, logger);
+      non_kb_clause_print(target, logger);
       tee_alt(" to update not present\n", logger);
       update_fail = 1;
     }
@@ -1457,9 +1454,9 @@ void update_formula(kb *collection, long time, char *string, kb_logger *logger) 
         remove_fif_singleton_tasks(&collection->fif_tasks, &collection->fif_map, t_dupe);
 
       tee_alt("-a: ", logger);
-      clause_print(target, logger);
+      clause_print(t_dupe, logger);
       tee_alt(" updated to ", logger);
-      clause_print(update, logger);
+      non_kb_clause_print(update, logger);
       tee_alt("\n", logger);
       free_clause(target);
 
