@@ -299,6 +299,30 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *alma, kb_l
   return kind == NEG_INT_SPEC || kind == NEG_INT || kind == NEG_INT_GEN || kind == NEG_INT_PAST;
 }
 
+static void enqueue_parents(clause *c, tommy_array *queue) {
+  // Parents as starting items for queue
+  for (int i = 0; i < c->parent_set_count; i++)
+    for (int j = 0; j < c->parents[i].count; j++)
+      tommy_array_insert(queue, c->parents[i].clauses[j]);
+
+  // If clause has equiv_bel_down, the formulas that are equiv_bel_up to its parents also act as ancestors to queue
+  // Generalized for clauses n levels down, where n equiv_bel_up edges are followed before enqueueing
+  int levels_down = 1;
+  while (c->equiv_bel_down != NULL) {
+    for (int i = 0; i < c->equiv_bel_down->parent_set_count; i++) {
+      for (int j = 0; j < c->equiv_bel_down->parents[i].count; j++) {
+        clause *curr = c->equiv_bel_down->parents[i].clauses[j];
+        for (int k = 0; k < levels_down; k++)
+          curr = curr->equiv_bel_up;
+        tommy_array_insert(queue, curr);
+      }
+    }
+
+    c = c->equiv_bel_down;
+    levels_down++;
+  }
+}
+
 // ancestor(A, B) returns true if a A appears as an ancestor in any derivation of B
 static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time, binding_list *bindings, kb *alma, kb_logger *logger, int neg, int parent) {
   // Ensure time argument is correctly constructed: either a numeric constant, or a variable bound to one
@@ -327,7 +351,10 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time,
   if (ancestor_copy->type == QUOTE && ancestor_copy->quote->type == CLAUSE &&
       descendant_copy->type == QUOTE && descendant_copy->quote->type == CLAUSE) {
     if (alma->verbose) {
-      tee_alt("Performing ancestor proc on descendant \"", logger);
+      if (!neg)
+        tee_alt("Performing ancestor proc on descendant \"", logger);
+      else
+        tee_alt("Performing non-ancestor proc on descendant \"", logger);
       non_kb_clause_print(descendant_copy->quote->clause_quote, logger);
       tee_alt("\" for ancestor \"", logger);
       non_kb_clause_print(ancestor_copy->quote->clause_quote, logger);
@@ -367,10 +394,7 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time,
             tommy_array checked;
             tommy_array_init(&checked);
 
-            // Parents as starting items for queue
-            for (int j = 0; j < ith->parent_set_count; j++)
-              for (int k = 0; k < ith->parents[j].count; k++)
-                tommy_array_insert(&queue, ith->parents[j].clauses[k]);
+            enqueue_parents(ith, &queue);
 
             // Process queue in breadth-first manner
             for (int curr = 0; curr < tommy_array_size(&queue); curr++) {
@@ -420,11 +444,8 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time,
                 cleanup_bindings(anc_bindings);
 
                 // Queue parents for expansion only when procedure is ancestor/non_ancestor, not parent
-                if (!parent) {
-                  for (int j = 0; j < c->parent_set_count; j++)
-                    for (int k = 0; k < c->parents[j].count; k++)
-                      tommy_array_insert(&queue, c->parents[j].clauses[k]);
-                }
+                if (!parent)
+                  enqueue_parents(c, &queue);
               }
             }
 
@@ -444,15 +465,15 @@ static int ancestor(alma_term *ancestor, alma_term *descendant, alma_term *time,
   free_term(descendant_copy);
   free(descendant_copy);
 
-  if (neg)
-    has_ancestor = !has_ancestor;
-
   if (alma->verbose) {
     if (has_ancestor)
-      tee_alt("Ancestor succeeded!\n", logger);
+      tee_alt("Has ancestor!\n", logger);
     else
-      tee_alt("Ancestor failure\n\n", logger);
+      tee_alt("Doesn't have ancestor\n", logger);
   }
+
+  if (neg)
+    has_ancestor = !has_ancestor;
 
   return has_ancestor;
 }
