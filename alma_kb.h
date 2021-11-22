@@ -40,7 +40,16 @@ typedef struct kb {
   tommy_array res_tasks; // Stores tasks for resolution (non-tagged clauses) in next step
   // If grow to have many fifs, having pos and neg versions may help
   tommy_hashlin fif_tasks; // Stores tasks for fif rules
+
+  int agent_count; // Number of agents modeled
+  struct agent_kb *agents; // Agent KBs for agent models
 } kb;
+
+typedef struct agent_kb {
+  char *name;
+  kb *pos;
+  kb *neg;
+} agent_kb;
 
 // Map used for entries in index_map
 typedef struct index_mapping {
@@ -72,8 +81,6 @@ void kb_task_init(kb *collection, struct alma_proc *procs, long time, kb_logger 
 void kb_task_process(kb *collection, struct alma_proc *procs, long time, kb_logger *logger);
 void kb_print(kb *collection, kb_logger *logger);
 void kb_halt(kb *collection);
-
-void new_beliefs_from_agent(kb *agent, int positive, char *name, kb *core);
 
 void* clause_lookup(kb *collection, clause *c);
 clause* duplicate_check(kb *collection, long time, clause *c, int check_distrusted);

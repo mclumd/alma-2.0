@@ -37,23 +37,32 @@ void kb_init(kb* collection, int verbose) {
 
   tommy_array_init(&collection->res_tasks);
   tommy_hashlin_init(&collection->fif_tasks);
+
+  collection->agent_count = 0;
+  collection->agents = NULL;
 }
 
 void kb_task_init(kb *collection, alma_proc *procs, long time, kb_logger *logger) {
   // Generate starting tasks
-  tommy_node *i = tommy_list_head(&collection->clauses);
-  while (i) {
-    clause *c = ((index_mapping*)i->data)->value;
+  tommy_node *curr = tommy_list_head(&collection->clauses);
+  while (curr) {
+    clause *c = ((index_mapping*)curr->data)->value;
     if (c->tag == FIF)
       fif_task_map_init(collection, procs, &collection->fif_tasks, c, 0);
     else {
       res_tasks_from_clause(collection, c, 0);
       fif_tasks_from_clause(&collection->fif_tasks, c);
     }
-    i = i->next;
+    curr = curr->next;
+  }
+
+  for (int i = 0; i < collection->agent_count; i++) {
+    kb_task_init(collection->agents[i].pos, procs, time, logger);
+    kb_task_init(collection->agents[i].neg, procs, time, logger);
   }
 }
 
+// Processes tasks in all KB areas
 void kb_task_process(kb *collection, struct alma_proc *procs, long time, kb_logger *logger) {
   // Move delayed clauses into new_clauses
   for (tommy_size_t i = 0; i < tommy_array_size(&collection->timestep_delay_clauses); i++) {
@@ -66,18 +75,32 @@ void kb_task_process(kb *collection, struct alma_proc *procs, long time, kb_logg
   // Process resolution and fif tasks
   process_res_tasks(collection, time, &collection->res_tasks, &collection->new_clauses, NULL, logger);
   process_fif_tasks(collection, procs, logger);
+
+  for (int i = 0; i < collection->agent_count; i++) {
+    kb_task_process(collection->agents[i].pos, procs, time, logger);
+    kb_task_process(collection->agents[i].neg, procs, time, logger);
+  }
 }
 
 void kb_print(kb *collection, kb_logger *logger) {
-  tommy_node *i = tommy_list_head(&collection->clauses);
-  while (i) {
-    index_mapping *data = i->data;
+  tommy_node *curr = tommy_list_head(&collection->clauses);
+  while (curr) {
+    index_mapping *data = curr->data;
     if (collection->verbose || data->value->dirty_bit) {
       tee_alt("%ld: ", logger, data->key);
       clause_print(data->value, logger);
       tee_alt("\n", logger);
     }
-    i = i->next;
+    curr = curr->next;
+  }
+
+  if (collection->agent_count > 0)
+    tee_alt("Agent belief models:\n", logger);
+  for (int i = 0; i < collection->agent_count; i++) {
+    tee_alt("%s pos:\n", logger, collection->agents[i].name);
+    kb_print(collection->agents[i].pos, logger);
+    tee_alt("%s neg:\n", logger, collection->agents[i].name);
+    kb_print(collection->agents[i].neg, logger);
   }
 }
 
@@ -133,14 +156,84 @@ void kb_halt(kb *collection) {
   tommy_hashlin_foreach(&collection->fif_tasks, free_fif_task_mapping);
   tommy_hashlin_done(&collection->fif_tasks);
 
+  for (int i = 0; i < collection->agent_count; i++) {
+    kb_halt(collection->agents[i].pos);
+    kb_halt(collection->agents[i].neg);
+    free(collection->agents[i].name);
+  }
+  free(collection->agents);
+
   free(collection);
 }
 
+// Given a literal's function, checks for form bel(const_name, "...")
+static int is_bel_literal(alma_function *lit) {
+  return strcmp(lit->name, "bel") == 0 && lit->term_count == 2 && lit->terms[0].type == FUNCTION
+      && lit->terms[0].function->term_count == 0 && lit->terms[1].type == QUOTE && lit->terms[1].quote->type == CLAUSE;
+}
+
+
+// Syncs beliefs downward into argument KB's own agent model KBs
+static void new_beliefs_to_agents(kb *collection) {
+  for (tommy_size_t i = 0; i < tommy_array_size(&collection->new_clauses); i++) {
+    clause *c = tommy_array_get(&collection->new_clauses, i);
+    if (c->pos_count + c->neg_count == 1) {
+      int positive = (c->pos_count == 1);
+      alma_function *lit = positive ? c->pos_lits[0] : c->neg_lits[0];
+      if (is_bel_literal(lit)) {
+        char *agent_name = lit->terms[0].function->name;
+
+        agent_kb *agent = NULL;
+        // Search for matching agent KB
+        for (int j = 0; j < collection->agent_count; j++) {
+          if (strcmp(collection->agents[j].name, agent_name) == 0) {
+            agent = collection->agents + j;
+            break;
+          }
+        }
+        // If a matching agent KB doesn't exist, create it
+        if (agent == NULL) {
+          collection->agent_count++;
+          collection->agents = realloc(collection->agents, sizeof(*collection->agents) * collection->agent_count);
+          agent = collection->agents + (collection->agent_count-1);
+          agent->name = malloc(strlen(agent_name)+1);
+          strcpy(agent->name, agent_name);
+          agent->pos = malloc(sizeof(*agent->pos));
+          kb_init(agent->pos, collection->verbose);
+          agent->neg = malloc(sizeof(*agent->neg));
+          kb_init(agent->neg, collection->verbose);
+        }
+
+        // Create copy of quoted belief, add to agent's appropriate KB
+        clause *unquoted = malloc(sizeof(*unquoted));
+        copy_clause_structure(lit->terms[1].quote->clause_quote, unquoted);
+        decrement_quote_level(unquoted, 1);
+        // Initialize equivalence links for pair
+        unquoted->equiv_bel_up = c;
+        c->equiv_bel_down = unquoted;
+        if (positive) {
+          set_variable_ids(unquoted, 1, 0, NULL, &agent->pos->variable_id_count);
+          tommy_array_insert(&agent->pos->new_clauses, unquoted);
+        }
+        else {
+          set_variable_ids(unquoted, 1, 0, NULL, &agent->neg->variable_id_count);
+          tommy_array_insert(&agent->neg->new_clauses, unquoted);
+        }
+      }
+    }
+  }
+
+  // Recursively sync into own agent models
+  for (int i = 0; i < collection->agent_count; i++) {
+    new_beliefs_to_agents(collection->agents[i].pos);
+    new_beliefs_to_agents(collection->agents[i].neg);
+  }
+}
 
 static clause* make_meta_literal(kb *collection, char *predname, clause *c, long time);
 
 // For each new formula in new_clauses of agent kb, makes equivalent bel(...) formula for core kb
-void new_beliefs_from_agent(kb *agent, int positive, char *name, kb *core) {
+static void belief_sync_upward(kb *agent, int positive, char *name, kb *core) {
   for (tommy_size_t i = 0; i < tommy_array_size(&agent->new_clauses); i++) {
     clause *c = tommy_array_get(&agent->new_clauses, i);
 
@@ -174,6 +267,19 @@ void new_beliefs_from_agent(kb *agent, int positive, char *name, kb *core) {
 
       tommy_array_insert(&core->new_clauses, bel);
     }
+  }
+}
+
+// Syncs beliefs upward from argument KB's own agent model KBs
+static void new_beliefs_from_agents(kb *collection) {
+  for (int i = 0; i < collection->agent_count; i++) {
+    new_beliefs_from_agents(collection->agents[i].pos);
+    new_beliefs_from_agents(collection->agents[i].neg);
+  }
+
+  for (int i = 0; i < collection->agent_count; i++) {
+    belief_sync_upward(collection->agents[i].pos, 1, collection->agents[i].name, collection);
+    belief_sync_upward(collection->agents[i].neg, 0, collection->agents[i].name, collection);
   }
 }
 
@@ -1010,6 +1116,16 @@ static void handle_update(kb *collection, clause *update, tommy_array *clauses) 
 // Processing of new clauses: inserts non-duplicates derived, makes new tasks from if flag is active
 // Special handling for true, reinstate, distrust, update
 void process_new_clauses(kb *collection, alma_proc *procs, long time, int make_tasks, tommy_array *unpaused, kb_logger *logger) {
+  // Syncs beliefs between agent KBs and core KB
+  new_beliefs_to_agents(collection);
+  new_beliefs_from_agents(collection);
+
+  // Executes recursively on all agent levels
+  for (int i = 0; i < collection->agent_count; i++) {
+    process_new_clauses(collection->agents[i].pos, procs, time, make_tasks, unpaused, logger);
+    process_new_clauses(collection->agents[i].neg, procs, time, make_tasks, unpaused, logger);
+  }
+
   fif_to_front(&collection->new_clauses);
 
   tommy_array next_pass_clauses;
@@ -1127,6 +1243,12 @@ void process_new_clauses(kb *collection, alma_proc *procs, long time, int make_t
 }
 
 void process_meta_clauses(kb *collection, long time, tommy_array *unpaused, kb_logger *logger) {
+  // Processes meta clauses collected in KB's agents
+  for (int i = 0; i < collection->agent_count; i++) {
+    process_meta_clauses(collection->agents[i].pos, time, unpaused, logger);
+    process_meta_clauses(collection->agents[i].neg, time, unpaused, logger);
+  }
+
   // Process reinstatements of literals to look for contradictory reinstatements between them
   for (tommy_size_t i = 0; i < tommy_array_size(&collection->pos_lit_reinstates); i++) {
     clause *reinstate = tommy_array_get(&collection->pos_lit_reinstates, i);
