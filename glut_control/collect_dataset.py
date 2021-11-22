@@ -29,6 +29,7 @@ import pickle
 from sklearn.utils import shuffle
 
 from utils import kb_to_subjects_list
+import tqdm
 
 def get_dataset(network, training_percent):
     X = network.Xbuffer
@@ -123,7 +124,7 @@ def collect(reasoning_steps, num_observations, num_trajectories, outfile, subjec
             kb=None, gnn_nodes=-1, gnn=True, text_kb=False,
             training_percent=0.8):
     trajectories = []
-    for tnum in range(num_trajectories):
+    for tnum in tqdm.trange(num_trajectories):
         network = resolution_prebuffer.res_prebuffer(subject_list, [], debug=True, use_tf=True,   # Torch not working at time of writing
                                                      use_gnn=gnn, gnn_nodes=gnn_nodes)
         alma_inst, _ = alma.init(1,kb, '0', 1, 1000, [], [])
