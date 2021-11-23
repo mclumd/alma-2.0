@@ -42,52 +42,16 @@ void kb_init(kb* collection, int verbose) {
   collection->agents = NULL;
 }
 
-void kb_task_init(kb *collection, alma_proc *procs, long time, kb_logger *logger) {
-  // Generate starting tasks
-  tommy_node *curr = tommy_list_head(&collection->clauses);
-  while (curr) {
-    clause *c = ((index_mapping*)curr->data)->value;
-    if (c->tag == FIF)
-      fif_task_map_init(collection, procs, &collection->fif_tasks, c, 0);
-    else {
-      res_tasks_from_clause(collection, c, 0);
-      fif_tasks_from_clause(&collection->fif_tasks, c);
-    }
-    curr = curr->next;
-  }
+void kb_print(kb *collection, int indent, kb_logger *logger) {
+  char *spacing = malloc(indent+1);
+  memset(spacing, ' ', indent);
+  spacing[indent] = '\0';
 
-  for (int i = 0; i < collection->agent_count; i++) {
-    kb_task_init(collection->agents[i].pos, procs, time, logger);
-    kb_task_init(collection->agents[i].neg, procs, time, logger);
-  }
-}
-
-// Processes tasks in all KB areas
-void kb_task_process(kb *collection, struct alma_proc *procs, long time, kb_logger *logger) {
-  // Move delayed clauses into new_clauses
-  for (tommy_size_t i = 0; i < tommy_array_size(&collection->timestep_delay_clauses); i++) {
-    clause *c = tommy_array_get(&collection->timestep_delay_clauses, i);
-    tommy_array_insert(&collection->new_clauses, c);
-  }
-  tommy_array_done(&collection->timestep_delay_clauses);
-  tommy_array_init(&collection->timestep_delay_clauses);
-
-  // Process resolution and fif tasks
-  process_res_tasks(collection, time, &collection->res_tasks, &collection->new_clauses, NULL, logger);
-  process_fif_tasks(collection, procs, logger);
-
-  for (int i = 0; i < collection->agent_count; i++) {
-    kb_task_process(collection->agents[i].pos, procs, time, logger);
-    kb_task_process(collection->agents[i].neg, procs, time, logger);
-  }
-}
-
-void kb_print(kb *collection, kb_logger *logger) {
   tommy_node *curr = tommy_list_head(&collection->clauses);
   while (curr) {
     index_mapping *data = curr->data;
     if (collection->verbose || data->value->dirty_bit) {
-      tee_alt("%ld: ", logger, data->key);
+      tee_alt("%s%ld: ", logger, spacing, data->key);
       clause_print(data->value, logger);
       tee_alt("\n", logger);
     }
@@ -95,20 +59,21 @@ void kb_print(kb *collection, kb_logger *logger) {
   }
 
   if (collection->agent_count > 0)
-    tee_alt("Agent belief models:\n", logger);
+    tee_alt("%sAgent belief models:\n", logger, spacing);
   for (int i = 0; i < collection->agent_count; i++) {
-    tee_alt("%s pos:\n", logger, collection->agents[i].name);
-    kb_print(collection->agents[i].pos, logger);
-    tee_alt("%s neg:\n", logger, collection->agents[i].name);
-    kb_print(collection->agents[i].neg, logger);
+    tee_alt("%s %s pos:\n", logger, spacing, collection->agents[i].name);
+    kb_print(collection->agents[i].pos, indent+1, logger);
+    tee_alt("%s %s neg:\n", logger, spacing, collection->agents[i].name);
+    kb_print(collection->agents[i].neg, indent+1, logger);
   }
+  free(spacing);
 }
 
 static void free_predname_mapping(void *arg) {
   predname_mapping *entry = arg;
   free(entry->predname);
   free(entry->clauses);
-  // Note: clause entries ARE NOT FREED because they alias the clause objects freed in kb_halt
+  // Note: clauses are not freed because they alias the clause objects freed in kb_halt
   free(entry);
 }
 
@@ -1176,22 +1141,20 @@ void process_new_clauses(kb *collection, alma_proc *procs, long time, int make_t
           handle_update(collection, c, &next_pass_clauses);
         }
       }
-      // Non-reinstate/non-update sentences generate tasks
-      else {
-        // Update child info for parents of new clause
-        if (c->parents != NULL) {
-          for (int j = 0; j < c->parents[0].count; j++)
-            add_child(c->parents[0].clauses[j], c);
-        }
 
-        if (make_tasks) {
-          if (c->tag == FIF) {
-            fif_task_map_init(collection, procs, &collection->fif_tasks, c, 1);
-          }
-          else {
-            res_tasks_from_clause(collection, c, 1);
-            fif_tasks_from_clause(&collection->fif_tasks, c);
-          }
+      // Update child info for parents of new clause
+      if (c->parents != NULL) {
+        for (int j = 0; j < c->parents[0].count; j++)
+          add_child(c->parents[0].clauses[j], c);
+      }
+
+      if (make_tasks) {
+        if (c->tag == FIF) {
+          fif_task_map_init(collection, procs, &collection->fif_tasks, c, 1);
+        }
+        else {
+          res_tasks_from_clause(collection, c, 1);
+          fif_tasks_from_clause(&collection->fif_tasks, c);
         }
       }
     }

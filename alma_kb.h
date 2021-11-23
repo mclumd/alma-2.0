@@ -75,17 +75,15 @@ typedef struct res_task {
   alma_function *neg; // Negative literal from y
 } res_task;
 
-struct alma_proc;
 void kb_init(kb* collection, int verbose);
-void kb_task_init(kb *collection, struct alma_proc *procs, long time, kb_logger *logger);
-void kb_task_process(kb *collection, struct alma_proc *procs, long time, kb_logger *logger);
-void kb_print(kb *collection, kb_logger *logger);
+void kb_print(kb *collection, int indent, kb_logger *logger);
 void kb_halt(kb *collection);
 
 void* clause_lookup(kb *collection, clause *c);
 clause* duplicate_check(kb *collection, long time, clause *c, int check_distrusted);
 
 struct backsearch_task;
+struct alma_proc;
 void make_single_task(clause *c, alma_function *c_lit, clause *other, tommy_array *tasks, int use_bif, int pos);
 void make_res_tasks(clause *c, int count, alma_function **c_lits, tommy_hashlin *map, tommy_array *tasks, int use_bif, int pos);
 void res_tasks_from_clause(kb *collection, clause *c, int process_negatives);

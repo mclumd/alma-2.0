@@ -1,4 +1,5 @@
 #include <stdarg.h>
+#include <string.h>
 #include "alma_print.h"
 #include "alma_clause.h"
 #include "alma_fif.h"
@@ -103,6 +104,20 @@ static void lits_print(alma_function **lits, int count, char *delimiter, int neg
   }
 }
 
+// If c is of form bel(name, ...), returns name string; otherwise an empty string
+static char* agent_name(clause *bel) {
+  if (bel->pos_count + bel->neg_count == 1) {
+    int positive = (bel->pos_count == 1);
+    alma_function *lit = positive ? bel->pos_lits[0] : bel->neg_lits[0];
+
+    if (strcmp(lit->name, "bel") == 0 && lit->term_count == 2 && lit->terms[0].type == FUNCTION
+        && lit->terms[0].function->term_count == 0) {
+      return lit->terms[0].function->name;
+    }
+  }
+  return "";
+}
+
 static void clause_print_full(clause *c, kb_logger *logger, int print_extra) {
   // Print fif in original format
   if (c->tag == FIF) {
@@ -184,14 +199,19 @@ static void clause_print_full(clause *c, kb_logger *logger, int print_extra) {
     }
     if (print_extra && (c->equiv_bel_up != NULL || c->equiv_bel_down != NULL)) {
       tee_alt("equiv: ", logger);
+
+      char *up_name = "";
+      if (c->equiv_bel_up != NULL && c->equiv_bel_up->equiv_bel_up != NULL)
+        up_name = agent_name(c->equiv_bel_up->equiv_bel_up);
+
       if (c->equiv_bel_up != NULL && c->equiv_bel_down == NULL) {
-        tee_alt("%ld", logger, c->equiv_bel_up->index);
+        tee_alt("%s%ld", logger, up_name, c->equiv_bel_up->index);
       }
       else if (c->equiv_bel_up == NULL && c->equiv_bel_down != NULL) {
-        tee_alt("%ld", logger, c->equiv_bel_down->index);
+        tee_alt("%s%ld", logger, agent_name(c), c->equiv_bel_down->index);
       }
       else {
-        tee_alt("%ld, %ld", logger, c->equiv_bel_up->index, c->equiv_bel_down->index);
+        tee_alt("%s%ld, %s%ld", logger, up_name, c->equiv_bel_up->index, agent_name(c), c->equiv_bel_down->index);
       }
     }
     tee_alt(")", logger);

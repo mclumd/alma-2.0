@@ -57,11 +57,10 @@ static int unpaused_task_regen(kb *collection, clause *c) {
 
 // Boolean return based on if KB had any new (non-now) clauses this step
 static int process_new_reasoner_clauses(alma *reasoner, kb_logger *logger, int make_tasks) {
-  tommy_array unpaused;
-  tommy_array_init(&unpaused);
-
   // Continue processing clauses until KB segments have new_clauses exhausted
   int has_new_clauses = new_clauses_present(reasoner->core_kb);
+  tommy_array unpaused;
+  tommy_array_init(&unpaused);
   do {
     process_new_clauses(reasoner->core_kb, reasoner->procs, reasoner->time, make_tasks, &unpaused, logger);
   } while (new_clauses_present(reasoner->core_kb));
@@ -91,11 +90,30 @@ static int process_new_reasoner_clauses(alma *reasoner, kb_logger *logger, int m
   return has_new_clauses;
 }
 
+static void kb_task_init(kb *collection, alma_proc *procs, long time, kb_logger *logger) {
+  // Generate starting tasks
+  tommy_node *curr = tommy_list_head(&collection->clauses);
+  while (curr) {
+    clause *c = ((index_mapping*)curr->data)->value;
+    if (c->tag == FIF)
+      fif_task_map_init(collection, procs, &collection->fif_tasks, c, 0);
+    else {
+      res_tasks_from_clause(collection, c, 0);
+      fif_tasks_from_clause(&collection->fif_tasks, c);
+    }
+    curr = curr->next;
+  }
+
+  for (int i = 0; i < collection->agent_count; i++) {
+    kb_task_init(collection->agents[i].pos, procs, time, logger);
+    kb_task_init(collection->agents[i].neg, procs, time, logger);
+  }
+}
+
 // Caller will need to free reasoner with alma_halt
 void alma_init(alma *reasoner, char **files, int file_count, char *agent, char *trialnum, char *log_dir, int verbose, kb_str *buf, int logon) {
   reasoner->time = 0;
   reasoner->prev = reasoner->now = NULL;
-
   reasoner->idling = 0;
   reasoner->core_kb = malloc(sizeof(*reasoner->core_kb));
   kb_init(reasoner->core_kb, verbose);
@@ -191,6 +209,26 @@ static int has_delay_clauses(kb *collection) {
   return 0;
 }
 
+// Processes tasks in all KB areas
+static void kb_task_process(kb *collection, struct alma_proc *procs, long time, kb_logger *logger) {
+  // Move delayed clauses into new_clauses
+  for (tommy_size_t i = 0; i < tommy_array_size(&collection->timestep_delay_clauses); i++) {
+    clause *c = tommy_array_get(&collection->timestep_delay_clauses, i);
+    tommy_array_insert(&collection->new_clauses, c);
+  }
+  tommy_array_done(&collection->timestep_delay_clauses);
+  tommy_array_init(&collection->timestep_delay_clauses);
+
+  // Process resolution and fif tasks
+  process_res_tasks(collection, time, &collection->res_tasks, &collection->new_clauses, NULL, logger);
+  process_fif_tasks(collection, procs, logger);
+
+  for (int i = 0; i < collection->agent_count; i++) {
+    kb_task_process(collection->agents[i].pos, procs, time, logger);
+    kb_task_process(collection->agents[i].neg, procs, time, logger);
+  }
+}
+
 void alma_step(alma *reasoner, kb_str *buf) {
   kb_logger logger;
   logger.log = reasoner->almalog;
@@ -223,7 +261,7 @@ void alma_print(alma *reasoner, kb_str *buf) {
   logger.log = reasoner->almalog;
   logger.buf = buf;
 
-  kb_print(reasoner->core_kb, &logger);
+  kb_print(reasoner->core_kb, 0, &logger);
 
   tommy_node* i = tommy_list_head(&reasoner->backsearch_tasks);
   if (i) {
