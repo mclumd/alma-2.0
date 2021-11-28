@@ -6,7 +6,7 @@ from torch import nn
 
 
 class dt_dataset():
-    def __init__(self, trajectories, state_dim=2048, act_dim=1024, max_ep_len=100, scale=100, device='cpu'):
+    def __init__(self, trajectories, state_dim=2048, act_dim=1024, max_ep_len=100, scale=100, device='cuda'):
         self.trajectories = trajectories 
         self.num_trajectories = len(trajectories)
         self.tokenizer = GPT2Tokenizer.from_pretrained("gpt2")

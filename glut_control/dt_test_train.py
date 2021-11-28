@@ -1,3 +1,5 @@
+
+
 import os, sys, argparse
 import wandb
 import pickle
@@ -5,6 +7,7 @@ import numpy as np
 import torch
 from transformers import GPT2Tokenizer
 import dt_dataset
+import tqdm
 
 # Find decision_transformer
 cwd = os.path.dirname(os.path.abspath(__file__))
@@ -32,8 +35,8 @@ def train(variant, dataset="offline_datasets/dection_trans_data_qlearning2.1.pkl
     num_added_toks = tokenizer.add_special_tokens(special_tokens_dict)
     #model.resize_token_embeddings(len(tokenizer))
 
-    state_dim = 1024
-    act_dim = 512
+    state_dim = 2048
+    act_dim = 1024
     max_length= 128
     warmup_steps = variant['warmup_steps']
     with open(dataset, "rb") as dfile:
@@ -56,7 +59,7 @@ def train(variant, dataset="offline_datasets/dection_trans_data_qlearning2.1.pkl
         )
 
     
-    #model = model.to(device=device)
+    model = model.to(device=variant['device'])
     optimizer = torch.optim.AdamW(
         model.parameters(),
         lr=variant['learning_rate'],
@@ -88,10 +91,18 @@ def train(variant, dataset="offline_datasets/dection_trans_data_qlearning2.1.pkl
         )
         # wandb.watch(model)  # wandb has some bug
 
-    for iter in range(variant['max_iters']):
+    for iter in tqdm.trange(variant['max_iters']):
         outputs = trainer.train_iteration(num_steps=variant['num_steps_per_iter'], iter_num=iter+1, print_logs=True)
         if log_to_wandb:
-            wandb.log(outputs)        
+            wandb.log(outputs)
+
+    torch.save({
+            'epoch': 1,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'loss': 0.4,
+            }, "dt_checkpoint.pt")        
+
 
 def test():
     pass
