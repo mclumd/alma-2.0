@@ -93,15 +93,11 @@ def train(variant, dataset="offline_datasets/dection_trans_data_qlearning2.1.pkl
 
     for iter in tqdm.trange(variant['max_iters']):
         outputs = trainer.train_iteration(num_steps=variant['num_steps_per_iter'], iter_num=iter+1, print_logs=True)
-        if log_to_wandb:
-            wandb.log(outputs)
+        torch.save(model, "dt_checkpoint-iter{}.pt".format(iter))        
+        #if log_to_wandb:
+        #    wandb.log(outputs)
 
-    torch.save({
-            'epoch': 1,
-            'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict(),
-            'loss': 0.4,
-            }, "dt_checkpoint.pt")        
+    torch.save(model,  "dt_final.pt")        
 
 
 def test():
