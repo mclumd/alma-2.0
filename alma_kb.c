@@ -7,7 +7,10 @@
 #include "alma_fif.h"
 #include "alma_proc.h"
 
-void kb_init(kb* collection, int verbose) {
+void kb_init(kb* collection, char *name, int verbose) {
+  collection->name = malloc(strlen(name)+1);
+  strcpy(collection->name, name);
+
   collection->variable_id_count = 0;
   collection->next_index = 0;
   collection->verbose = verbose;
@@ -42,7 +45,7 @@ void kb_init(kb* collection, int verbose) {
   collection->agents = NULL;
 }
 
-void kb_print(kb *collection, int indent, kb_logger *logger) {
+static void kb_print_rec(kb *collection, int indent, kb_logger *logger, int print_name) {
   char *spacing = malloc(indent+1);
   memset(spacing, ' ', indent);
   spacing[indent] = '\0';
@@ -51,7 +54,10 @@ void kb_print(kb *collection, int indent, kb_logger *logger) {
   while (curr) {
     index_mapping *data = curr->data;
     if (collection->verbose || data->value->dirty_bit) {
-      tee_alt("%s%ld: ", logger, spacing, data->key);
+      if (print_name)
+        tee_alt("%s%s%ld: ", logger, spacing, collection->name, data->key);
+      else
+        tee_alt("%s%ld: ", logger, spacing, data->key);
       clause_print(data->value, logger);
       tee_alt("\n", logger);
     }
@@ -61,12 +67,17 @@ void kb_print(kb *collection, int indent, kb_logger *logger) {
   if (collection->agent_count > 0)
     tee_alt("%sAgent belief models:\n", logger, spacing);
   for (int i = 0; i < collection->agent_count; i++) {
-    tee_alt("%s %s pos:\n", logger, spacing, collection->agents[i].name);
-    kb_print(collection->agents[i].pos, indent+1, logger);
-    tee_alt("%s %s neg:\n", logger, spacing, collection->agents[i].name);
-    kb_print(collection->agents[i].neg, indent+1, logger);
+    tee_alt("%s %s positive:\n", logger, spacing, collection->agents[i].pos->name);
+    kb_print_rec(collection->agents[i].pos, indent+2, logger, 1);
+    tee_alt("%s %s negative:\n", logger, spacing, collection->agents[i].neg->name);
+    kb_print_rec(collection->agents[i].neg, indent+2, logger, 1);
   }
   free(spacing);
+}
+
+// Top-level doesn't print name; recursive calls do
+void kb_print(kb *collection, int indent, kb_logger *logger) {
+  kb_print_rec(collection, indent, logger, 0);
 }
 
 static void free_predname_mapping(void *arg) {
@@ -78,6 +89,8 @@ static void free_predname_mapping(void *arg) {
 }
 
 void kb_halt(kb *collection) {
+  free(collection->name);
+
   for (tommy_size_t i = 0; i < tommy_array_size(&collection->new_clauses); i++)
     free_clause(tommy_array_get(&collection->new_clauses, i));
   tommy_array_done(&collection->new_clauses);
@@ -124,7 +137,6 @@ void kb_halt(kb *collection) {
   for (int i = 0; i < collection->agent_count; i++) {
     kb_halt(collection->agents[i].pos);
     kb_halt(collection->agents[i].neg);
-    free(collection->agents[i].name);
   }
   free(collection->agents);
 
@@ -147,42 +159,42 @@ static void new_beliefs_to_agents(kb *collection) {
       alma_function *lit = positive ? c->pos_lits[0] : c->neg_lits[0];
       if (is_bel_literal(lit)) {
         char *agent_name = lit->terms[0].function->name;
-
-        agent_kb *agent = NULL;
-        // Search for matching agent KB
-        for (int j = 0; j < collection->agent_count; j++) {
-          if (strcmp(collection->agents[j].name, agent_name) == 0) {
-            agent = collection->agents + j;
-            break;
+        // Only model agent with name distinct from collection itself
+        if (strcmp(agent_name, collection->name) != 0) {
+          agent_kb *agent = NULL;
+          // Search for matching agent KB
+          for (int j = 0; j < collection->agent_count; j++) {
+            if (strcmp(collection->agents[j].pos->name, agent_name) == 0) {
+              agent = collection->agents + j;
+              break;
+            }
           }
-        }
-        // If a matching agent KB doesn't exist, create it
-        if (agent == NULL) {
-          collection->agent_count++;
-          collection->agents = realloc(collection->agents, sizeof(*collection->agents) * collection->agent_count);
-          agent = collection->agents + (collection->agent_count-1);
-          agent->name = malloc(strlen(agent_name)+1);
-          strcpy(agent->name, agent_name);
-          agent->pos = malloc(sizeof(*agent->pos));
-          kb_init(agent->pos, collection->verbose);
-          agent->neg = malloc(sizeof(*agent->neg));
-          kb_init(agent->neg, collection->verbose);
-        }
+          // If a matching agent KB doesn't exist, create it
+          if (agent == NULL) {
+            collection->agent_count++;
+            collection->agents = realloc(collection->agents, sizeof(*collection->agents) * collection->agent_count);
+            agent = collection->agents + (collection->agent_count-1);
+            agent->pos = malloc(sizeof(*agent->pos));
+            kb_init(agent->pos, agent_name, collection->verbose);
+            agent->neg = malloc(sizeof(*agent->neg));
+            kb_init(agent->neg, agent_name, collection->verbose);
+          }
 
-        // Create copy of quoted belief, add to agent's appropriate KB
-        clause *unquoted = malloc(sizeof(*unquoted));
-        copy_clause_structure(lit->terms[1].quote->clause_quote, unquoted);
-        decrement_quote_level(unquoted, 1);
-        // Initialize equivalence links for pair
-        unquoted->equiv_bel_up = c;
-        c->equiv_bel_down = unquoted;
-        if (positive) {
-          set_variable_ids(unquoted, 1, 0, NULL, &agent->pos->variable_id_count);
-          tommy_array_insert(&agent->pos->new_clauses, unquoted);
-        }
-        else {
-          set_variable_ids(unquoted, 1, 0, NULL, &agent->neg->variable_id_count);
-          tommy_array_insert(&agent->neg->new_clauses, unquoted);
+          // Create copy of quoted belief, add to agent's appropriate KB
+          clause *unquoted = malloc(sizeof(*unquoted));
+          copy_clause_structure(lit->terms[1].quote->clause_quote, unquoted);
+          decrement_quote_level(unquoted, 1);
+          // Initialize equivalence links for pair
+          unquoted->equiv_bel_up = c;
+          c->equiv_bel_down = unquoted;
+          if (positive) {
+            set_variable_ids(unquoted, 1, 0, NULL, &agent->pos->variable_id_count);
+            tommy_array_insert(&agent->pos->new_clauses, unquoted);
+          }
+          else {
+            set_variable_ids(unquoted, 1, 0, NULL, &agent->neg->variable_id_count);
+            tommy_array_insert(&agent->neg->new_clauses, unquoted);
+          }
         }
       }
     }
@@ -198,7 +210,7 @@ static void new_beliefs_to_agents(kb *collection) {
 static clause* make_meta_literal(kb *collection, char *predname, clause *c, long time);
 
 // For each new formula in new_clauses of agent kb, makes equivalent bel(...) formula for core kb
-static void belief_sync_upward(kb *agent, int positive, char *name, kb *core) {
+static void belief_sync_upward(kb *agent, int positive, kb *core) {
   for (tommy_size_t i = 0; i < tommy_array_size(&agent->new_clauses); i++) {
     clause *c = tommy_array_get(&agent->new_clauses, i);
 
@@ -210,8 +222,8 @@ static void belief_sync_upward(kb *agent, int positive, char *name, kb *core) {
       bel->pos_lits[0]->terms[1].quote = bel->pos_lits[0]->terms[0].quote;
       bel->pos_lits[0]->terms[0].type = FUNCTION;
       bel->pos_lits[0]->terms[0].function = malloc(sizeof(*bel->pos_lits[0]->terms[0].function));
-      bel->pos_lits[0]->terms[0].function->name = malloc(strlen(name)+1);
-      strcpy(bel->pos_lits[0]->terms[0].function->name, name);
+      bel->pos_lits[0]->terms[0].function->name = malloc(strlen(agent->name)+1);
+      strcpy(bel->pos_lits[0]->terms[0].function->name, agent->name);
       bel->pos_lits[0]->terms[0].function->term_count = 0;
       bel->pos_lits[0]->terms[0].function->terms = NULL;
 
@@ -243,8 +255,8 @@ static void new_beliefs_from_agents(kb *collection) {
   }
 
   for (int i = 0; i < collection->agent_count; i++) {
-    belief_sync_upward(collection->agents[i].pos, 1, collection->agents[i].name, collection);
-    belief_sync_upward(collection->agents[i].neg, 0, collection->agents[i].name, collection);
+    belief_sync_upward(collection->agents[i].pos, 1, collection);
+    belief_sync_upward(collection->agents[i].neg, 0, collection);
   }
 }
 

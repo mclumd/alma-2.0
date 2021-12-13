@@ -9,6 +9,8 @@
 #include "alma_print.h"
 
 typedef struct kb {
+  char *name; // Name of agent KB belongs to; defaults to "alma"
+
   long long variable_id_count;
   long next_index;
   int verbose; // Boolean flag for printing extra output
@@ -46,7 +48,6 @@ typedef struct kb {
 } kb;
 
 typedef struct agent_kb {
-  char *name;
   kb *pos;
   kb *neg;
 } agent_kb;
@@ -75,7 +76,7 @@ typedef struct res_task {
   alma_function *neg; // Negative literal from y
 } res_task;
 
-void kb_init(kb* collection, int verbose);
+void kb_init(kb* collection, char *name, int verbose);
 void kb_print(kb *collection, int indent, kb_logger *logger);
 void kb_halt(kb *collection);
 

@@ -116,7 +116,11 @@ void alma_init(alma *reasoner, char **files, int file_count, char *agent, char *
   reasoner->prev = reasoner->now = NULL;
   reasoner->idling = 0;
   reasoner->core_kb = malloc(sizeof(*reasoner->core_kb));
-  kb_init(reasoner->core_kb, verbose);
+
+  if (agent == NULL) {
+    agent = "alma";
+  }
+  kb_init(reasoner->core_kb, agent, verbose);
 
   tommy_list_init(&reasoner->backsearch_tasks);
   const alma_proc procs[17] = {{"neg_int", 1}, {"neg_int_spec", 1}, {"neg_int_gen", 1}, {"pos_int", 1}, {"pos_int_spec", 1},
@@ -183,15 +187,14 @@ void alma_init(alma *reasoner, char **files, int file_count, char *agent, char *
       }
     }
   }
-  if (agent != NULL) {
-    int namelen = strlen(agent);
-    char *namestr = malloc(10 + namelen + 3);
-    strcpy(namestr, "agentname(");
-    strcpy(namestr + 10, agent);
-    strcpy(namestr + 10 + namelen, ").");
-    assert_formula(reasoner->core_kb, namestr, 0, &logger);
-    free(namestr);
-  }
+
+  int namelen = strlen(agent);
+  char *namestr = malloc(10 + namelen + 3);
+  strcpy(namestr, "agentname(");
+  strcpy(namestr + 10, agent);
+  strcpy(namestr + 10 + namelen, ").");
+  assert_formula(reasoner->core_kb, namestr, 0, &logger);
+  free(namestr);
 
   process_new_reasoner_clauses(reasoner, &logger, 0);
 
