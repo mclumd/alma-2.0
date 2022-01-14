@@ -42,7 +42,9 @@ common_knowledge(quote(
 fif(and(agentname(Self),
     and(heard(Self, Utterance, Speaker),
     and(agent(Agent),
-    neg_int(quote(near(`Agent, `Speaker)))))),
+    and(not_equal(quote(agent(`Agent)), quote(agent(`Self))),
+    and(not_equal(quote(agent(`Agent)), quote(agent(`Speaker))),
+    neg_int(quote(near(`Agent, `Speaker)))))))),
 not(heard(Agent, Utterance, Speaker)))
 )).
 

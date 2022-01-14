@@ -111,7 +111,7 @@ static void kb_task_init(kb *collection, alma_proc *procs, long time, kb_logger 
 }
 
 // Caller will need to free reasoner with alma_halt
-void alma_init(alma *reasoner, char **files, int file_count, char *agent, char *trialnum, char *log_dir, int verbose, kb_str *buf, int logon) {
+void alma_init(alma *reasoner, char **files, int file_count, char *agent, char *trialnum, char *log_dir, int verbose, kb_str *buf, int logon, int max_depth) {
   reasoner->time = 0;
   reasoner->prev = reasoner->now = NULL;
   reasoner->idling = 0;
@@ -120,7 +120,7 @@ void alma_init(alma *reasoner, char **files, int file_count, char *agent, char *
   if (agent == NULL) {
     agent = "alma";
   }
-  kb_init(reasoner->core_kb, agent, verbose);
+  kb_init(reasoner->core_kb, agent, verbose, max_depth);
 
   tommy_list_init(&reasoner->backsearch_tasks);
   const alma_proc procs[17] = {{"neg_int", 1}, {"neg_int_spec", 1}, {"neg_int_gen", 1}, {"pos_int", 1}, {"pos_int_spec", 1},

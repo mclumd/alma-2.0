@@ -22,12 +22,13 @@ int main(int argc, char **argv) {
   int file_count = 0;
   char **files = NULL;
   char *agent = NULL;
+  int max_depth = 1000;
 
   logs_on = 1;
   python_mode = 0;
 
   int c;
-  while ((c = getopt(argc, argv, "rxvf:a:")) != -1)
+  while ((c = getopt(argc, argv, "rxvf:a:n:")) != -1)
     switch (c) {
       case 'r':
         run = 1;
@@ -41,16 +42,21 @@ int main(int argc, char **argv) {
         files[file_count-1] = optarg;
         break;
       case 'x':
-  logs_on = (char) 0;
-  break;
+        logs_on = (char) 0;
+        break;
       case 'a':
         agent = optarg;
+        break;
+      case 'n':
+        max_depth = atoi(optarg);
         break;
       case '?':
         if (optopt == 'f')
           printf("Option -%c requires an ALMA file argument.\n", optopt);
         else if (optopt == 'a')
           printf("Option -%c requires an agent name argument.\n", optopt);
+        else if (optopt == 'n')
+          printf("Option -%c requires an integer max nesting dapth.\n", optopt);
         else if (isprint (optopt))
           printf("Unknown option `-%c'.\n", optopt);
         else
@@ -66,7 +72,7 @@ int main(int argc, char **argv) {
   }
 
   alma *reasoner = malloc(sizeof(*reasoner));
-  alma_init(reasoner, files, file_count, agent, NULL, NULL, verbose, NULL, logs_on);
+  alma_init(reasoner, files, file_count, agent, NULL, NULL, verbose, NULL, logs_on, max_depth);
   free(files);
   alma_print(reasoner, NULL);
 

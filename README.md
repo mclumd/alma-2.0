@@ -10,15 +10,17 @@ make
 
 ## Usage
 ```
-./alma.x [-r] [-f file] [-a agent]
+./alma.x [-r] [-v] [-f file] [-a agent] [-n nesting]
 ```
 
 required arguments:  
   `-f file`   provides an input file for beginning ALMA KB; may be repeated for multiple input files
 
 optional arguments:  
-  `-r`        runs ALMA automatically until halting when it first idles  
-  `-a agent`  provides the agent name to identify this ALMA instance
+  `-r`         runs automatically until halting when reasoner first idles
+  `-v`         runs with verbose output
+  `-a agent`   provides the agent name to identify this ALMA instance
+  `-n nesting` sets the maximum depth of nesting for modeling agent beliefs
 
 #### Commands
 `step`: Makes one derivation step. Will print `Idling...` if there are no remaining tasks which might produce further derivations.

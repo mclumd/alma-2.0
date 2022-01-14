@@ -14,6 +14,7 @@ typedef struct kb {
   long long variable_id_count;
   long next_index;
   int verbose; // Boolean flag for printing extra output
+  int nesting_depth;
 
   tommy_list clauses; // Linked list storing index_mappings, keeps track of all clauses
   tommy_hashlin index_map; // Maps index value to a clause
@@ -76,7 +77,7 @@ typedef struct res_task {
   alma_function *neg; // Negative literal from y
 } res_task;
 
-void kb_init(kb* collection, char *name, int verbose);
+void kb_init(kb* collection, char *name, int verbose, int nesting_depth);
 void kb_print(kb *collection, int indent, kb_logger *logger);
 void kb_halt(kb *collection);
 

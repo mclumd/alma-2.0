@@ -7,13 +7,14 @@
 #include "alma_fif.h"
 #include "alma_proc.h"
 
-void kb_init(kb* collection, char *name, int verbose) {
+void kb_init(kb* collection, char *name, int verbose, int nesting_depth) {
   collection->name = malloc(strlen(name)+1);
   strcpy(collection->name, name);
 
   collection->variable_id_count = 0;
   collection->next_index = 0;
   collection->verbose = verbose;
+  collection->nesting_depth = nesting_depth;
 
   tommy_list_init(&collection->clauses);
   tommy_hashlin_init(&collection->index_map);
@@ -94,6 +95,8 @@ void kb_halt(kb *collection) {
   for (tommy_size_t i = 0; i < tommy_array_size(&collection->new_clauses); i++)
     free_clause(tommy_array_get(&collection->new_clauses, i));
   tommy_array_done(&collection->new_clauses);
+  for (tommy_size_t i = 0; i < tommy_array_size(&collection->timestep_delay_clauses); i++)
+    free_clause(tommy_array_get(&collection->timestep_delay_clauses, i));
   tommy_array_done(&collection->timestep_delay_clauses);
 
   tommy_array_done(&collection->distrust_set);
@@ -152,58 +155,61 @@ static int is_bel_literal(alma_function *lit) {
 
 // Syncs beliefs downward into argument KB's own agent model KBs
 static void new_beliefs_to_agents(kb *collection) {
-  for (tommy_size_t i = 0; i < tommy_array_size(&collection->new_clauses); i++) {
-    clause *c = tommy_array_get(&collection->new_clauses, i);
-    if (c->pos_count + c->neg_count == 1) {
-      int positive = (c->pos_count == 1);
-      alma_function *lit = positive ? c->pos_lits[0] : c->neg_lits[0];
-      if (is_bel_literal(lit)) {
-        char *agent_name = lit->terms[0].function->name;
-        // Only model agent with name distinct from collection itself
-        if (strcmp(agent_name, collection->name) != 0) {
-          agent_kb *agent = NULL;
-          // Search for matching agent KB
-          for (int j = 0; j < collection->agent_count; j++) {
-            if (strcmp(collection->agents[j].pos->name, agent_name) == 0) {
-              agent = collection->agents + j;
-              break;
+  // Recursively sync into own agent models
+  if (collection->nesting_depth >= 1) {
+    for (tommy_size_t i = 0; i < tommy_array_size(&collection->new_clauses); i++) {
+      clause *c = tommy_array_get(&collection->new_clauses, i);
+      if (c->pos_count + c->neg_count == 1) {
+        int positive = (c->pos_count == 1);
+        alma_function *lit = positive ? c->pos_lits[0] : c->neg_lits[0];
+        if (is_bel_literal(lit)) {
+          char *agent_name = lit->terms[0].function->name;
+          // Only model agent with name distinct from collection itself
+          if (strcmp(agent_name, collection->name) != 0) {
+            agent_kb *agent = NULL;
+            // Search for matching agent KB
+            for (int j = 0; j < collection->agent_count; j++) {
+              if (strcmp(collection->agents[j].pos->name, agent_name) == 0) {
+                agent = collection->agents + j;
+                break;
+              }
             }
-          }
-          // If a matching agent KB doesn't exist, create it
-          if (agent == NULL) {
-            collection->agent_count++;
-            collection->agents = realloc(collection->agents, sizeof(*collection->agents) * collection->agent_count);
-            agent = collection->agents + (collection->agent_count-1);
-            agent->pos = malloc(sizeof(*agent->pos));
-            kb_init(agent->pos, agent_name, collection->verbose);
-            agent->neg = malloc(sizeof(*agent->neg));
-            kb_init(agent->neg, agent_name, collection->verbose);
-          }
+            // If a matching agent KB doesn't exist, create it
+            if (agent == NULL) {
+              collection->agent_count++;
+              collection->agents = realloc(collection->agents, sizeof(*collection->agents) * collection->agent_count);
+              agent = collection->agents + (collection->agent_count-1);
+              agent->pos = malloc(sizeof(*agent->pos));
+              kb_init(agent->pos, agent_name, collection->verbose, collection->nesting_depth-1);
+              agent->neg = malloc(sizeof(*agent->neg));
+              kb_init(agent->neg, agent_name, collection->verbose, collection->nesting_depth-1);
+            }
 
-          // Create copy of quoted belief, add to agent's appropriate KB
-          clause *unquoted = malloc(sizeof(*unquoted));
-          copy_clause_structure(lit->terms[1].quote->clause_quote, unquoted);
-          decrement_quote_level(unquoted, 1);
-          // Initialize equivalence links for pair
-          unquoted->equiv_bel_up = c;
-          c->equiv_bel_down = unquoted;
-          if (positive) {
-            set_variable_ids(unquoted, 1, 0, NULL, &agent->pos->variable_id_count);
-            tommy_array_insert(&agent->pos->new_clauses, unquoted);
-          }
-          else {
-            set_variable_ids(unquoted, 1, 0, NULL, &agent->neg->variable_id_count);
-            tommy_array_insert(&agent->neg->new_clauses, unquoted);
+            // Create copy of quoted belief, add to agent's appropriate KB
+            clause *unquoted = malloc(sizeof(*unquoted));
+            copy_clause_structure(lit->terms[1].quote->clause_quote, unquoted);
+            decrement_quote_level(unquoted, 1);
+            // Initialize equivalence links for pair
+            unquoted->equiv_bel_up = c;
+            c->equiv_bel_down = unquoted;
+            if (positive) {
+              set_variable_ids(unquoted, 1, 0, NULL, &agent->pos->variable_id_count);
+              tommy_array_insert(&agent->pos->new_clauses, unquoted);
+            }
+            else {
+              set_variable_ids(unquoted, 1, 0, NULL, &agent->neg->variable_id_count);
+              tommy_array_insert(&agent->neg->new_clauses, unquoted);
+            }
           }
         }
       }
     }
-  }
 
-  // Recursively sync into own agent models
-  for (int i = 0; i < collection->agent_count; i++) {
-    new_beliefs_to_agents(collection->agents[i].pos);
-    new_beliefs_to_agents(collection->agents[i].neg);
+
+    for (int i = 0; i < collection->agent_count; i++) {
+      new_beliefs_to_agents(collection->agents[i].pos);
+      new_beliefs_to_agents(collection->agents[i].neg);
+    }
   }
 }
 
