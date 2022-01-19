@@ -22,7 +22,8 @@ true(X)).
 % Version of above: agents are able to believe common knowledge
 % And, this is also common knowledge
 common_knowledge(quote(
-fif(agent(Agent),
+fif(and(agent(Agent),
+    neg_int(quote(agentname(`Agent)))),
 bel(Agent, quote(fif(common_knowledge(X), true(X)))))
 )).
 

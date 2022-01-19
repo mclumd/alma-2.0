@@ -20,21 +20,19 @@ fif(and(tell(Speaker, Utterance, Confidant),
     agent(Speaker)),
 heard(Speaker, Utterance, Speaker)).
 
-% An agent that heard from a speaker considers that others near speaker have heard, and believe it itself heard too
+% An agent that heard from a speaker considers that others near speaker have heard
 common_knowledge(quote(
 fif(and(agentname(Self),
     and(heard(Self, Utterance, Speaker),
     near(Agent, Speaker))),
-and(heard(Agent, Utterance, Speaker),
-bel(Agent, quote(heard(`Self, `Utterance, `Speaker)))))
+heard(Agent, Utterance, Speaker))
 )).
 
-% An agent that heard from a speaker considers the speaker to have heard, and believe that it itself heard too
+% An agent that heard from a speaker considers the speaker to have heard
 common_knowledge(quote(
 fif(and(agentname(Self),
     heard(Self, Utterance, Speaker)),
-and(heard(Speaker, Utterance, Speaker),
-bel(Speaker, quote(heard(`Self, `Utterance, `Speaker)))))
+heard(Speaker, Utterance, Speaker))
 )).
 
 % An agent that heard from a speaker considers by default that others not near speaker have not heard
@@ -109,7 +107,8 @@ agent(carol)
 
 % Agents believe their own names
 common_knowledge(quote(
-fif(agent(Agent),
+fif(and(agent(Agent),
+    neg_int(quote(agentname(`Agent)))),
 bel(Agent, quote(agentname(`Agent))))
 )).
 
