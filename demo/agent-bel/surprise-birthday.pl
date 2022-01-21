@@ -81,17 +81,17 @@ reinstate(quote(heard(`Agent, `Belief, `Speaker)), T))
 
 
 
-% Common knowledge that when decision to give to Agent is made, and believed by Agent, they expect to receive it
+% Common knowledge that when decision to give to Agent is made, expectation is for them to receive it
 common_knowledge(quote(
-fif(and(decision(Giver, give(Gift, Agent)),
-    agentname(Agent)),
+fif(decision(Giver, give(Gift, Agent)),
 expectation(receive(Agent, Gift)))
 )).
 
-% Common knowledge that when an agent has expectation for a gift, they won't be surprised in the future to receive it
+% Common knowledge that when there's expactation for an agent to receive a gift they've heard about, they won't be surprised in the future to receive it
 common_knowledge(quote(
-fif(expectation(receive(Recipient, Gift)),
-not(future_surprise(Recipient, gift(Item))))
+fif(and(expectation(receive(Recipient, Gift)),
+    heard(Recipient, quote(decision(`Giver, give(`Gift, `Agent))), Speaker)),
+not(future_surprise(Recipient, gift(Gift))))
 )).
 
 

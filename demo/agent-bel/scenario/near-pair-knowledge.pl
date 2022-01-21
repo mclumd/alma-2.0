@@ -1,7 +1,7 @@
 common_knowledge(quote(
 near(alma, bob)
 )).
-common_knowledge(quote(
+pair_knowledge(alma, carol, quote(
 near(bob, carol)
 )).
 pair_knowledge(alma, carol, quote(
