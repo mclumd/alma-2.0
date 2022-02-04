@@ -541,10 +541,11 @@ static PyObject * alma_mode(PyObject *self, PyObject *args) {
 static PyObject *alma_to_pyobject(PyObject *self, PyObject *args) {
   PyObject *lst;
   long alma_kb;
+  long full_kb; // 1 for full kb; 0 for only new entries
   kb *collection;
 
   //fprintf(stderr, "In alma_to_pyobject\n");
-  if (!PyArg_ParseTuple(args, "l", &alma_kb))
+  if (!PyArg_ParseTuple(args, "ll", &alma_kb, &full_kb))
     return NULL;
 
 
@@ -554,7 +555,8 @@ static PyObject *alma_to_pyobject(PyObject *self, PyObject *args) {
   tommy_node *i = tommy_list_head(&collection->clauses);
   while (i) {
     index_mapping *data = i->data;
-    if (data->value->pyobject_bit || 1) { // remove || 1 to only send new elements added to kb
+    //    if (data->value->pyobject_bit || 1) { // remove || 1 to only send new elements added to kb
+    if (data->value->pyobject_bit || full_kb) { // remove || 1 to only send new elements added to kb
       PyList_Append(lst,clause_to_pyobject(collection, data->value));
     }
     i = i->next;

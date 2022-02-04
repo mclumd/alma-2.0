@@ -2,9 +2,11 @@
 #(setq python-shell-interpreter "/home/justin/software/Python-3.8.10-valgrind/bin/python3"
 #      python-shell-interpreter-args "-i -X showrefcount -X showalloccount -X tracemalloc -X dev ")
 
+import sys
+import os
+sys.path.append(os.path.join(os.getcwd(), 'alma_python'))
 
-
-import glut_control.alma_utils as alma_utils
+import alma_utils
 #import numpy as np
 import time
 import sys
