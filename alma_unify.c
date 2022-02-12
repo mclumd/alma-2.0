@@ -148,7 +148,6 @@ static void adjust_context(binding *b, int quote_level, int backticks) {
       adjust_var_quasiquote_level(b->term, backticks);
     }
     b->quote_level = quote_level;
-    b->quasi_quote_level = backticks;
   }
 }
 
@@ -605,7 +604,6 @@ static void add_binding_detailed(binding_list *theta, alma_variable *var, int qu
   theta->list[theta->num_bindings-1].var = malloc(sizeof(*var));
   copy_alma_var(var, theta->list[theta->num_bindings-1].var);
   theta->list[theta->num_bindings-1].quote_level = quote_level;
-  theta->list[theta->num_bindings-1].quasi_quote_level = qq_level;
   if (copy_term) {
     theta->list[theta->num_bindings-1].term = malloc(sizeof(*term));
     copy_alma_term(term, theta->list[theta->num_bindings-1].term);
@@ -649,7 +647,6 @@ void copy_bindings(binding_list *dest, binding_list *src) {
       dest->list[i].var = malloc(sizeof(alma_variable));
       copy_alma_var(src->list[i].var, dest->list[i].var);
       dest->list[i].quote_level = src->list[i].quote_level;
-      dest->list[i].quasi_quote_level = src->list[i].quasi_quote_level;
       dest->list[i].term = malloc(sizeof(alma_term));
       copy_alma_term(src->list[i].term, dest->list[i].term);
       dest->list[i].term_parent = src->list[i].term_parent;

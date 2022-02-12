@@ -24,7 +24,6 @@ int release_matches(var_match_set *v, int retval);
 typedef struct binding {
   alma_variable *var;
   int quote_level;
-  int quasi_quote_level;
   alma_term *term;
   // Parent literal/term pointer to track overall source of term in binding
   void *term_parent;

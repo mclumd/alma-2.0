@@ -261,14 +261,6 @@ void print_bindings(binding_list *theta, int print_all, int last_newline, kb_log
   }
   else {
     for (int i = 0; i < theta->num_bindings; i++) {
-      if (theta->list[i].quasi_quote_level > 0) {
-        char *backticks = malloc(theta->list[i].quasi_quote_level+1);
-        for (int j = 0; j < theta->list[i].quasi_quote_level; j++)
-          backticks[j] = '`';
-        backticks[theta->list[i].quasi_quote_level] = '\0';
-        tee_alt("%s", logger, backticks);
-        free(backticks);
-      }
       tee_alt("%s%lld", logger, theta->list[i].var->name, theta->list[i].var->id);
       tee_alt(" / ", logger);
       alma_term_print(theta->list[i].term, logger);

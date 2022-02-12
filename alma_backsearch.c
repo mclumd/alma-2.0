@@ -8,7 +8,6 @@ static void collect_variables(alma_term *term, binding_list *b, int quote_level,
     b->list[b->num_bindings-1].var = malloc(sizeof(alma_variable));
     copy_alma_var(term->variable, b->list[b->num_bindings-1].var);
     b->list[b->num_bindings-1].quote_level = quote_level;
-    b->list[b->num_bindings-1].quasi_quote_level = 0;
     b->list[b->num_bindings-1].term = malloc(sizeof(alma_term));
     copy_alma_term(term, b->list[b->num_bindings-1].term);
     b->list[b->num_bindings-1].term_parent = parent;
