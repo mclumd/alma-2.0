@@ -62,8 +62,8 @@ static int function_structure_match(alma_function *original, alma_function *quer
             || (original->terms[i].type == QUOTE && !quote_structure_match(original->terms[i].quote, query->terms[i].quote, kind, quote_level+1)))
           return 0;
       }
-      // Non-matching cases fail when original isn't fully-escaped variable and query isn't fully-escaped var (i.e. non-unifying cases)
-      // Doing pos_int_gen/neg_int_gen prevents the case of query as fully-escaped var here
+      // Non-matching cases fail when original isn't fully-escaping variable and query isn't fully-escaping var (i.e. non-unifying cases)
+      // Doing pos_int_gen/neg_int_gen prevents the case of query as fully-escaping var here
       else if (!(query->terms[i].type == QUASIQUOTE && query->terms[i].quasiquote->backtick_count == quote_level
                && kind != POS_INT_GEN && kind != NEG_INT_GEN) && original->terms[i].type != VARIABLE
                && !(original->terms[i].type == QUASIQUOTE && original->terms[i].quasiquote->backtick_count == quote_level-1)) {
@@ -108,7 +108,7 @@ static int structure_match(clause *original, clause *query, introspect_kind kind
 
 // Duplicate original into copy as long as the structure of original matches query
 // Subject to constaints:
-// - If this is a GEN kind of introspection, query cannot have an escaped variable where original does not
+// - If this is a GEN kind of introspection, query cannot have an escaping variable where original does not
 // - Original must have predicate and function structure conducive to unifying with query
 static int copy_and_quasiquote_clause(clause *original, clause *copy, clause *query, introspect_kind kind) {
   // Scan for sufficient matching structure of original vs query

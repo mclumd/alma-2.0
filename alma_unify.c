@@ -118,7 +118,7 @@ static void adjust_var_quasiquote_level(alma_term *var, int backticks) {
 }
 
 // Function used for substitution and cases like truth predicate
-// Only fully-escaped variables are adjusted to begin inside quotation level new_level
+// Only fully-escaping variables are adjusted to begin inside quotation level new_level
 // Thus deeper levels of quotation increment new_level as they recursively descend
 static void adjust_quasiquote_level(alma_term *term, int quote_level, int new_level) {
   if (term->type == VARIABLE && quote_level == 0 && new_level != 0) {
@@ -140,7 +140,7 @@ static void adjust_quasiquote_level(alma_term *term, int quote_level, int new_le
 static void adjust_context(binding *b, int quote_level, int backticks) {
   if (b->quote_level != quote_level) {
     if (quote_level == backticks) {
-      // Fully-escaped quasi-quotation or non-quoted (thus fully escaped) variable
+      // Fully-escaping quasi-quotation or non-quoted variable
       adjust_quasiquote_level(b->term, b->quote_level, quote_level);
     }
     else {
@@ -151,7 +151,7 @@ static void adjust_context(binding *b, int quote_level, int backticks) {
   }
 }
 
-// Only fully-escaped variables are adjusted to have an additional quasiquote backtick
+// Only fully-escaping variables are adjusted to have an additional quasiquote backtick
 // And, only if corresponding place in the query is something other than a non-escaping variable
 // Since term has yet to be placed in its outermost quote context, changes are made when effective quote_level is 1
 // Query doesn't have this issue
@@ -423,7 +423,7 @@ static int unify_quasiquote(alma_term *qqterm, alma_term *x, void *qq_parent, vo
     return 0;
   }
   // Rejecting for unification: terms with non-escaping variables that have their quantifiers outside the quasi-quoted variable
-  // A case specific to fully-escaped quasi-quote, given above filtering
+  // A case specific to fully-escaping quasi-quote, given above filtering
   else if (x->type != QUASIQUOTE && var_insuff_quoted(x, quote_level, quote_level)) {
     // Debug
     printf("Cannot unify %lld with term having insufficiently quoted variables\n", qq->variable->id);
@@ -435,7 +435,7 @@ static int unify_quasiquote(alma_term *qqterm, alma_term *x, void *qq_parent, vo
     if (qq->backtick_count < quote_level && non_escaping_var_failure(qq->variable, x->quasiquote->variable, qq_parent, x_parent, quote_level - qq->backtick_count, theta)) {
       return 0;
     }
-    // Fully-escaped quasi-quotation case; reject cases with other quasi-quote not fully escaping
+    // Fully-escaping quasi-quotation case; reject cases with other non-escaping quasi-quote
     else if (qq->backtick_count == quote_level && x->quasiquote->backtick_count < quote_level) {
         // Debug
         printf("Cannot unify %lld with fully-escaping %lld\n", x->quasiquote->variable->id, qq->variable->id);
