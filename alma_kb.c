@@ -188,7 +188,7 @@ static void new_beliefs_to_agents(kb *collection) {
             // Create copy of quoted belief, add to agent's appropriate KB
             clause *unquoted = malloc(sizeof(*unquoted));
             copy_clause_structure(lit->terms[1].quote->clause_quote, unquoted);
-            decrement_quote_level(unquoted, 1);
+            adjust_quote_level(unquoted, 1, 0);
             // Initialize equivalence links for pair
             unquoted->equiv_bel_up = c;
             c->equiv_bel_down = unquoted;
@@ -232,8 +232,6 @@ static void belief_sync_upward(kb *agent, int positive, kb *core) {
       strcpy(bel->pos_lits[0]->terms[0].function->name, agent->name);
       bel->pos_lits[0]->terms[0].function->term_count = 0;
       bel->pos_lits[0]->terms[0].function->terms = NULL;
-
-      increment_quote_level(bel->pos_lits[0]->terms[1].quote->clause_quote, 1); // Needed??
 
       // Make literal negated if necessary
       if (!positive) {
@@ -911,7 +909,7 @@ static void handle_true(kb *collection, clause *truth, kb_logger *logger) {
       copy_clause_structure(quote->clause_quote, u);
 
       // True formula has its outermost quotation withdrawn
-      decrement_quote_level(u, 1);
+      adjust_quote_level(u, 1, 0);
 
       // Adjust variable IDs for the new formula
       set_variable_ids(u, 1, 0, NULL, &collection->variable_id_count);

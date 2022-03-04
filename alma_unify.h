@@ -25,8 +25,6 @@ typedef struct binding {
   alma_variable *var;
   int quote_level;
   alma_term *term;
-  // Parent literal/term pointer to track overall source of term in binding
-  void *term_parent;
 } binding;
 
 typedef struct binding_list {
@@ -36,8 +34,7 @@ typedef struct binding_list {
 } binding_list;
 
 struct clause;
-void increment_quote_level(struct clause *c, int quote_level);
-void decrement_quote_level(struct clause *c, int quote_level);
+void adjust_quote_level(struct clause *c, int quote_level, int new_level);
 void increment_clause_quote_level_paired(struct clause *c, struct clause *query, int quote_lvl);
 
 binding* bindings_contain(binding_list *theta, alma_variable *var);
@@ -49,7 +46,7 @@ int term_unify(alma_term *x, alma_term *y, binding_list *theta);
 int pred_unify(alma_function *x, alma_function *y, binding_list *theta, int verbose);
 
 void init_bindings(binding_list *theta);
-void add_binding(binding_list *theta, alma_variable *var, alma_term *term, void *parent, int copy_term);
+void add_binding(binding_list *theta, alma_variable *var, int quote_level, alma_term *term, int copy_term);
 void cleanup_bindings(binding_list *theta);
 void copy_bindings(binding_list *dest, binding_list *src);
 void swap_bindings(binding_list *a, binding_list *b);

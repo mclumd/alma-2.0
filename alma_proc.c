@@ -268,12 +268,12 @@ static int introspect(alma_function *arg, binding_list *bindings, kb *alma, kb_l
         if ((kind == ACQUIRED || kind == POS_INT_PAST) && !acquired_time_bound) {
           alma_term *time_term = malloc(sizeof(*time_term));
           func_from_long(time_term, ith->acquired);
-          add_binding(bindings, arg->terms[1].variable, time_term, arg, 0);
+          add_binding(bindings, arg->terms[1].variable, 0, time_term, 0);
         }
         if (kind == POS_INT_PAST && !end_time_bound) {
           alma_term *time_term = malloc(sizeof(*time_term));
           func_from_long(time_term, flag_min(ith));
-          add_binding(bindings, arg->terms[2].variable, time_term, arg, 0);
+          add_binding(bindings, arg->terms[2].variable, 0, time_term, 0);
         }
 
         // Don't free clause unless gen case
@@ -693,7 +693,7 @@ static int quote_cons(alma_term *to_quote, alma_variable *result, binding_list *
   else if (res->term->type == QUOTE) {
     alma_term *quoted = malloc(sizeof(*quoted));
     copy_alma_term(res->term, quoted);
-    add_binding(bindings, result, quoted, to_quote, 0);
+    add_binding(bindings, result, 0, quoted, 0);
     return 1;
   }
   else if (res->term->type != FUNCTION) {
@@ -737,15 +737,15 @@ static int quote_cons(alma_term *to_quote, alma_variable *result, binding_list *
 
   // Replace non-escaping variable IDs
   set_variable_ids(formula, 0, 1, NULL, &alma->variable_id_count);
-  // Place inside quotation
-  increment_quote_level(formula, 0);
+  // Adjusts escaping variables inside quotation
+  //adjust_quote_level(formula, 0, 1);
 
   alma_term *quoted = malloc(sizeof(*quoted));
   quoted->type = QUOTE;
   quoted->quote = malloc(sizeof(*quoted->quote));
   quoted->quote->type = CLAUSE;
   quoted->quote->clause_quote = formula;
-  add_binding(bindings, result, quoted, to_quote, 0);
+  add_binding(bindings, result, 0, quoted, 0);
   return 1;
 }
 

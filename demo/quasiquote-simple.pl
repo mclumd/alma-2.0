@@ -5,6 +5,9 @@ smoke(site1).
 % Only variable
 heard(quote(on_fire(Y))).
 
+% Only quasiquoted variable
+heard(quote(on_fire(`Y))).
+
 % Only constant
 heard(quote(on_fire(site1))).
 
