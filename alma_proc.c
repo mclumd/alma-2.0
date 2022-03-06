@@ -56,7 +56,7 @@ static int quote_structure_match(alma_quote *original, alma_quote *query, intros
 static int function_structure_match(alma_function *original, alma_function *query, introspect_kind kind, int quote_level) {
   if (original->term_count == query->term_count && strcmp(original->name, query->name) == 0) {
     for (int i = 0; i < original->term_count; i++) {
-      // Pair of variables / quasi-quotes doesn't need examination
+      // Pair of variables doesn't need examination
       if (original->terms[i].type == query->terms[i].type) {
         if ((original->terms[i].type == FUNCTION && !function_structure_match(original->terms[i].function, query->terms[i].function, kind, quote_level))
             || (original->terms[i].type == QUOTE && !quote_structure_match(original->terms[i].quote, query->terms[i].quote, kind, quote_level+1)))
@@ -64,9 +64,9 @@ static int function_structure_match(alma_function *original, alma_function *quer
       }
       // Non-matching cases fail when original isn't fully-escaping variable and query isn't fully-escaping var (i.e. non-unifying cases)
       // Doing pos_int_gen/neg_int_gen prevents the case of query as fully-escaping var here
-      else if (!(query->terms[i].type == QUASIQUOTE && query->terms[i].quasiquote->backtick_count == quote_level
+      else if (!(query->terms[i].type == VARIABLE && query->terms[i].variable->quasiquotes == quote_level
                && kind != POS_INT_GEN && kind != NEG_INT_GEN) && original->terms[i].type != VARIABLE
-               && !(original->terms[i].type == QUASIQUOTE && original->terms[i].quasiquote->backtick_count == quote_level-1)) {
+               && original->terms[i].variable->quasiquotes != quote_level-1) {
         return 0;
       }
     }

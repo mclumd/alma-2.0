@@ -73,13 +73,8 @@ int release_matches(var_match_set *v, int retval) {
 // Only fully-escaping variables are adjusted to begin inside quotation level new_level
 // Thus deeper levels of quotation increment new_level as they recursively descend
 static void adjust_quasiquote_level(alma_term *term, int quote_level, int new_level) {
-  if (term->type == VARIABLE && quote_level == 0 && new_level != 0) {
-    // Assigns new amount of quasi-quotation to a plain variable
-    term->type = QUASIQUOTE;
-    alma_variable *temp = term->variable;
-    term->quasiquote = malloc(sizeof(*term->quasiquote));
-    term->quasiquote->backtick_count = new_level;
-    term->quasiquote->variable = temp;
+  if (term->type == VARIABLE && term->variable->quasiquotes == quote_level) {
+    term->variable->quasiquotes = new_level;
   }
   else if (term->type == FUNCTION) {
     for (int i = 0; i < term->function->term_count; i++)
@@ -87,19 +82,6 @@ static void adjust_quasiquote_level(alma_term *term, int quote_level, int new_le
   }
   else if (term->type == QUOTE && term->quote->type == CLAUSE) {
     adjust_quote_level(term->quote->clause_quote, quote_level+1, new_level+1);
-  }
-  else if (term->type == QUASIQUOTE && term->quasiquote->backtick_count == quote_level
-          && term->quasiquote->backtick_count != new_level) {
-    // Override amount of quasi-quotation marks with new_level
-    if (new_level != 0)
-      term->quasiquote->backtick_count = new_level;
-    // If all quasiquotation would be lost, convert to regular variable
-    else {
-      term->type = VARIABLE;
-      alma_quasiquote *temp = term->quasiquote;
-      term->variable = temp->variable;
-      free(temp);
-    }
   }
 }
 
@@ -128,38 +110,30 @@ static void adjust_context(binding *b, int quote_level, int backticks) {
   }
 }
 
-// Only fully-escaping variables are adjusted to have an additional quasiquote backtick
+// Only fully-escaping variables are adjusted to have an additional quasiquote
 // And, only if corresponding place in the query is something other than a non-escaping variable
 // Since term has yet to be placed in its outermost quote context, changes are made when effective quote_level is 1
 // Query doesn't have this issue
 static void increment_quasiquote_level_paired(alma_term *term, alma_term *query, int quote_level) {
   if (term->type == VARIABLE) {
-    if (quote_level == 1 && query != NULL && query->type != VARIABLE && !(query->type == QUASIQUOTE && query->quasiquote->backtick_count < quote_level)) {
-      term->type = QUASIQUOTE;
-      alma_variable *temp = term->variable;
-      term->quasiquote = malloc(sizeof(*term->quasiquote));
-      term->quasiquote->backtick_count = 1;
-      term->quasiquote->variable = temp;
+    if (term->variable->quasiquotes+1 == quote_level && query != NULL
+        && !(query->type == VARIABLE && query->variable->quasiquotes < quote_level)) {
+      term->variable->quasiquotes++;
     }
   }
   else if (term->type == FUNCTION) {
     for (int i = 0; i < term->function->term_count; i++) {
-      if (query != NULL && (query->type == VARIABLE || query->type == QUASIQUOTE))
+      if (query != NULL && query->type == VARIABLE)
         query = NULL;
       alma_term *query_term = (query == NULL) ? NULL : query->function->terms+i;
       increment_quasiquote_level_paired(term->function->terms+i, query_term, quote_level);
     }
   }
   else if (term->type == QUOTE && term->quote->type == CLAUSE) {
-    if (query != NULL && (query->type == VARIABLE || query->type == QUASIQUOTE))
+    if (query != NULL && query->type == VARIABLE)
       query = NULL;
     clause *query_clause = (query == NULL) ? NULL : query->quote->clause_quote;
     increment_clause_quote_level_paired(term->quote->clause_quote, query_clause, quote_level+1);
-  }
-  else if (term->type == QUASIQUOTE && term->quasiquote->backtick_count+1 == quote_level) {
-    if (query != NULL && query->type != VARIABLE && !(query->type == QUASIQUOTE && query->quasiquote->backtick_count < quote_level)) {
-      term->quasiquote->backtick_count++;
-    }
   }
 }
 
@@ -195,13 +169,13 @@ void subst_term(binding_list *theta, alma_term *term, int quote_level) {
     binding *contained = bindings_contain(theta, term->variable);
     // If a variable is bound, replace it with whatever it is bound to
     if (contained != NULL) {
+      int quasiquote_amount = term->variable->quasiquotes;
       free(term->variable->name);
       free(term->variable);
       copy_alma_term(contained->term, term);
 
-      // If a variable is being substituted for a binding, and that binding comes from quotation,
-      // then must decrease quasi-quotation to match unquoted substitution context
-      if (quote_level == 0 && contained->quote_level != quote_level)
+      // If fully-escaping, and quote levels aren't equal, must adjust when substitute into new context
+      if (quasiquote_amount == quote_level && contained->quote_level != quote_level)
         adjust_quasiquote_level(term, contained->quote_level, quote_level);
     }
   }
@@ -210,21 +184,6 @@ void subst_term(binding_list *theta, alma_term *term, int quote_level) {
   }
   else if (term->type == QUOTE && term->quote->type == CLAUSE) {
     subst_clause(theta, term->quote->clause_quote, quote_level+1);
-  }
-  else if (term->type == QUASIQUOTE) {
-    binding *contained = bindings_contain(theta, term->quasiquote->variable);
-    // If a variable is bound, replace it with whatever it is bound to
-    if (contained != NULL) {
-      int quasiquote_amount = term->quasiquote->backtick_count;
-      free(term->quasiquote->variable->name);
-      free(term->quasiquote->variable);
-      free(term->quasiquote);
-      copy_alma_term(contained->term, term);
-
-      // If quote levels aren't equal, must adjust when substitute into new quote context
-      if (quasiquote_amount == quote_level && contained->quote_level != quote_level)
-        adjust_quasiquote_level(term, contained->quote_level, quote_level);
-    }
   }
 }
 
@@ -249,6 +208,7 @@ static void cascade_substitution(binding_list *theta) {
 // Unification helper functions
 
 // Returns term variable is bound to if it's in the bindings, null otherwise
+// Ignores quasiquotes field of var, due to bindings not tracking this context
 binding* bindings_contain(binding_list *theta, alma_variable *var) {
   if (theta != NULL) {
     for (int i = 0; i < theta->num_bindings; i++) {
@@ -305,9 +265,6 @@ static int occurs_check(binding_list *theta, alma_variable *var, alma_term *x) {
   else if (x->type == QUOTE && x->quote->type == CLAUSE) {
     res = occurs_check_clause(theta, var, x->quote->clause_quote);
   }
-  else if (x->type == QUASIQUOTE) {
-    res = occurs_check_var(theta, var, x->quasiquote->variable);
-  }
 
   // Debug
   if (res)
@@ -315,45 +272,42 @@ static int occurs_check(binding_list *theta, alma_variable *var, alma_term *x) {
   return res;
 }
 
-static int vars_insuff_quoted(alma_term *term, int must_exceed_level, int quote_level);
+static int vars_suff_quoted(alma_term *term, int must_exceed_level, int quote_level);
 
-static int func_vars_insuff_quoted(alma_function *func, int must_exceed_level, int quote_level) {
+static int func_vars_suff_quoted(alma_function *func, int must_exceed_level, int quote_level) {
   for (int i = 0; i < func->term_count; i++)
-    if (vars_insuff_quoted(func->terms+i, must_exceed_level, quote_level))
-      return 1;
-  return 0;
+    if (!vars_suff_quoted(func->terms+i, must_exceed_level, quote_level))
+      return 0;
+  return 1;
 }
 
-static int clause_vars_insuff_quoted(clause *c, int must_exceed_level, int quote_level) {
+static int clause_vars_suff_quoted(clause *c, int must_exceed_level, int quote_level) {
   for (int i = 0; i < c->pos_count; i++)
-    if (func_vars_insuff_quoted(c->pos_lits[i], must_exceed_level, quote_level))
-      return 1;
+    if (!func_vars_suff_quoted(c->pos_lits[i], must_exceed_level, quote_level))
+      return 0;
   for (int i = 0; i < c->neg_count; i++)
-    if (func_vars_insuff_quoted(c->neg_lits[i], must_exceed_level, quote_level))
-      return 1;
+    if (!func_vars_suff_quoted(c->neg_lits[i], must_exceed_level, quote_level))
+      return 0;
   if (c->tag == FIF)
     for (int i = 0; i < c->fif->num_conclusions; i++)
-      if (clause_vars_insuff_quoted(c->fif->conclusions[i], must_exceed_level, quote_level))
-        return 1;
-  return 0;
+      if (!clause_vars_suff_quoted(c->fif->conclusions[i], must_exceed_level, quote_level))
+        return 0;
+  return 1;
 }
 
 // Non-escaping variables must occur in *effective* quotation level above must_exceed_level
 // Thus, checks for location of quantifiers inside
 // Non-escaping variables violating above condition have quantifiers outside of the arg term; in such cases return 1
-// Returning 1 indicates insufficient quotation of a variable, which then must not unify
-static int vars_insuff_quoted(alma_term *term, int must_exceed_level, int quote_level) {
+// Returning 1 indicates sufficient quotation of a variable; otherwise must not unify
+static int vars_suff_quoted(alma_term *term, int must_exceed_level, int quote_level) {
   if (term->type == VARIABLE) {
-    return quote_level <= must_exceed_level;
+    return term->variable->quasiquotes == quote_level || quote_level - term->variable->quasiquotes > must_exceed_level;
   }
   else if (term->type == FUNCTION) {
-    return func_vars_insuff_quoted(term->function, must_exceed_level, quote_level);
-  }
-  else if (term->type == QUASIQUOTE) {
-    return term->quasiquote->backtick_count != quote_level && quote_level - term->quasiquote->backtick_count <= must_exceed_level;
+    return func_vars_suff_quoted(term->function, must_exceed_level, quote_level);
   }
   else if (term->type == QUOTE && term->quote->type == CLAUSE) {
-    return clause_vars_insuff_quoted(term->quote->clause_quote, must_exceed_level, quote_level+1);
+    return clause_vars_suff_quoted(term->quote->clause_quote, must_exceed_level, quote_level+1);
   }
   return 0;
 }
@@ -363,76 +317,39 @@ static int vars_insuff_quoted(alma_term *term, int must_exceed_level, int quote_
 
 static int unify(alma_term *x, alma_term *y, int quote_level, binding_list *theta);
 
-static int unify_quasiquote(alma_term *qqterm, alma_term *x, int quote_level, binding_list *theta) {
-  alma_quasiquote *qq = qqterm->quasiquote;
-
-  if (x->type == QUASIQUOTE) {
-    // A quasi-quoted variable can unify with another only if of the same backticks
-    if (qq->backtick_count != x->quasiquote->backtick_count) {
-      // Debug
-      printf("Cannot unify %lld with different backtick count %lld\n", qq->variable->id, x->quasiquote->variable->id);
-      return 0;
-    }
-    // Check for inconsistent partially-escaping variable matching
-    if (qq->backtick_count < quote_level && !var_match_consistent(theta->quoted_var_matches, quote_level - qq->backtick_count, qq->variable, x->quasiquote->variable)) {
-     // Debug
-     printf("Var matching not consistent if matching %lld with %lld\n", qq->variable->id, x->quasiquote->variable->id);
-     return 0;
-    }
-  }
-  // X is not a quasi-quote, so qq can unify only if fully-escaping and x has inner variables sufficiently quoted
-  else if (!(qq->backtick_count == quote_level && !vars_insuff_quoted(x, quote_level, quote_level))) {
-    // Debug
-    printf("Cannot unify %lld with term having insufficiently quoted variables\n", qq->variable->id);
-    return 0;
-  }
-
-  // If qq is a bound variable, unify what it's bound to with x
-  binding *res = bindings_contain(theta, qq->variable);
-  if (res != NULL) {
-    adjust_context(res, quote_level, qq->backtick_count);
-    return unify(res->term, x, res->quote_level, theta);
-  }
-  // If x is a bound quasi-quote, unify qq with what x is bound to
-  else if (x->type == QUASIQUOTE && (res = bindings_contain(theta, x->quasiquote->variable)) != NULL) {
-    adjust_context(res, quote_level, x->quasiquote->backtick_count);
-    return unify(qqterm, res->term, res->quote_level, theta);
-  }
-  // Occurs check to avoid infinite regress in bindings
-  else if (occurs_check(theta, qq->variable, x)) {
-    return 0;
-  }
-
-  add_binding(theta, qq->variable, quote_level, x, 1);
-  return 1;
-}
-
-// X cannot be quasi-quotation due to ordering of cases in unify()
 static int unify_var(alma_term *varterm, alma_term *x, int quote_level, binding_list *theta) {
   alma_variable *var = varterm->variable;
 
   if (x->type == VARIABLE) {
-    // Check for inconsistent non-escaping variable matching
-    if (quote_level > 0 && !var_match_consistent(theta->quoted_var_matches, quote_level, var, x->variable)) {
+    // A variable can directly unify with another only if of the same quasiquotes
+    if (var->quasiquotes != x->variable->quasiquotes) {
       // Debug
-      printf("Var matching not consistent if matching %lld with %lld\n", var->id, x->variable->id);
+      printf("Cannot unify %lld with different quasiquote amount %lld\n", var->id, x->variable->id);
       return 0;
     }
+    // Check for inconsistent partially-escaping variable matching
+    if (var->quasiquotes < quote_level && !var_match_consistent(theta->quoted_var_matches, quote_level - var->quasiquotes, var, x->variable)) {
+     // Debug
+     printf("Var matching not consistent if matching %lld with %lld\n", var->id, x->variable->id);
+     return 0;
+    }
   }
-  // X is not a variable, so var can unify only if not within quotes
-  else if (quote_level > 0) {
+  // X is not a variable, so var can unify only if fully-escaping and x has inner variables sufficiently quoted
+  else if (var->quasiquotes != quote_level || !vars_suff_quoted(x, quote_level, quote_level)) {
+    // Debug
+    printf("Cannot unify %lld with term having insufficiently quoted variables\n", var->id);
     return 0;
   }
 
   // If var is a bound variable, unify what it's bound to with x
   binding *res = bindings_contain(theta, var);
   if (res != NULL) {
-    adjust_context(res, quote_level, 0);
+    adjust_context(res, quote_level, var->quasiquotes);
     return unify(res->term, x, res->quote_level, theta);
   }
   // If x is a bound variable, unify var with what x is bound to
   else if (x->type == VARIABLE && (res = bindings_contain(theta, x->variable)) != NULL) {
-    adjust_context(res, quote_level, 0);
+    adjust_context(res, quote_level, x->variable->quasiquotes);
     return unify(varterm, res->term, res->quote_level, theta);
   }
   // Occurs check to avoid infinite regress in bindings
@@ -494,22 +411,9 @@ static int unify_quote(alma_quote *x, alma_quote *y, int quote_level, binding_li
 // Unification function based on algorithm in AIMA book
 // Modified for quotation and quasi-quootation
 static int unify(alma_term *x, alma_term *y, int quote_level, binding_list *theta) {
-  // Cases where unification succeeds without changing theta:
-  //  1. If trying to unify variable with itself
-  //  2. If trying to unify quasi-quoted variable with itself
-  //  3. If trying to unify variable with quasi-quoted variable of same ID (i.e. also with itself)
-  if ((x->type == VARIABLE && y->type == VARIABLE && x->variable->id == y->variable->id)
-      || (x->type == QUASIQUOTE && y->type == QUASIQUOTE
-          && x->quasiquote->variable->id == y->quasiquote->variable->id)
-      || (x->type == VARIABLE && y->type == QUASIQUOTE && x->variable->id == y->quasiquote->variable->id)
-      || (x->type == QUASIQUOTE && y->type == VARIABLE && x->quasiquote->variable->id == y->variable->id)) {
+  // Unification succeeds without changing theta if trying to unify variable with itself
+  if (x->type == VARIABLE && y->type == VARIABLE && x->variable->id == y->variable->id) {
     return 1;
-  }
-  else if (x->type == QUASIQUOTE) {
-    return unify_quasiquote(x, y, quote_level, theta);
-  }
-  else if (y->type == QUASIQUOTE) {
-    return unify_quasiquote(y, x, quote_level, theta);
   }
   else if (x->type == VARIABLE) {
     return unify_var(x, y, quote_level, theta);
@@ -566,6 +470,7 @@ void add_binding(binding_list *theta, alma_variable *var, int quote_level, alma_
   theta->list = realloc(theta->list, sizeof(*theta->list) * theta->num_bindings);
   theta->list[theta->num_bindings-1].var = malloc(sizeof(*var));
   copy_alma_var(var, theta->list[theta->num_bindings-1].var);
+  theta->list[theta->num_bindings-1].var->quasiquotes = 0; // Binding ignores quasi-quote amounts
   theta->list[theta->num_bindings-1].quote_level = quote_level;
   if (copy_term) {
     theta->list[theta->num_bindings-1].term = malloc(sizeof(*term));

@@ -30,12 +30,11 @@ typedef struct alma_function {
   struct alma_term *terms;
 } alma_function;
 
-typedef enum term_type {VARIABLE, FUNCTION, QUOTE, QUASIQUOTE} term_type;
+typedef enum term_type {VARIABLE, FUNCTION, QUOTE} term_type;
 
 struct alma_variable;
 struct alma_function;
 struct alma_quote;
-struct alma_quasiquote;
 
 typedef struct alma_term {
   term_type type;
@@ -43,11 +42,11 @@ typedef struct alma_term {
     struct alma_variable *variable;
     alma_function *function;
     struct alma_quote *quote;
-    struct alma_quasiquote *quasiquote;
   };
 } alma_term;
 
 typedef struct alma_variable {
+  int quasiquotes;
   char *name;
   long long id; // Zero until the formula it's in converts to a clause
 } alma_variable;
@@ -62,11 +61,6 @@ typedef struct alma_quote {
     struct clause *clause_quote;
   };
 } alma_quote;
-
-typedef struct alma_quasiquote {
-  int backtick_count;
-  alma_variable *variable;
-} alma_quasiquote;
 
 struct kb_logger;
 int fol_from_source(char *source, int file_src, alma_node **formulas, struct kb_logger *logger);

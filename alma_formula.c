@@ -19,6 +19,7 @@ static int alma_term_init(alma_term *term, int quote_level, mpc_ast_t *ast) {
   if (strstr(ast->tag, "variable") != NULL) {
     term->type = VARIABLE;
     term->variable = malloc(sizeof(*term->variable));
+    term->variable->quasiquotes = 0;
     term->variable->name = malloc(strlen(ast->contents)+1);
     term->variable->id = 0;
     strcpy(term->variable->name, ast->contents);
@@ -34,25 +35,22 @@ static int alma_term_init(alma_term *term, int quote_level, mpc_ast_t *ast) {
   // Constructs ALMA quasi-quoted variable, counting backtick marks
   // If excessive quasi-quotation marks are given, generates and error, leading to formula rejection
   else if (strstr(ast->tag, "quasiquote") != NULL) {
-    int backtick_count = 0;
-    alma_variable *var = malloc(sizeof(*var));
+    term->type = VARIABLE;
+    term->variable = malloc(sizeof(*term->variable));
+    term->variable->quasiquotes = 0;
+
     while (strstr(ast->tag, "quasiquote") != NULL) {
-      backtick_count++;
+      term->variable->quasiquotes++;
       ast = ast->children[1];
     }
     if (strstr(ast->tag, "variable") != NULL) {
-      var->name = malloc(strlen(ast->contents)+1);
-      var->id = 0;
-      strcpy(var->name, ast->contents);
+      term->variable->name = malloc(strlen(ast->contents)+1);
+      term->variable->id = 0;
+      strcpy(term->variable->name, ast->contents);
     }
 
-    term->type = QUASIQUOTE;
-    term->quasiquote = malloc(sizeof(*term->quasiquote));
-    term->quasiquote->backtick_count = backtick_count;
-    term->quasiquote->variable = var;
-
     // Error return case if has excess quasi-quotation marks
-    return backtick_count <= quote_level;
+    return term->variable->quasiquotes <= quote_level;
   }
   // Quote
   else {
@@ -279,13 +277,8 @@ void free_term(alma_term *term) {
   else if (term->type == FUNCTION) {
     free_function(term->function);
   }
-  else if (term->type == QUOTE) {
-    free_quote(term->quote);
-  }
   else {
-    free(term->quasiquote->variable->name);
-    free(term->quasiquote->variable);
-    free(term->quasiquote);
+    free_quote(term->quote);
   }
 }
 
@@ -297,6 +290,7 @@ void free_alma_tree(alma_node *node) {
 
 // Space for copy must be allocated before call
 void copy_alma_var(alma_variable *original, alma_variable *copy) {
+  copy->quasiquotes = original->quasiquotes;
   copy->name = malloc(strlen(original->name)+1);
   strcpy(copy->name, original->name);
   copy->id = original->id;
@@ -372,12 +366,6 @@ void copy_alma_quote(alma_quote *original, alma_quote *copy) {
   }
 }
 
-static void copy_alma_quasiquote(alma_quasiquote *original, alma_quasiquote *copy) {
-  copy->backtick_count = original->backtick_count;
-  copy->variable = malloc(sizeof(*copy->variable));
-  copy_alma_var(original->variable, copy->variable);
-}
-
 // Space for copy must be allocated before call
 void copy_alma_term(alma_term *original, alma_term *copy) {
   copy->type = original->type;
@@ -389,13 +377,9 @@ void copy_alma_term(alma_term *original, alma_term *copy) {
     copy->function = malloc(sizeof(*copy->function));
     copy_alma_function(original->function, copy->function);
   }
-  else if (original->type == QUOTE) {
+  else {
     copy->quote = malloc(sizeof(*copy->quote));
     copy_alma_quote(original->quote, copy->quote);
-  }
-  else {
-    copy->quasiquote = malloc(sizeof(*copy->quasiquote));
-    copy_alma_quasiquote(original->quasiquote, copy->quasiquote);
   }
 }
 

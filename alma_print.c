@@ -23,26 +23,23 @@ static void alma_function_print(alma_function *func, kb_logger *logger);
 
 static void alma_term_print(alma_term *term, kb_logger *logger) {
   if (term->type == VARIABLE) {
-    tee_alt("%s%lld", logger, term->variable->name, term->variable->id);
+    char *backticks = malloc(term->variable->quasiquotes+1);
+    for (int i = 0; i < term->variable->quasiquotes; i++)
+      backticks[i] = '`';
+    backticks[term->variable->quasiquotes] = '\0';
+    tee_alt("%s%s%lld", logger, backticks, term->variable->name, term->variable->id);
+    free(backticks);
   }
   else if (term->type == FUNCTION) {
     alma_function_print(term->function, logger);
   }
-  else if (term->type == QUOTE) {
+  else {
     tee_alt("\"", logger);
     if (term->quote->type == SENTENCE)
       alma_fol_print(term->quote->sentence, logger);
     else
       clause_print(term->quote->clause_quote, logger);
     tee_alt("\"", logger);
-  }
-  else {
-    char *backticks = malloc(term->quasiquote->backtick_count+1);
-    for (int i = 0; i < term->quasiquote->backtick_count; i++)
-      backticks[i] = '`';
-    backticks[term->quasiquote->backtick_count] = '\0';
-    tee_alt("%s%s%lld", logger, backticks, term->quasiquote->variable->name, term->quasiquote->variable->id);
-    free(backticks);
   }
 }
 

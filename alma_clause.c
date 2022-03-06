@@ -92,8 +92,11 @@ static void set_var_name(record_tree *records, alma_variable *var, int id_from_n
 static void set_variable_ids_rec(record_tree *records, clause *c, int id_from_name, int non_escaping_only, int quote_level, long long *id_count);
 
 static void set_variable_names(record_tree *records, alma_term *term, int id_from_name, int non_escaping_only, int quote_level, long long *id_count) {
-  if (term->type == VARIABLE && (!non_escaping_only || quote_level > 0)) {
-    set_var_name(records, term->variable, id_from_name, quote_level, id_count);
+  if (term->type == VARIABLE && (!non_escaping_only || quote_level > term->variable->quasiquotes)) {
+    // Trace back up along parents based on amount of quasi-quotation
+    for (int i = 0; i < term->variable->quasiquotes; i++)
+      records = records->parent;
+    set_var_name(records, term->variable, id_from_name, quote_level - term->variable->quasiquotes, id_count);
   }
   else if (term->type == FUNCTION) {
     for (int i = 0; i < term->function->term_count; i++)
@@ -109,12 +112,6 @@ static void set_variable_names(record_tree *records, alma_term *term, int id_fro
 
       set_variable_ids_rec(records->next_level[records->next_level_count-1], term->quote->clause_quote, id_from_name, non_escaping_only, quote_level+1, id_count);
     }
-  }
-  else if (term->type == QUASIQUOTE && (!non_escaping_only || quote_level > term->quasiquote->backtick_count)) {
-    // Trace back up along parents based on amount of quasi-quotation
-    for (int i = 0; i < term->quasiquote->backtick_count; i++)
-      records = records->parent;
-    set_var_name(records, term->quasiquote->variable, id_from_name, quote_level - term->quasiquote->backtick_count, id_count);
   }
 }
 
@@ -137,7 +134,11 @@ static void set_clause_from_records(record_tree *records, clause *c, int quote_l
 // Use existing assembled record_tree to update ID values from old_id to new_id in the argument term
 static void set_term_from_records(record_tree *records, alma_term *term, int quote_level, long long *id_count) {
   if (term->type == VARIABLE) {
-    name_record *rec = records_retrieve(records, quote_level, term->variable->id);
+    // Trace back up along parents based on amount of quasi-quotation
+    for (int i = 0; i < term->variable->quasiquotes; i++)
+      records = records->parent;
+
+    name_record *rec = records_retrieve(records, quote_level - term->variable->quasiquotes, term->variable->id);
     if (rec != NULL)
       term->variable->id = rec->new_id;
   }
@@ -145,18 +146,10 @@ static void set_term_from_records(record_tree *records, alma_term *term, int quo
     for (int i = 0; i < term->function->term_count; i++)
       set_term_from_records(records, term->function->terms+i, quote_level, id_count);
   }
-  else if (term->type == QUOTE) {
+  else {
     if (term->quote->type == CLAUSE) {
       set_clause_from_records(records, term->quote->clause_quote, quote_level+1, id_count);
     }
-  }
-  else {
-    // Trace back up along parents based on amount of quasi-quotation
-    for (int i = 0; i < term->quasiquote->backtick_count; i++)
-      records = records->parent;
-    name_record *rec = records_retrieve(records, quote_level - term->quasiquote->backtick_count, term->quasiquote->variable->id);
-    if (rec != NULL)
-      term->variable->id = rec->new_id;
   }
 }
 
@@ -513,7 +506,7 @@ void nodes_to_clauses(alma_node *trees, int num_trees, tommy_array *clauses, lon
 
 // Returns 0 if variable pair respects x and y matchings in matches arg outside of quotes
 static int variables_differ(alma_variable *x, alma_variable *y, var_match_set *matches, int quote_level) {
-  return !var_match_consistent(matches, quote_level, x, y);
+  return x->quasiquotes != y->quasiquotes || !var_match_consistent(matches, quote_level, x, y);
 }
 
 static int functions_differ(alma_function *x, alma_function *y, var_match_set *matches, int quote_level);
@@ -562,10 +555,6 @@ static int quotes_differ(alma_quote *x, alma_quote *y, var_match_set *matches, i
   return 1;
 }
 
-static int quasiquotes_differ(alma_quasiquote *x, alma_quasiquote *y, var_match_set *matches, int quote_level) {
-  return x->backtick_count != y->backtick_count || !var_match_consistent(matches, quote_level - x->backtick_count, x->variable, y->variable);
-}
-
 // Returns 0 if functions are equal while respecting x and y matchings based on matches arg; otherwise returns 1
 // Further detail in clauses_differ
 static int functions_differ(alma_function *x, alma_function *y, var_match_set *matches, int quote_level) {
@@ -574,8 +563,7 @@ static int functions_differ(alma_function *x, alma_function *y, var_match_set *m
       if (x->terms[i].type != y->terms[i].type
           || (x->terms[i].type == VARIABLE && variables_differ(x->terms[i].variable, y->terms[i].variable, matches, quote_level))
           || (x->terms[i].type == FUNCTION && functions_differ(x->terms[i].function, y->terms[i].function, matches, quote_level))
-          || (x->terms[i].type == QUOTE && quotes_differ(x->terms[i].quote, y->terms[i].quote, matches, quote_level+1))
-          || (x->terms[i].type == QUASIQUOTE && quasiquotes_differ(x->terms[i].quasiquote, y->terms[i].quasiquote, matches, quote_level)))
+          || (x->terms[i].type == QUOTE && quotes_differ(x->terms[i].quote, y->terms[i].quote, matches, quote_level+1)))
         return 1;
 
     // All arguments compared as equal; return 0
