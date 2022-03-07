@@ -106,7 +106,8 @@ class dt_dataset():
             a[-1] = torch.cat([torch.ones((1, max_len - tlen, self.act_dim)) * -10., a[-1]], axis=1)
             r[-1] = np.concatenate([np.zeros((1, max_len - tlen, 1)), r[-1]], axis=1)
             d[-1] = np.concatenate([np.ones((1, max_len - tlen)) * 2, d[-1]], axis=1)
-            rtg[-1] = np.concatenate([np.zeros((1, max_len - tlen, 1)), rtg[-1]], axis=1) / self.scale
+            # Right now, rtg is one longer than then other vectors.  TODO:   Is this a bug?
+            rtg[-1] = np.concatenate([np.zeros((1, max_len - (tlen+1), 1)), rtg[-1]], axis=1) / self.scale
             timesteps[-1] = np.concatenate([np.zeros((1, max_len - tlen)), timesteps[-1]], axis=1)
             mask.append(np.concatenate([np.zeros((1, max_len - tlen)), np.ones((1, tlen))], axis=1))
 

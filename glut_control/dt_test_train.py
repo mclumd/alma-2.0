@@ -8,6 +8,7 @@ import torch
 from transformers import GPT2Tokenizer
 import dt_dataset
 import tqdm
+import dt_env
 
 # Find decision_transformer
 cwd = os.path.dirname(os.path.abspath(__file__))
@@ -17,13 +18,12 @@ from decision_transformer.evaluation.evaluate_episodes import evaluate_episode, 
 from decision_transformer.models.decision_transformer import DecisionTransformer
 from decision_transformer.training.seq_trainer import SequenceTrainer
 
+kb = "qlearning2.pl"
 
+aenv = dt_env.alma_env(kb, dt_env.reward_f1)
 
 
 def train(variant, dataset="offline_datasets/dection_trans_data_qlearning2.1.pkl"):
-    max_ep_len = 20
-    env_targets = [3600, 1800]  # evaluation conditioning targets
-    scale = 1000.  # normalization for rewards/returns
 
     tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
 
@@ -34,6 +34,11 @@ def train(variant, dataset="offline_datasets/dection_trans_data_qlearning2.1.pkl
                            'sep_token': '<SEP>'}
     num_added_toks = tokenizer.add_special_tokens(special_tokens_dict)
     #model.resize_token_embeddings(len(tokenizer))
+
+    max_ep_len = 20
+    env_targets = [3600, 1800]  # evaluation conditioning targets
+    scale = 1000.  # normalization for rewards/returns
+
 
     state_dim = 2048
     act_dim = 1024
@@ -102,47 +107,40 @@ def train(variant, dataset="offline_datasets/dection_trans_data_qlearning2.1.pkl
     torch.save(model,  "dt_final.pt")        
 
 
-    def eval_episodes(target_rew):
-        def fn(model):
-            returns, lengths = [], []
-            for _ in range(num_eval_episodes):
-                with torch.no_grad():
-                    if model_type == 'dt':
-                        ret, length = evaluate_episode_rtg(
-                            env,
-                            state_dim,
-                            act_dim,
-                            model,
-                            max_ep_len=max_ep_len,
-                            scale=scale,
-                            target_return=target_rew/scale,
-                            mode=mode,
-                            state_mean=state_mean,
-                            state_std=state_std,
-                            device=device,
-                        )
-                    else:
-                        ret, length = evaluate_episode(
-                            env,
-                            state_dim,
-                            act_dim,
-                            model,
-                            max_ep_len=max_ep_len,
-                            target_return=target_rew/scale,
-                            mode=mode,
-                            state_mean=state_mean,
-                            state_std=state_std,
-                            device=device,
-                        )
-                returns.append(ret)
-                lengths.append(length)
-            return {
-                f'target_{target_rew}_return_mean': np.mean(returns),
-                f'target_{target_rew}_return_std': np.std(returns),
-                f'target_{target_rew}_length_mean': np.mean(lengths),
-                f'target_{target_rew}_length_std': np.std(lengths),
-            }
-        return fn
+def eval_episodes(target_rew, num_eval_episodes):
+    state_dim = 2048
+    act_dim = 1024
+    max_length= 128
+    max_ep_length= 20
+    scale = 10
+
+    def fn(model):
+        returns, lengths = [], []
+        for _ in range(num_eval_episodes):
+            with torch.no_grad():
+                ret, length = evaluate_episode_rtg(
+                        aenv,
+                        state_dim,
+                        act_dim,
+                        model,
+                        max_ep_len=10,
+                        scale=scale,
+                        target_return=target_rew/scale,
+                        mode='dt',
+                        state_mean=np.array([0]), state_std=np.array([1]),
+                        #state_mean=state_mean,
+                        #state_std=state_std,
+                        device='cpu',
+                    )
+            returns.append(ret)
+            lengths.append(length)
+        return {
+            f'target_{target_rew}_return_mean': np.mean(returns),
+            f'target_{target_rew}_return_std': np.std(returns),
+            f'target_{target_rew}_length_mean': np.mean(lengths),
+            f'target_{target_rew}_length_std': np.std(lengths),
+        }
+    return fn
 
 
 def eval_episodes(target_rew, env, state_dim, act_dim,
@@ -189,18 +187,26 @@ def eval_episodes(target_rew, env, state_dim, act_dim,
         }
 
     return fn
-def test(checkpoint_file="dt_final.pt"):
+def test(checkpoint_file="dt_final.pt", dataset="offline_datasets/dection_trans_data_qlearning2.1.pkl"):
     model = torch.load(checkpoint_file)
     model.eval()
     env_targets = [1, 10, 100]
+    state_dim = 2048
+    act_dim = 1024
+    max_length = 128
+    max_ep_length = 20
+    scale = 10
     with open(dataset, "rb") as dfile:
         D = pickle.load(dfile)
-        data = dt_dataset.dt_dataset(D, state_dim=state_dim, act_dim=act_dim, max_ep_len=max_ep_len)
-    eval_fns = [eval_episodes(tar) for tar in env_targets]
+        data = dt_dataset.dt_dataset(D, state_dim=state_dim, act_dim=act_dim, max_ep_len=max_ep_length)
+    s, a, r, d, rtg, timesteps, mask = data.get_batch()
+    output = model.forward(s, a, r, rtg, timesteps)
+
+    eval_fns = [eval_episodes(tar, 20) for tar in env_targets]
 
     logs = {}
     for eval_fn in eval_fns:
-        outputs = eval_fn(self.model)
+        outputs = eval_fn(model)
         for k, v in outputs.items():
             logs[f'evaluation/{k}'] = v
     print(logs)
@@ -230,4 +236,5 @@ if __name__ == '__main__':
     
     args = parser.parse_args()
 
-    train(variant=vars(args))
+    #train(variant=vars(args))
+    test()
