@@ -210,7 +210,7 @@ def sar_format(trajectory, calc_reward = reward1 ):
     for i in range(total):
         kb = format_kb(tkb[i])
         act = format_act(tact[i])
-        reward = calc_reward(tkb[i+1]) if i < total-1 else total_reward
+        reward = calc_reward(tkb[i]) 
         result.append( (kb, act, reward - total_reward, reward) )
         total_reward = reward
     return result
@@ -235,3 +235,17 @@ def format_trajectory(trajectory):
     """
     sartg_list = trajectory_sar_add_returns(sar_format(trajectory))
     return [ x[0] + "="*10 + x[1] + ":"*10 + str(x[4]) for x in sartg_list]
+
+def format_trajectory_gpt3(trajectory):
+    """
+    A trajectory will be a dictionary with attributes 'total', 'kb',
+    'actions'.
+
+    This will return a list of (state,action,returns_to_go) triples 
+    formatted to be fed into a pre-trained model.
+
+    Want (R_1, s_1, a_1, R_2, s_2, a_2, ...)
+    """
+    sartg_list = trajectory_sar_add_returns(sar_format(trajectory))
+    traj_list =  [ "<" + str(x[4]) + "="*4 + x[0] + ":"*4 + x[1] + ">" for x in sartg_list]
+    return "[" + ("|"*8).join(traj_list) + "]"

@@ -143,7 +143,52 @@ def train(variant, dataset="offline_datasets/dection_trans_data_qlearning2.1.pkl
                 f'target_{target_rew}_length_std': np.std(lengths),
             }
         return fn
-    
+
+
+def eval_episodes(target_rew, env, state_dim, act_dim,
+                  max_ep_len, scale, mode, state_mean,
+                  state_std, device='cpu'):
+    def fn(model):
+        returns, lengths = [], []
+        for _ in range(num_eval_episodes):
+            with torch.no_grad():
+                if model_type == 'dt':
+                    ret, length = evaluate_episode_rtg(
+                        env,
+                        state_dim,
+                        act_dim,
+                        model,
+                        max_ep_len=max_ep_len,
+                        scale=scale,
+                        target_return=target_rew / scale,
+                        mode=mode,
+                        state_mean=state_mean,
+                        state_std=state_std,
+                        device=device,
+                    )
+                else:
+                    ret, length = evaluate_episode(
+                        env,
+                        state_dim,
+                        act_dim,
+                        model,
+                        max_ep_len=max_ep_len,
+                        target_return=target_rew / scale,
+                        mode=mode,
+                        state_mean=state_mean,
+                        state_std=state_std,
+                        device=device,
+                    )
+            returns.append(ret)
+            lengths.append(length)
+        return {
+            f'target_{target_rew}_return_mean': np.mean(returns),
+            f'target_{target_rew}_return_std': np.std(returns),
+            f'target_{target_rew}_length_mean': np.mean(lengths),
+            f'target_{target_rew}_length_std': np.std(lengths),
+        }
+
+    return fn
 def test(checkpoint_file="dt_final.pt"):
     model = torch.load(checkpoint_file)
     model.eval()
