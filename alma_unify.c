@@ -200,8 +200,6 @@ void subst_clause(binding_list *theta, clause *c, int quote_level) {
 static void cascade_substitution(binding_list *theta) {
   for (int i = 0; i < theta->num_bindings; i++)
     subst_term(theta, theta->list[i].term, theta->list[i].quote_level);
-
-  // AIMA code examples process functions for a second time; may need to do here as well
 }
 
 
@@ -220,14 +218,6 @@ binding* bindings_contain(binding_list *theta, alma_variable *var) {
 }
 
 static int occurs_check(binding_list *theta, alma_variable *var, alma_term *x);
-
-static int occurs_check_var(binding_list *theta, alma_variable *var, alma_variable *x) {
-  if (x->id == var->id)
-    return 1;
-  binding *res = bindings_contain(theta, x);
-  // If x is a bound variable, occurs-check what it's bound to
-  return res != NULL ? occurs_check(theta, var, res->term) : 0;
-}
 
 static int occurs_check_func(binding_list *theta, alma_variable *var, alma_function *func) {
   for (int i = 0; i < func->term_count; i++) {
@@ -254,7 +244,13 @@ static int occurs_check_clause(binding_list *theta, alma_variable *var, clause *
 static int occurs_check(binding_list *theta, alma_variable *var, alma_term *x) {
   int res = 0;
   if (x->type == VARIABLE) {
-    res = occurs_check_var(theta, var, x->variable);
+    if (var->id == x->variable->id)
+      res = 1;
+    else {
+      binding *b = bindings_contain(theta, x->variable);
+      // If x is a bound variable, occurs-check what it's bound to
+      res = (b == NULL) ? 0 : occurs_check(theta, var, b->term);
+    }
   }
   // In function case occurs-check each argument
   else if (x->type == FUNCTION) {
@@ -409,7 +405,7 @@ static int unify_quote(alma_quote *x, alma_quote *y, int quote_level, binding_li
 }
 
 // Unification function based on algorithm in AIMA book
-// Modified for quotation and quasi-quootation
+// Modified for quotation and quasi-quotation
 static int unify(alma_term *x, alma_term *y, int quote_level, binding_list *theta) {
   // Unification succeeds without changing theta if trying to unify variable with itself
   if (x->type == VARIABLE && y->type == VARIABLE && x->variable->id == y->variable->id) {
