@@ -10,20 +10,28 @@
 // TODO: Longer term, check for error codes of library functions used
 
 static int alma_function_init(alma_function *func, int quote_level, mpc_ast_t *ast);
-static int alma_quote_init(alma_quote *quote, int quote_level, mpc_ast_t *ast);
+static int alma_tree_init(alma_node *alma_tree, int quote_level, mpc_ast_t *ast);
 
 // Recursively constructs ALMA FOL term representation of AST argument into term pointer
 // Boolean return for success of initializing representation
 static int alma_term_init(alma_term *term, int quote_level, mpc_ast_t *ast) {
   // Variable
+  // Constructs ALMA variable, counting quasi-quote marks
+  // If excessive marks are given, returns an error, leading to formula rejection
   if (strstr(ast->tag, "variable") != NULL) {
     term->type = VARIABLE;
     term->variable = malloc(sizeof(*term->variable));
     term->variable->quasiquotes = 0;
+    while (ast->children_num != 0) {
+      term->variable->quasiquotes++;
+      ast = ast->children[1];
+    }
     term->variable->name = malloc(strlen(ast->contents)+1);
     term->variable->id = 0;
     strcpy(term->variable->name, ast->contents);
-    return 1;
+
+    // Error return case if has excess quasi-quotation marks
+    return term->variable->quasiquotes <= quote_level;
   }
   // Function
   else if (strstr(ast->tag, "constant") != NULL || strstr(ast->children[0]->tag, "funcname") != NULL) {
@@ -31,32 +39,14 @@ static int alma_term_init(alma_term *term, int quote_level, mpc_ast_t *ast) {
     term->function = malloc(sizeof(*term->function));
     return alma_function_init(term->function, quote_level, ast);
   }
-  // Quasi-quote
-  // Constructs ALMA quasi-quoted variable, counting backtick marks
-  // If excessive quasi-quotation marks are given, generates and error, leading to formula rejection
-  else if (strstr(ast->tag, "quasiquote") != NULL) {
-    term->type = VARIABLE;
-    term->variable = malloc(sizeof(*term->variable));
-    term->variable->quasiquotes = 0;
-
-    while (strstr(ast->tag, "quasiquote") != NULL) {
-      term->variable->quasiquotes++;
-      ast = ast->children[1];
-    }
-    if (strstr(ast->tag, "variable") != NULL) {
-      term->variable->name = malloc(strlen(ast->contents)+1);
-      term->variable->id = 0;
-      strcpy(term->variable->name, ast->contents);
-    }
-
-    // Error return case if has excess quasi-quotation marks
-    return term->variable->quasiquotes <= quote_level;
-  }
   // Quote
+  // Recursively constructs ALMA FOL function representation of AST argument into ALMA quote pointer
   else {
     term->type = QUOTE;
     term->quote = malloc(sizeof(*term->quote));
-    return alma_quote_init(term->quote, quote_level+1, ast);
+    term->quote->type = SENTENCE;
+    term->quote->sentence =  malloc(sizeof(*term->quote->sentence));
+    return alma_tree_init(term->quote->sentence, quote_level+1, ast->children[2]);
   }
 }
 
@@ -95,23 +85,6 @@ static int alma_function_init(alma_function *func, int quote_level, mpc_ast_t *a
   }
 }
 
-static int alma_tree_init(alma_node *alma_tree, int quote_level, mpc_ast_t *ast);
-
-// Recursively constructs ALMA FOL function representation of AST argument into ALMA quote pointer
-static int alma_quote_init(alma_quote *quote, int quote_level, mpc_ast_t *ast) {
-  quote->type = SENTENCE;
-  quote->sentence = malloc(sizeof(*quote->sentence));
-  return alma_tree_init(quote->sentence, quote_level, ast->children[2]);
-}
-
-// Constructs ALMA FOL representation of a predicate:
-// an ALMA node whose union is used to hold an ALMA function that describes the predicate
-static int alma_predicate_init(alma_node *node, int quote_level, mpc_ast_t *ast) {
-  node->type = PREDICATE;
-  node->predicate = malloc(sizeof(*node->predicate));
-  return alma_function_init(node->predicate, quote_level, ast);
-}
-
 
 // Contents should contain one of not/or/and/if
 // Fif/bif still match strstr
@@ -128,47 +101,44 @@ static alma_operator op_from_contents(char *contents) {
 
 // Given an MPC AST pointer, constructs an ALMA tree to a FOL representation of the AST
 static int alma_tree_init(alma_node *alma_tree, int quote_level, mpc_ast_t *ast) {
-  // Match tag containing literal as function
-  if (strstr(ast->tag, "literal") != NULL) {
-    return alma_predicate_init(alma_tree, quote_level, ast);
-  }
-  // Match nested pieces of formula/fformula/bformula/conjform/fformconc rules, recursively operate on
-  // Dependent on only these productions containing string formula within an almaformula tree
-  else if (strstr(ast->tag, "formula") != NULL || strstr(ast->tag, "conjform") != NULL
-          || strstr(ast->tag, "fformconc") != NULL) {
-    // Case for formula producing just a literal
-    if (strstr(ast->children[0]->tag, "literal") != NULL) {
-      return alma_predicate_init(alma_tree, quote_level, ast->children[0]);
+  // Match tag containing literal as function (formula derived straight to just literal)
+  if (strstr(ast->tag, "literal") != NULL || (ast->children_num > 0 && strstr(ast->children[0]->tag, "literal") != NULL)) {
+    if (ast->children_num > 0 && strstr(ast->children[0]->tag, "literal") != NULL) {
+      ast = ast->children[0];
     }
-    // Otherwise, formula derives to FOL contents
+
+    // Constructs ALMA FOL representation of a predicate with ALMA function instance
+    alma_tree->type = PREDICATE;
+    alma_tree->predicate = malloc(sizeof(*alma_tree->predicate));
+    return alma_function_init(alma_tree->predicate, quote_level, ast);
+  }
+  // Remaining cases of formula/fformula/bformula/conjform/fformconc rules all derive to FOL contents
+  else {
+    alma_tree->type = FOL;
+    alma_tree->fol = malloc(sizeof(*alma_tree->fol));
+    alma_tree->fol->op = op_from_contents(ast->children[0]->contents);
+    if (strstr(ast->tag, "fformula") != NULL)
+      alma_tree->fol->tag = FIF;
+    else if (strstr(ast->tag, "bformula") != NULL)
+      alma_tree->fol->tag = BIF;
+    else
+      alma_tree->fol->tag = NONE;
+
+    // Set arg1 based on children
+    alma_tree->fol->arg1 = malloc(sizeof(*alma_tree->fol->arg1));
+    int ret = alma_tree_init(alma_tree->fol->arg1, quote_level, ast->children[1]);
+
+    // Set arg2 if operation is binary or/and/if
+    if (alma_tree->fol->op != NOT) {
+      alma_tree->fol->arg2 = malloc(sizeof(*alma_tree->fol->arg2));
+      ret = alma_tree_init(alma_tree->fol->arg2, quote_level, ast->children[3]) && ret;
+    }
     else {
-      alma_tree->type = FOL;
-      alma_tree->fol = malloc(sizeof(*alma_tree->fol));
-      alma_tree->fol->op = op_from_contents(ast->children[0]->contents);
-      if (strstr(ast->tag, "fformula") != NULL)
-        alma_tree->fol->tag = FIF;
-      else if (strstr(ast->tag, "bformula") != NULL)
-        alma_tree->fol->tag = BIF;
-      else
-        alma_tree->fol->tag = NONE;
-
-      // Set arg1 based on children
-      alma_tree->fol->arg1 = malloc(sizeof(*alma_tree->fol->arg1));
-      int ret = alma_tree_init(alma_tree->fol->arg1, quote_level, ast->children[1]);
-
-      // Set arg2 if operation is binary or/and/if
-      if (alma_tree->fol->op != NOT) {
-        alma_tree->fol->arg2 = malloc(sizeof(*alma_tree->fol->arg2));
-        ret = alma_tree_init(alma_tree->fol->arg2, quote_level, ast->children[3]) && ret;
-      }
-      else {
-        alma_tree->fol->arg2 = NULL;
-      }
-
-      return ret;
+      alma_tree->fol->arg2 = NULL;
     }
+
+    return ret;
   }
-  return 0;
 }
 
 static void make_cnf(alma_node *node);

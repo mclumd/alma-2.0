@@ -54,12 +54,11 @@ bformula     : \"bif(\" <formula> ',' <formula> ')'
 conjform     : \"and(\" <conjform> ',' <conjform> ')' | \"not(\" <literal> ')' | <literal>
 literal      : <predname> '(' <listofterms> ')' | <predname>
 listofterms  : <term> (',' <term>)*
-term         : \"quote\" '(' <sentence> ')' | <funcname> '(' <listofterms> ')' | <quasiquote> | <variable> | <constant>
-quasiquote   : '`' <quasiquote> | '`' <variable>
+term         : \"quote\" '(' <sentence> ')' | <funcname> '(' <listofterms> ')' | <variable> | <constant>
 predname     : <prologconst>
 constant     : <prologconst>
 funcname     : <prologconst>
-variable     : /[A-Z_][a-zA-Z0-9_]*/
+variable     : '`' <variable>/ | [A-Z_][a-zA-Z0-9_]*/
 prologconst  : /[a-z0-9][a-zA-Z0-9_]*/
 ```
 ## Troubleshooting

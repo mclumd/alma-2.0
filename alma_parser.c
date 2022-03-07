@@ -14,7 +14,6 @@ mpc_parser_t* Conjform;
 mpc_parser_t* Literal;
 mpc_parser_t* Listofterms;
 mpc_parser_t* Term;
-mpc_parser_t* Quasiquote;
 mpc_parser_t* Predname;
 mpc_parser_t* Constant;
 mpc_parser_t* Funcname;
@@ -41,7 +40,6 @@ void parse_init(void) {
   Literal = mpc_new("literal");
   Listofterms = mpc_new("listofterms");
   Term = mpc_new("term");
-  Quasiquote = mpc_new("quasiquote");
   Predname = mpc_new("predname");
   Constant = mpc_new("constant");
   Funcname = mpc_new("funcname");
@@ -72,16 +70,15 @@ void parse_init(void) {
     " listofterms  : <term> (',' <term>)* ;                      "
     " term         : \"quote\" '(' <sentence> ')'                "
     "              | <funcname> '(' <listofterms> ')'            "
-    "              | <quasiquote> | <variable> | <constant> ;    "
-    " quasiquote   : '`' <quasiquote> | '`' <variable> ;         "
+    "              | <variable> | <constant> ;                   "
     " predname     : <prologconst> ;                             "
     " constant     : <prologconst> ;                             "
     " funcname     : <prologconst> ;                             "
-    " variable     : /[A-Z][a-zA-Z0-9_]*/ ;                      "
+    " variable     : '`' <variable> | /[A-Z][a-zA-Z0-9_]*/;      "
     " prologconst  : /[a-z0-9_][a-zA-Z0-9_]*/ ;                  ",
     Alma, Almacomment, Almaformula, Sentence, Formula, FFormula,
     FFormConc, BFormula, Conjform, Literal, Listofterms, Term,
-    Quasiquote, Predname, Constant, Funcname, Variable, Prologconst,
+    Predname, Constant, Funcname, Variable, Prologconst,
     NULL);
 }
 
@@ -126,8 +123,8 @@ void parse_cleanup(void) {
   pthread_mutex_unlock(&count_mutex);
 
   if (parser_ref_count == 0) {
-    mpc_cleanup(18, Alma, Almacomment, Almaformula, Sentence, Formula,
+    mpc_cleanup(17, Alma, Almacomment, Almaformula, Sentence, Formula,
       FFormula, FFormConc, BFormula, Conjform, Literal, Listofterms,
-      Term, Quasiquote, Predname, Constant, Funcname, Variable, Prologconst);
+      Term, Predname, Constant, Funcname, Variable, Prologconst);
   }
 }
