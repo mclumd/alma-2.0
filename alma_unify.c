@@ -69,44 +69,33 @@ int release_matches(var_match_set *v, int retval) {
 
 // Substitution functions
 
-// Function used for substitution and cases like truth predicate
-// Only fully-escaping variables are adjusted to begin inside quotation level new_level
-// Thus deeper levels of quotation increment new_level as they recursively descend
-static void adjust_quasiquote_level(alma_term *term, int quote_level, int new_level) {
+// Function used for substitution, recursive unification, and cases like truth predicate
+// Fully-escaping variables at quote_level+x are adjusted to quotation level new_level+x
+static void adjust_context(alma_term *term, int quote_level, int new_level) {
   if (term->type == VARIABLE && term->variable->quasiquotes == quote_level) {
     term->variable->quasiquotes = new_level;
   }
   else if (term->type == FUNCTION) {
     for (int i = 0; i < term->function->term_count; i++)
-      adjust_quasiquote_level(term->function->terms+i, quote_level, new_level);
+      adjust_context(term->function->terms+i, quote_level, new_level);
   }
   else if (term->type == QUOTE && term->quote->type == CLAUSE) {
-    adjust_quote_level(term->quote->clause_quote, quote_level+1, new_level+1);
+    adjust_clause_context(term->quote->clause_quote, quote_level+1, new_level+1);
   }
 }
 
-// Calls adjust_quasiquote_level on each term of a clause
-void adjust_quote_level(clause *c, int quote_level, int new_level) {
+// Calls adjust_context on each term of a clause
+void adjust_clause_context(clause *c, int quote_level, int new_level) {
   for (int i = 0; i < c->pos_count; i++)
     for (int j = 0; j < c->pos_lits[i]->term_count; j++)
-      adjust_quasiquote_level(c->pos_lits[i]->terms+j, quote_level, new_level);
+      adjust_context(c->pos_lits[i]->terms+j, quote_level, new_level);
   for (int i = 0; i < c->neg_count; i++)
     for (int j = 0; j < c->neg_lits[i]->term_count; j++)
-      adjust_quasiquote_level(c->neg_lits[i]->terms+j, quote_level, new_level);
+      adjust_context(c->neg_lits[i]->terms+j, quote_level, new_level);
   if (c->tag == FIF) {
     for (int i = 0; i < c->fif->num_conclusions; i++) {
-      adjust_quote_level(c->fif->conclusions[i], quote_level, new_level);
+      adjust_clause_context(c->fif->conclusions[i], quote_level, new_level);
     }
-  }
-}
-
-// Called in context of quote_level levels of quotation and a variable bound to b
-// If b is fully-escaping AND from a different quote level than argument,
-// then adjusts fully-escaping vars in term to quote_level backticks
-static void adjust_context(binding *b, int quote_level, int backticks) {
-  if (backticks == quote_level && b->quote_level != quote_level) {
-    adjust_quasiquote_level(b->term, b->quote_level, quote_level);
-    b->quote_level = quote_level;
   }
 }
 
@@ -137,7 +126,7 @@ static void increment_quasiquote_level_paired(alma_term *term, alma_term *query,
   }
 }
 
-// Calls adjust_quasiquote_level on each term of a clause
+// Calls increment_clause_quote_level_paired on each term of a clause
 void increment_clause_quote_level_paired(clause *c, clause *query, int quote_level) {
   for (int i = 0; i < c->pos_count; i++)
     for (int j = 0; j < c->pos_lits[i]->term_count; j++) {
@@ -163,7 +152,7 @@ static void subst_func(binding_list *theta, alma_function *func, int level) {
     subst_term(theta, func->terms+i, level);
 }
 
-// For a given term, replace its variables present in the binding list with their bindings
+// For a given term at quote_level, replace its variables present in the binding list with their bindings
 void subst_term(binding_list *theta, alma_term *term, int quote_level) {
   if (term->type == VARIABLE) {
     binding *contained = bindings_contain(theta, term->variable);
@@ -174,9 +163,9 @@ void subst_term(binding_list *theta, alma_term *term, int quote_level) {
       free(term->variable);
       copy_alma_term(contained->term, term);
 
-      // If fully-escaping, and quote levels aren't equal, must adjust when substitute into new context
+      // Adjust context based on different quote level if necessary
       if (quasiquote_amount == quote_level && contained->quote_level != quote_level)
-        adjust_quasiquote_level(term, contained->quote_level, quote_level);
+        adjust_context(term, contained->quote_level, quote_level);
     }
   }
   else if (term->type == FUNCTION) {
@@ -340,12 +329,20 @@ static int unify_var(alma_term *varterm, alma_term *x, int quote_level, binding_
   // If var is a bound variable, unify what it's bound to with x
   binding *res = bindings_contain(theta, var);
   if (res != NULL) {
-    adjust_context(res, quote_level, var->quasiquotes);
+    // If var is fully-escaping and from a different quote level, adjust res' context to quote level
+    if (var->quasiquotes == quote_level && res->quote_level != quote_level) {
+      adjust_context(res->term, res->quote_level, quote_level);
+      res->quote_level = quote_level;
+    }
     return unify(res->term, x, res->quote_level, theta);
   }
   // If x is a bound variable, unify var with what x is bound to
   else if (x->type == VARIABLE && (res = bindings_contain(theta, x->variable)) != NULL) {
-    adjust_context(res, quote_level, x->variable->quasiquotes);
+    // If x is fully-escaping and from a different quote level, adjust res' context to quote level
+    if (x->variable->quasiquotes == quote_level && res->quote_level != quote_level) {
+      adjust_context(res->term, res->quote_level, quote_level);
+      res->quote_level = quote_level;
+    }
     return unify(varterm, res->term, res->quote_level, theta);
   }
   // Occurs check to avoid infinite regress in bindings
