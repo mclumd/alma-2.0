@@ -738,7 +738,7 @@ static int quote_cons(alma_term *to_quote, alma_variable *result, binding_list *
   // Replace non-escaping variable IDs
   set_variable_ids(formula, 0, 1, NULL, &alma->variable_id_count);
   // Adjusts escaping variables inside quotation
-  //adjust_quote_level(formula, 0, 1);
+  //adjust_clause_context(formula, 0, 1);
 
   alma_term *quoted = malloc(sizeof(*quoted));
   quoted->type = QUOTE;

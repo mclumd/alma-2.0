@@ -34,7 +34,7 @@ typedef struct binding_list {
 } binding_list;
 
 struct clause;
-void adjust_quote_level(struct clause *c, int quote_level, int new_level);
+void adjust_clause_context(struct clause *c, int quote_level, int new_level);
 void increment_clause_quote_level_paired(struct clause *c, struct clause *query, int quote_lvl);
 
 binding* bindings_contain(binding_list *theta, alma_variable *var);
