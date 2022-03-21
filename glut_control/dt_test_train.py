@@ -145,7 +145,7 @@ def eval_episodes(target_rew, num_eval_episodes):
 
 def eval_episodes(target_rew, env, state_dim, act_dim,
                   max_ep_len, scale, mode, state_mean,
-                  state_std, device='cpu'):
+                  state_std, device='cuda'):
     def fn(model):
         returns, lengths = [], []
         for _ in range(num_eval_episodes):
@@ -200,7 +200,7 @@ def test(checkpoint_file="dt_final.pt", dataset="offline_datasets/dection_trans_
         D = pickle.load(dfile)
         data = dt_dataset.dt_dataset(D, state_dim=state_dim, act_dim=act_dim, max_ep_len=max_ep_length)
     s, a, r, d, rtg, timesteps, mask = data.get_batch()
-    output = model.forward(s, a, r, rtg, timesteps)
+    state_preds, action_preds, return_preds = model.forward(s, a, r, rtg, timesteps)
 
     eval_fns = [eval_episodes(tar, 20) for tar in env_targets]
 
