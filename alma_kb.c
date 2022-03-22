@@ -1475,6 +1475,14 @@ static void remove_clause(kb *collection, clause *c) {
     for (int j = 0; j < c->parents[i].count; j++)
       remove_child(c->parents[i].clauses[j], c);
 
+  // Remove clause from equivalence links
+  if (c->equiv_bel_up != NULL) {
+    c->equiv_bel_up->equiv_bel_down = NULL;
+  }
+  if (c->equiv_bel_down != NULL) {
+    c->equiv_bel_down->equiv_bel_up = NULL;
+  }
+
   free_clause(c);
 }
 
