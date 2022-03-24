@@ -920,7 +920,6 @@ static void handle_true(kb *collection, clause *truth, kb_logger *logger) {
       clause *curr = tommy_array_get(&unquoted, i);
       init_single_parent(curr, truth);
 
-      // Inserted same timestep
       tommy_array_insert(&collection->timestep_delay_clauses, curr);
     }
     tommy_array_done(&unquoted);
