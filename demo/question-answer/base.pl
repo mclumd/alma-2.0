@@ -97,7 +97,7 @@ fif(and(query_truth(quote(rel(`Pred, `Arg_a, `Arg_b, `Arg_c)), Asktime),
     and(not(rel(Pred, Arg_a, Arg_b, Arg_c)),
     acquired(quote(not(rel(`Pred, `Arg_a, `Arg_b, `Arg_c))), Learnedtime)))),
 answer(quote(query_truth(quote(rel(``Pred, ``Arg_a, ``Arg_b, ``Arg_c)), `Asktime)), no, reason(quote(acquired(quote(not(rel(``Pred, ``Arg_a, ``Arg_b, ``Arg_c))), `Learnedtime))))).
-% Negation flipped from the above six: queries about negative formula when positive is believed
+% Negation flipped from the above three: queries about negative formula when positive is believed
 % Unary case
 fif(and(query_truth(quote(not(rel(`Pred, `Arg))), Asktime),
     and(now(Asktime),
@@ -174,7 +174,7 @@ fif(and(query_belief(X, Asktime),
     neg_int_past(X, Learnedtime, Endtime)))),
 answer(quote(query_belief(`X, `Asktime)), no, reason(quote(never_believed_formula(`X))))).
 
-% Truth query: no
+% Truth query: unsure
 fif(and(query_truth(X, Asktime),
     and(now(Asktime),
     and(neg_int(X),
