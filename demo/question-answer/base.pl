@@ -172,17 +172,18 @@ fif(and(query_belief(X, Asktime),
     and(now(Asktime),
     and(neg_int(X),
     neg_int_past(X, Learnedtime, Endtime)))),
-answer(quote(query_belief(`X, `Asktime)), no, reason(quote(never_believed_formula(`X))))).
+answer(quote(query_belief(`X, `Asktime)), no, reason(quote(never_believed(`X))))).
 
 % Truth query: unsure
 fif(and(query_truth(X, Asktime),
     and(now(Asktime),
     and(neg_int(X),
     neg_int_past(X, Learnedtime, Endtime)))),
-answer(quote(query_truth(`X, `Asktime)), unsure, reason(quote(never_believed_formula(`X))))).
+answer(quote(query_truth(`X, `Asktime)), unsure, reason(quote(never_believed(`X))))).
 
 
 % Meta-formula managing query answers: if an "unsure" answer exists with a "no" answer, update the former to reflect the stronger "no"
-fif(and(answer(Query, unsure, Reason_a),
-    answer(Query, no, Reason_b)),
-update(quote(answer(`Query, unsure, `Reason_a)), quote(answer(`Query, no, `Reason_a)))).
+fif(and(answer(Query, no, Reason_a),
+    and(acquired(quote(answer(`Query, no, `Reason_a)), T),
+    acquired(quote(answer(`Query, unsure, `Reason_b)), T))),
+update(quote(answer(`Query, unsure, `Reason_b)), quote(answer(`Query, no, `Reason_b)))).

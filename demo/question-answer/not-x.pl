@@ -1,7 +1,7 @@
 not(rel(foo, x)).
 
-fif(now(0), query_truth(quote(rel(foo, x)), 1)).
-fif(now(0), query_belief(quote(rel(foo, x)), 1)).
+query_truth(quote(rel(foo, x)), 0).
+query_belief(quote(rel(foo, x)), 0).
 
 fif(now(3), rel(foo, x)).
 
