@@ -7,6 +7,7 @@ import pprint
 import json
 import pickle
 import argparse
+import time
 
 def timesteps(almalog):
   messages = []
@@ -131,6 +132,7 @@ def main():
 
     with open(os.devnull, 'w') as devnull:
       subprocess.call(["./alma.x", "-f" , args['base'], "-f", args['topic'], "-f", os.path.join(pl_dir, prefix + ".pl"), "-r"], stdout = devnull, stderr = devnull)
+      time.sleep(1)
 
     # Parse timesteps structure from ALMA log
     log = max(os.listdir("."), key=os.path.getctime)
@@ -142,7 +144,7 @@ def main():
       expected_believed = [-1] * len(expecteds)
       expected_distrusted = [-1] * len(expecteds)
 
-      for time, (timestep, messages) in enumerate(log_info):
+      for t, (timestep, messages) in enumerate(log_info):
         for index, (sentence, parents, child) in timestep.items():
           if parents is not None:
             for parent_set in parents:
@@ -150,10 +152,10 @@ def main():
                 if parent < base_axiom_count:
                   axiom_parent_count[parent] = axiom_parent_count[parent]+1 
           if sentence in expecteds:
-            expected_believed[expecteds.index(sentence)] = time
+            expected_believed[expecteds.index(sentence)] = t
           distrust = distrust_re.search(sentence)
           if distrust and distrust.group(1) in expecteds:
-            expected_distrusted[expecteds.index(distrust.group(1))] = time
+            expected_distrusted[expecteds.index(distrust.group(1))] = t
 
       present = 0
       for index, expected in enumerate(expecteds):

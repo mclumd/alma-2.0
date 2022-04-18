@@ -18,29 +18,12 @@ fif(and(contradicting(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
 and(update(quote(fif(rel(`Kind, Obj), rel(`Pred, Obj))), quote(fif(and(rel(`Kind, Obj), neg_int(quote(abnormal(`Obj, ``Kind, quote(not(rel(```Pred, ``Obj))))))), rel(`Pred, Obj)))),
 fif(and(rel(Kind, Ab_Obj), not(rel(Pred, Ab_Obj))), abnormal(Ab_Obj, Kind, quote(not(rel(`Pred, `Ab_Obj))))))).
 
-% Contradiction response for when both contradictands are inferred, ancestors have is-a relationship, and more specific case is negative
+% Contradiction response for when both contradictands are inferred, ancestors have is-a relationship, and more specific case is positive
 fif(and(contradicting(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
     and(rel(Kind, Obj),
     and(parent(quote(fif(rel(`Kind, Obj), not(rel(`Pred, Obj)))), quote(not(rel(`Pred, `Obj))), T),
     and(rel(is_a, Kind_spec, Kind),
     parent(quote(rel(`Kind_spec, `Obj)), quote(rel(`Pred, `Obj)), T))))),
-and(update(quote(fif(rel(`Kind, Obj), not(rel(`Pred, Obj)))), quote(fif(and(rel(`Kind, Obj), neg_int(quote(abnormal(`Obj, ``Kind, quote(rel(```Pred, ``Obj)))))), not(rel(`Pred, Obj))))),
-fif(and(rel(Kind, Ab_Obj), rel(Pred, Ab_Obj)), abnormal(Ab_Obj, Kind, quote(rel(`Pred, `Ab_Obj)))))).
-
-
-% Contradiction response for when negative contradictand was observed, and positive isn't derived from default
-fif(and(contradicting(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
-    and(obs(quote(not(rel(`Pred, `Obj)))),
-    and(rel(Kind, Obj),
-    parent(quote(fif(rel(`Kind, Obj), rel(`Pred, Obj))), quote(rel(`Pred, `Obj)), T)))),
-and(update(quote(fif(rel(`Kind, Obj), rel(`Pred, Obj))), quote(fif(and(rel(`Kind, Obj), neg_int(quote(abnormal(`Obj, ``Kind, quote(not(rel(```Pred, ``Obj))))))), rel(`Pred, Obj)))),
-fif(and(rel(Kind, Ab_Obj), not(rel(Pred, Ab_Obj))), abnormal(Ab_Obj, Kind, quote(not(rel(`Pred, `Ab_Obj))))))).
-
-% Contradiction response for when positive contradictand was observed, and negative isn't derived from default
-fif(and(contradicting(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
-    and(obs(quote(rel(`Pred, `Obj))),
-    and(rel(Kind, Obj),
-    parent(quote(fif(rel(`Kind, Obj), not(rel(`Pred, Obj)))), quote(not(rel(`Pred, `Obj))), T)))),
 and(update(quote(fif(rel(`Kind, Obj), not(rel(`Pred, Obj)))), quote(fif(and(rel(`Kind, Obj), neg_int(quote(abnormal(`Obj, ``Kind, quote(rel(```Pred, ``Obj)))))), not(rel(`Pred, Obj))))),
 fif(and(rel(Kind, Ab_Obj), rel(Pred, Ab_Obj)), abnormal(Ab_Obj, Kind, quote(rel(`Pred, `Ab_Obj)))))).
 
@@ -64,6 +47,23 @@ fif(and(contradicting(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
     and(parent(quote(rel(`Kind_gen, `Obj)), quote(not(rel(`Pred, `Obj))), T),
     non_ancestor(quote(rel(is_a, `Kind_spec, `Kind)), quote(rel(`Kind, `Obj)), T))))))),
 reinstate(quote(rel(`Pred, `Obj)), T)).
+
+
+% Contradiction response for when negative contradictand was observed, and positive isn't derived from default
+fif(and(contradicting(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
+    and(obs(quote(not(rel(`Pred, `Obj)))),
+    and(rel(Kind, Obj),
+    parent(quote(fif(rel(`Kind, Obj), rel(`Pred, Obj))), quote(rel(`Pred, `Obj)), T)))),
+and(update(quote(fif(rel(`Kind, Obj), rel(`Pred, Obj))), quote(fif(and(rel(`Kind, Obj), neg_int(quote(abnormal(`Obj, ``Kind, quote(not(rel(```Pred, ``Obj))))))), rel(`Pred, Obj)))),
+fif(and(rel(Kind, Ab_Obj), not(rel(Pred, Ab_Obj))), abnormal(Ab_Obj, Kind, quote(not(rel(`Pred, `Ab_Obj))))))).
+
+% Contradiction response for when positive contradictand was observed, and negative isn't derived from default
+fif(and(contradicting(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
+    and(obs(quote(rel(`Pred, `Obj))),
+    and(rel(Kind, Obj),
+    parent(quote(fif(rel(`Kind, Obj), not(rel(`Pred, Obj)))), quote(not(rel(`Pred, `Obj))), T)))),
+and(update(quote(fif(rel(`Kind, Obj), not(rel(`Pred, Obj)))), quote(fif(and(rel(`Kind, Obj), neg_int(quote(abnormal(`Obj, ``Kind, quote(rel(```Pred, ``Obj)))))), not(rel(`Pred, Obj))))),
+fif(and(rel(Kind, Ab_Obj), rel(Pred, Ab_Obj)), abnormal(Ab_Obj, Kind, quote(rel(`Pred, `Ab_Obj)))))).
 
 
 % Contradiction response for when either contradictand was directly observed
@@ -106,7 +106,6 @@ fif(and(rel(Kind_a, Ab_Obj), and(rel(Prop_a, Ab_Obj), not(rel(Pred, Ab_Obj)))), 
 
 
 % Formulas for resolving contradictions where one contradictand is descended from a default, and the other is not
-
 % ~P from defaults and P not from defaults; reinstate P
 fif(and(contradicting(quote(rel(`Pred, `Obj)), quote(not(rel(`Pred, `Obj))), T),
     and(parents_defaults(quote(not(rel(`Pred, `Obj))), T),

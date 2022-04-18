@@ -1,2 +1,2 @@
-obs(quote(rel(gas_tank_car, ford))).
-obs(quote(not(rel(fueled, ford)))).
+rel(gas_tank_car, ford).
+not(rel(fueled, ford)).

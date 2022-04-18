@@ -1,7 +1,8 @@
-obs(quote(rel(gas_tank_car, ford))).
-obs(quote(not(rel(fueled, ford)))).
+rel(electric_car, prius).
+rel(gas_tank_car, prius).
+rel(charged, prius).
+not(rel(fueled, prius)).
 
-fif(now(5), obs(quote(rel(electric_car, prius)))).
-fif(now(5), obs(quote(rel(gas_tank_car, prius)))).
-fif(now(5), obs(quote(rel(charged, prius)))).
-fif(now(5), obs(quote(not(rel(fueled, prius))))).
+fif(now(3), rel(gas_tank_car, ford)).
+fif(now(3), not(rel(fueled, ford))).
+
