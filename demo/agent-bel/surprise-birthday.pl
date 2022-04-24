@@ -73,7 +73,6 @@ not(bel(Agent, X)))
 )).
 
 % Contradiction response for heard and ~heard: ~heard is a default conclusion, so positive is reinstated
-% TODO: Check it really counts the derivation of being a kind of default sort (that is, had neg_int(near())?)
 common_knowledge(quote(
 fif(contradicting(quote(heard(`Agent, `Belief, `Speaker)), quote(not(heard(`Agent, `Belief, `Speaker))), T),
 reinstate(quote(heard(`Agent, `Belief, `Speaker)), T))
@@ -87,7 +86,7 @@ fif(decision(Giver, give(Gift, Agent)),
 expectation(receive(Agent, Gift)))
 )).
 
-% Common knowledge that when there's expactation for an agent to receive a gift they've heard about, they won't be surprised in the future to receive it
+% Common knowledge that when there's expectation for an agent to receive a gift they've heard about, they won't be surprised in the future to receive it
 common_knowledge(quote(
 fif(and(expectation(receive(Recipient, Gift)),
     heard(Recipient, quote(decision(`Giver, give(`Gift, `Agent))), Speaker)),

@@ -6,7 +6,7 @@ fif(and(rel(is_a, A, B), rel(A, X)), rel(B, X)).
 fif(obs(X), true(X)).
 
 % The reason for an object's abnormality is true
-fif(abnormal(Obj, Kind, Reason), true(Reason)).
+fif(abnormal(Obj, Kind, Failure), true(Failure)).
 
 % Contradiction response for when both contradictands are inferred, ancestors have is-a relationship, and more specific case is negative
 % Abnormality case is thus when object *does not* have Pred apply to it; and likewise distrust abnormality when the predicate *does* apply

@@ -1,2 +1,2 @@
-rel(cephalopod, steve).
-fif(now(4), rel(naked_nautilus, barry)).
+rel(naked_nautilus, barry).
+fif(now(4), rel(cephalopod, steve)).
