@@ -1,7 +1,7 @@
 % Current agent knows it's ALMA and has that name
 agentname(alma).
 
-% Default assumption for another agent: if this agent isn't near the speaker of an utterance (and aren't the speaker), by default conclude this other agent didn't hear
+% Default assumption for another agent: if this agent isn't near the speaker of an utterance (and isn't the speaker), by default conclude this other agent didn't hear
 fif(and(tell(Speaker, Utterance, Confidant),
     and(agent(Agent),
     and(neg_int(quote(agentname(`Agent))),
@@ -58,18 +58,18 @@ true(Utterance))
 % Also a piece of common knowledge
 common_knowledge(quote(
 fif(and(agentname(Self),
-    and(heard(Agent, X, Speaker),
+    and(heard(Agent, Utterance, Speaker),
     not_equal(quote(agent(`Agent)), quote(agent(`Self))))),
-bel(Agent, quote(heard(`Agent, `X, `Speaker))))
+bel(Agent, quote(heard(`Agent, `Utterance, `Speaker))))
 )).
 
 % If an agent didn't hear an utterance, expect them to lack that belief in their KB
 % Belief formula to be concluded only for agent that's not self
 common_knowledge(quote(
 fif(and(agentname(Self),
-    and(not(heard(Agent, X, Speaker)),
+    and(not(heard(Agent, Utterance, Speaker)),
     not_equal(quote(agent(`Agent)), quote(agent(`Self))))),
-not(bel(Agent, X)))
+not(bel(Agent, Utterance)))
 )).
 
 % Contradiction response for heard and ~heard: ~heard is a default conclusion, so positive is reinstated
@@ -77,7 +77,6 @@ common_knowledge(quote(
 fif(contradicting(quote(heard(`Agent, `Belief, `Speaker)), quote(not(heard(`Agent, `Belief, `Speaker))), T),
 reinstate(quote(heard(`Agent, `Belief, `Speaker)), T))
 )).
-
 
 
 % Common knowledge that when decision to give to Agent is made, expectation is for them to receive it

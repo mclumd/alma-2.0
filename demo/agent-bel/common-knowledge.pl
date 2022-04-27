@@ -47,11 +47,11 @@ bel(Agent_a, quote(pair_knowledge(`Agent_a, `Agent_b, `X))))
 % Agents believe the formula that's pair knowledge they have a part in
 common_knowledge(quote(
 fif(and(agentname(Self),
-    pair_knowledge(Self, Agent_b, X)),
+    pair_knowledge(Self, Other, X)),
 true(X))
 )).
 common_knowledge(quote(
 fif(and(agentname(Self),
-    pair_knowledge(Agent_a, Self, X)),
+    pair_knowledge(Other, Self, X)),
 true(X))
 )).
