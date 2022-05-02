@@ -141,7 +141,20 @@ void alma_init(alma *reasoner, char **files, int file_count, char *agent, char *
     int agentlen = agent != NULL ? strlen(agent) : 0;
     int triallen = trialnum != NULL ? strlen(trialnum) : 0;
     int log_dir_len = log_dir != NULL ? strlen(log_dir) : 0;
-    char *logname = malloc(log_dir_len + 1 + 4 + agentlen + 1 + triallen + 1 + timelen + 9);
+    char *lastfile = NULL;
+    int filename_len = 0;
+    int after_last_slash = 0;
+    if (files != NULL && file_count > 0) {
+      lastfile = files[file_count-1];
+      filename_len = strlen(lastfile);
+      for (int i = 0; i < filename_len; i++) {
+        if (lastfile[i] == '/')
+          after_last_slash = i+1;
+      }
+      if (strncmp(lastfile + filename_len-3, ".pl", 3) == 0)
+        filename_len -= 3;
+    }
+    char *logname = malloc(log_dir_len + 1 + 4 + agentlen + 1 + triallen + 1 + 12 + 9 + filename_len+1-after_last_slash);
     if (log_dir != NULL) {
       strcpy(logname, log_dir);
       logname[log_dir_len] = '/';
@@ -155,8 +168,11 @@ void alma_init(alma *reasoner, char **files, int file_count, char *agent, char *
     if (trialnum != NULL)
       strcpy(logname+log_dir_len+4+agentlen+1,trialnum);
     logname[log_dir_len+4+agentlen+1+triallen] = '-';
-    strncpy(logname+log_dir_len+6+agentlen+triallen, time, 24);
-    strcpy(logname+log_dir_len+6+agentlen+triallen+timelen, "-log.txt");
+    strncpy(logname+log_dir_len+6+agentlen+triallen, time+4, 12);
+    logname[log_dir_len+6+agentlen+triallen+12] = '-';
+    if (lastfile != NULL)
+      strncpy(logname+log_dir_len+7+agentlen+triallen+12, lastfile+after_last_slash, filename_len-after_last_slash);
+    strcpy(logname+log_dir_len+7+agentlen+triallen+12+filename_len-after_last_slash, "-log.txt");
     reasoner->almalog = fopen(logname, "w");
     free(logname);
   } else {
