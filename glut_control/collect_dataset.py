@@ -132,7 +132,6 @@ def collect(reasoning_steps, num_observations, num_trajectories, outfile, subjec
         res_tasks = exp[0]
         res_lits = res_task_lits(exp[2])
         res_task_input = [x[:2] for x in res_tasks]
-        res_task_input = [x[:2] for x in res_tasks]
         if text_kb:  # random walk
             priorities = np.random.uniform(size = len(res_task_input))
             kb_over_time = []

@@ -9,6 +9,8 @@ from transformers import GPT2Tokenizer
 import dt_dataset
 import tqdm
 import dt_env
+import alma_dt
+import alma, alma_utils
 
 # Find decision_transformer
 cwd = os.path.dirname(os.path.abspath(__file__))
@@ -187,29 +189,29 @@ def eval_episodes(target_rew, env, state_dim, act_dim,
         }
 
     return fn
-def test(checkpoint_file="dt_final.pt", dataset="offline_datasets/dection_trans_data_qlearning2.1.pkl"):
-    model = torch.load(checkpoint_file)
+def test(model_checkpoint="dt_final.pt", state_checkpoint = "dt_checkpoint-state-emb-iter9.pt", action_checkpoint="dt_checkpoint-data-emb-iter9.pt", dataset="offline_datasets/dection_trans_data_qlearning2.1.pkl"):
+    model = torch.load(model_checkpoint)
+    state_emb = torch.load(state_checkpoint)
+    act_emb = torch.load(action_checkpoint)
     model.eval()
+    state_emb.eval()
+    act_emb.eval()
+    dta_model = alma_dt.alma_dt(model, state_emb, act_emb)
     env_targets = [1, 10, 100]
     state_dim = 2048
     act_dim = 1024
-    max_length = 128
+    #max_length = 128
     max_ep_length = 20
     scale = 10
     with open(dataset, "rb") as dfile:
         D = pickle.load(dfile)
         data = dt_dataset.dt_dataset(D, state_dim=state_dim, act_dim=act_dim, max_ep_len=max_ep_length)
-    s, a, r, d, rtg, timesteps, mask = data.get_batch()
+    s, a, r, d, rtg, timesteps, mask = data.get_batch(batch_size=1)
     state_preds, action_preds, return_preds = model.forward(s, a, r, rtg, timesteps)
-
-    eval_fns = [eval_episodes(tar, 20) for tar in env_targets]
-
-    logs = {}
-    for eval_fn in eval_fns:
-        outputs = eval_fn(model)
-        for k, v in outputs.items():
-            logs[f'evaluation/{k}'] = v
-    print(logs)
+    alma_inst, _ = alma.init(1,"qlearning2.pl", '0', 1, 1000, [], [])
+    for i in range(10):
+        selected_action = dta_model.get_action(alma_inst, action_preds)
+        dta_model.execute(alma_inst, selected_action)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

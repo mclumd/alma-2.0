@@ -5,8 +5,13 @@ import torch
 from torch import nn
 
 
+""" 
+This is probably not really correctly named, it deals with general embeddings from strings to vectors.
+TODO:  Clean up, rename and refactor.
+"""
+
 class dt_dataset():
-    def __init__(self, trajectories, state_dim=2048, act_dim=1024, max_ep_len=100, scale=100, device='cuda'):
+    def __init__(self, trajectories, state_dim=2048, act_dim=1024, max_ep_len=128, scale=100, device='cuda'):
         self.trajectories = trajectories 
         self.num_trajectories = len(trajectories)
         self.tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
@@ -23,7 +28,12 @@ class dt_dataset():
 
         self.state_embed = nn.Embedding(self.tokenizer.vocab_size, state_dim // 200)
         self.action_embed = nn.Embedding(self.tokenizer.vocab_size, act_dim // 100)
-        
+
+    def set_state_embed(self, state_embed):
+        self.state_embed = state_embed
+
+    def set_act_embed(self, act_embed):
+        self.action_embed = act_embed
 
     def state_vectorize_list(self, state_str_list):
         """
@@ -55,7 +65,8 @@ class dt_dataset():
             action_embeddings[i] = torch.cat((action_embeddings[i],torch.zeros(1,num_pad)),dim=1)
         return torch.stack(action_embeddings, dim=1)
 
-    def get_batch(self, batch_size=256, max_len=128):
+    def get_batch(self, batch_size=256):
+        max_len = self.max_ep_len  # TODO:  Check that these should mean the same thing.
         trajectories = self.trajectories
 
         batch_inds = np.random.choice(
@@ -99,7 +110,7 @@ class dt_dataset():
             #tlen = s[-1].shape[1]
             tlen = num_timesteps
             
-            # Skip normalization for now; requires calculating global stats for datset
+            # Skip normalization for now; requires calculating global stats for dataset
             # s,a padded in vectorization.
             s[-1] = torch.cat([torch.zeros((1, max_len - tlen, self.state_dim)), s[-1]], axis=1)
             #s[-1] = (s[-1] - state_mean) / state_std
@@ -250,3 +261,21 @@ def format_trajectory_gpt3(trajectory):
     sartg_list = trajectory_sar_add_returns(sar_format(trajectory))
     traj_list =  [ "<" + str(x[4]) + "="*4 + x[0] + ":"*4 + x[1] + ">" for x in sartg_list]
     return "[" + ("|"*8).join(traj_list) + "]"
+
+
+def get_timesteps_and_masks(start, stop, max_len=None):
+    """Return a right_flushed vector of shape (1,stop) with integer
+    values start..top "flushed right" and zeros elsewhere.
+    """
+    if max_len == None:
+        max_len = stop
+    timesteps, masks = [], []
+    
+    num_timesteps = stop
+    tlen = stop - start + 1
+    timesteps.append(np.arange(start, stop).reshape(1, -1))
+    timesteps[-1][timesteps[-1] >= max_len] = max_len-1  # padding cutoff
+    timesteps[-1] = np.concatenate([np.zeros((1, max_len - tlen)), timesteps[-1]], axis=1)
+    timesteps = torch.from_numpy(np.concatenate(timesteps, axis=0)).to(dtype=torch.long, device='cuda')
+    masks.append(np.concatenate([np.zeros((1, max_len - tlen)), np.ones((1, tlen))], axis=1))
+    return timesteps, masks
