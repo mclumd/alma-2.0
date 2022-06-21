@@ -1,0 +1,32 @@
+import alma_dt
+import alma, alma_utils
+from rl_transformer import rl_transformer
+
+
+
+def train(pt_model=None):
+    state_dim = 2048
+    act_dim = 1024
+    max_length= 128
+
+    model = rl_transformer() if pt_model is None else pt_model
+
+    
+    
+    tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+
+    # The following was taken from a blog entry; not sure if it can be made to work
+    # with the DecisionTransfofmer class of if it's actually necessary.  It *would* be
+    # nice to limit the vocabulary size!
+    special_tokens_dict = {'bos_token': '<BOS>', 'eos_token': '<EOS>',
+                           'sep_token': '<SEP>'}
+    num_added_toks = tokenizer.add_special_tokens(special_tokens_dict)
+    #model.resize_token_embeddings(len(tokenizer))
+
+    max_ep_len = 20
+    env_targets = [3600, 1800]  # evaluation conditioning targets
+    scale = 1000.  # normalization for rewards/returns
+
+
+
+    warmup_steps = variant['warmup_steps']

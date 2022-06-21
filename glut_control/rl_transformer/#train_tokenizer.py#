@@ -1,0 +1,26 @@
+import transformers
+from tokenizers import Tokenizer
+from tokenizers.models import BPE
+import pickle
+
+tokenizer = Tokenizer(BPE(unk_token="[UNK]"))
+
+from tokenizers.trainers import BpeTrainer
+# Special tokens do not appear in the text stream but are kinds of control symbols.  Standard ones are defined for sentences separation.  In our context, we will use tokens to format our trajectories which are of the form <State, Action, RTG>.   Since a state is a list of setnences and an action is a pair of sentences, we will format this as
+#  [TRAJS] S1 [KBS] S2 [KBS] ... SN [KBEND] A0 [AS] A1 [AEND] RTG [TRAJE]
+#
+# [TRAJS], [TRAJE]
+# [KBS] -- KB seperator.     [KBEND] -- END of KB         # [AS], [AEND]                           
+
+trainer = BpeTrainer(special_tokens=["[UNK]", "[TRAJS]", "[TRAJE]", "[KBS]", "[KBEND]", "[AS]", "[AEND]"])
+
+
+
+pkl_file = "/home/justin/alma-2.0/glut_control/offline_datasets/offline_kb1_5000obs_20000rs.pkl"
+dataset = pickle.load(open(pkl_file, 'rb'))['training_set_str']
+
+def 
+
+tokenizer.train(files, trainer)
+
+tokenizer.save("data/tokenizer-wiki.json")

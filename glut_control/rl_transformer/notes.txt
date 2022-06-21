@@ -1,0 +1,22 @@
+TOKENIZATION
+
+It is somewhat tempting to try to train a BPE tokenizer; there are
+ways in which this does and does not make sense.  It doesn't make
+sense because basic-level tokens are determined in a formal language;
+they correspond to the elements of the formal grammar.  On the other
+hand, the BPE encoding can help us determine when to combine tokens
+into higher level tokens.  E.g.  perhaps "right(X)" will be determined
+to want its own tokenization because it occurs so frequently.
+
+One issue that may or may not be dealt with using ML methods is that
+there are several isomorphic forms of a single sentence.  even
+something as simple as "forall x, q(x) --> r(x)" being the same as
+"forall z, q(z) --> r(z)".  Long-term, there may be a case for
+standardizing all the sentences that the network has to work with.
+This might look like some combination of putting sentences into normal
+form along with a way to normalize variable names.   For the latter
+issue, there is some reason to hope that the network will learn the
+semantics of variables names well enough to obviate the need for
+this.  For that matter, this could be true of the syntactic form as
+well.  [THIS WOULD BE A GOOD THING TO TEST AND DEMONSTRATE EMPIRICALLY
+IN THE FINAL PAPER].
