@@ -63,8 +63,11 @@ def alma_tree_to_str(tree):
             return tree[1]
     elif tree[0] == 'var':
         return tree[1]
-    elif tree[0] == 'a':
-        return alma_tree_to_str(tree[1][0]) + ' and ' + alma_tree_to_str(tree[1][1])
+    elif tree[0] == 'and':
+        result = alma_tree_to_str(tree[1][0])
+        for clause in tree[1][1:]:
+            result += ' and ' +alma_tree_to_str(clause)
+        return result
 
 def alma_collection_to_strings(collection):
     return [ alma_tree_to_str(tree) for tree in collection]
