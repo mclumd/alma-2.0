@@ -1,12 +1,26 @@
 import torch
+from torch import nn
+import transformers
 
-"""
-Transformer model for prioritizing actions.  The input is a state and a list of actions; 
-the output is a vector representing approximate Q-values for each action.
-"""
-class transformer_model_zero():
+
+""" Transformer model for prioritizing actions.  Intuitively, the
+input is a state and a list of actions; the output is a vector
+representing approximate Q-values for each action. 
+
+In more detail, our first pass at the architecture will be as follows.
+We conceive of the model as a kind of sequence2value model which
+approximates Q(a; k) where a is a sequence of actions and k is the
+knowledge base.  We will model this with an encoder-decoder
+architecture, where the encoder encodes the knowledge base which is fed in 
+as a context to the decoder.  
+
+The decoder is fed each individual action and uses the encoded context vector to output an estimated Q-value.  
+ """
+
+
+
+class transformer_model_zero(nn.Module):
     def __init__(self, input_size = 512, num_heads=4, debugging=False):
-        #gnn_model.__init__(self, max_nodes)
         self.debugging = debugging
         self.input_size = input_size
 
@@ -14,53 +28,12 @@ class transformer_model_zero():
         self.max_nodes = max_nodes
         self.num_features = num_features
 
-        self.use_pytorch = pytorch
-        self.use_tf = not pytorch
-        if self.use_tf:
-            tf_imports()
-        else:
-            torch_imports()
-            
-        # Function API version; don't use this for now
-        # input = keras.Input(shape=(input_size,))
-        # x1 = keras.layers.Dense(8, activation='tanh')(input)
-        # x2 = keras.layers.Dense(8, activation='tanh')(x1)
-        # out = keras.layers.Dense(1, activation='sigmoid')(x2)
-        # self.graph_net = out
 
-        # If we are encoding state, we will *separately* encode the KB,
-        # concatenate it with the action and feed the result into self.model
-            
-
-        self.use_state = use_state
-        self.pytorch_backend = pytorch
-        self.tensorflow_backend = not pytorch
-
-
-
+        self.state_input_size = (max_nodes)**2 + (max_nodes*num_features) # We'll feed in KB formulae one at a time
+        # Define the model
+        self.encoder = 
         
-        if self.tensorflow_backend:
-            tf_imports()
-            self.model_input = keras.Input(shape=((input_size,)), name="action_input")
-        else:
-            torch_imports()
-
-
-        if use_state:
-            self.state_input_size = (max_nodes)**2 + (max_nodes*num_features) # We'll feed in KB formulae one at a time
-            if self.tensorflow_backend:
-                self.state_input = keras.Input(shape=(None, self.state_input_size), name="state_input")
-                #self.state_embedding = keras.layers.Embedding(1000, 512)(self.state_input)
-                self.state_features = 0.1*keras.layers.LSTM(16)(self.state_input)
-                self.emb_input = 0.9*keras.layers.concatenate([self.state_features, self.model_input])
-            else:
-                
-                #keras.Input(shape=(None, self.state_input_size), name="state_input")
-                #self.state_embedding = keras.layers.Embedding(1000, 512)(self.state_input)
-                #self.state_features = 0.1*keras.layers.LSTM(16)(self.state_input)
-                #self.emb_input = 0.9*keras.layers.concatenate([self.state_features, self.model_input])
-                self.state_feature = torch.nn.LSTM(input_size = self.state_input_size, hidden_size=64, batch_first=True)
-                self.emb_input = torch.cat( (self.state_feature, self.model_input), 1)
+            
                 
         else:
             self.emb_input = self.model_input
