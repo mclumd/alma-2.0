@@ -1,4 +1,5 @@
 import alma
+import random
 
 def explosion(size, kb, alma_inst):
     """
