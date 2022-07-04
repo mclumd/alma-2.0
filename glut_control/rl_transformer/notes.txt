@@ -20,3 +20,34 @@ semantics of variables names well enough to obviate the need for
 this.  For that matter, this could be true of the syntactic form as
 well.  [THIS WOULD BE A GOOD THING TO TEST AND DEMONSTRATE EMPIRICALLY
 IN THE FINAL PAPER].
+
+
+--------------------------------------------------------------------------------
+
+ENCODER-DECODER MODEL.
+
+Some random thoughts
+
+*  The next sentence prediciton task corresponds exactly to learning
+   whether sentence 2 is a logical consequence of the KB.  This seems
+   like a good sign.
+
+*  Ideally we should be invariant to the order of the sentences (but
+   not the order of the tokens within each sentence.   This is maybe
+   something to look at for secon round of the model.
+
+   That said, the premise of ALMA is somewhat that when a formula is
+   introduced *does* matter.  So it might be an interesting experiment
+   to compare a totally order agnostic representation to one in which,
+   e.g., the timestamp is encoded as part of the sentence.
+
+
+--------------------------------------------------------------------------------
+THE ENVIRONMENT
+
+    * We are likely to need massive amounts of data, and it won't do
+      to simply live with the memory leaks in the python alma module.
+      One approach might be to try to fix the leaks; a hack might be
+      to wrap alma in some kind of server the periodically restarts to
+      clear leaks.  
+
