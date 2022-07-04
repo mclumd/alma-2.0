@@ -109,7 +109,7 @@ def main():
     parser.add_argument("--kb", action='store', required=False, default="test1_kb.pl")
     parser.add_argument("--dgl_gnn", action='store_true')
     args = parser.parse_args()
-    subject_list = kb_to_subjects_list(args.kb)
+    subject_list = kb_to_subjects_list(args.kb, True)
     collect(args.reasoning_steps, args.num_observations, args.num_trajectories,
             args.outfile, subject_list,
             kb = args.kb, gnn_nodes = args.gnn_nodes, gnn=args.gnn_nodes != -1,
