@@ -108,20 +108,21 @@ def main():
     parser.add_argument("--gnn_nodes", type=int, default=-1)
     parser.add_argument("--kb", action='store', required=False, default="test1_kb.pl")
     parser.add_argument("--dgl_gnn", action='store_true')
+    parser.add_argument("--classical_steps", action='store_true')
     args = parser.parse_args()
     subject_list = kb_to_subjects_list(args.kb, True)
     collect(args.reasoning_steps, args.num_observations, args.num_trajectories,
             args.outfile, subject_list,
             kb = args.kb, gnn_nodes = args.gnn_nodes, gnn=args.gnn_nodes != -1,
             training_percent=args.training_percent,
-            text_kb = args.text_kb
+            text_kb = args.text_kb, classical_steps=args.classical_steps
             )
 
 
 
 
 def collect(reasoning_steps, num_observations, num_trajectories, outfile, subject_list,
-            kb=None, gnn_nodes=-1, gnn=True, text_kb=False,
+            kb=None, gnn_nodes=-1, gnn=True, text_kb=False, classical_steps=False,
             training_percent=0.8):
     trajectories = []
     for tnum in tqdm.trange(num_trajectories):
@@ -144,27 +145,37 @@ def collect(reasoning_steps, num_observations, num_trajectories, outfile, subjec
         alma.prb_to_res_task(alma_inst, 1.0)
         # Get the next action
         actions = []
-        actions.append(alma_utils.next_action(alma_inst))
+        if not classical_steps:
+            actions.append(alma_utils.next_action(alma_inst))
         for step in range(reasoning_steps):
-            alma.astep(alma_inst)
-            prb = alma.prebuf(alma_inst)
-            res_tasks = prb[0]
-            if len(res_tasks) > 0:
-                res_lits = res_task_lits(prb[2])
-                res_task_input = [x[:2] for x in res_tasks]
-                if text_kb:
-                    priorities = np.random.uniform(size = len(res_task_input))
-                    kb_over_time.append(alma_utils.current_kb_text(alma_inst))
-                    total += 1
-                else:
-                    network.save_batch(res_task_input, res_lits)
-                    print("rti len is", len(res_task_input))
-                    print("At reasoning step {}, network has {} samples, {} of which are positive".format(step, len(network.ybuffer), network.ypos_count))
-                    priorities = 1 - network.get_priorities(res_task_input)
-                alma.set_priors_prb(alma_inst, priorities.flatten().tolist())
-                alma.prb_to_res_task(alma_inst, 1.0)
-                actions.append(alma_utils.next_action(alma_inst))
-        text_actions = [  (alma_utils.alma_tree_to_str(x[0]), alma_utils.alma_tree_to_str(x[1])) for x in actions]
+            if classical_steps:
+                alma.step(alma_inst)
+                kb_over_time.append(alma_utils.current_kb_text(alma_inst))
+                res_task_buffer = alma.res_task_buf(alma_inst)
+                actions.append(res_task_buffer[0])
+            else:
+                alma.astep(alma_inst)
+                prb = alma.prebuf(alma_inst)
+                res_tasks = prb[0]
+                if len(res_tasks) > 0:
+                    res_lits = res_task_lits(prb[2])
+                    res_task_input = [x[:2] for x in res_tasks]
+                    if text_kb:
+                        priorities = np.random.uniform(size = len(res_task_input))
+                        kb_over_time.append(alma_utils.current_kb_text(alma_inst))
+                        total += 1
+                    else:
+                        network.save_batch(res_task_input, res_lits)
+                        print("rti len is", len(res_task_input))
+                        print("At reasoning step {}, network has {} samples, {} of which are positive".format(step, len(network.ybuffer), network.ypos_count))
+                        priorities = 1 - network.get_priorities(res_task_input)
+                    alma.set_priors_prb(alma_inst, priorities.flatten().tolist())
+                    alma.prb_to_res_task(alma_inst, 1.0)
+                    actions.append(alma_utils.next_action(alma_inst))
+        if classical_steps:
+            text_actions = [ [ (alma_utils.alma_tree_to_str(x[0]), alma_utils.alma_tree_to_str(x[1])) for x in y] for y in actions ]
+        else:
+            text_actions = [  (alma_utils.alma_tree_to_str(x[0]), alma_utils.alma_tree_to_str(x[1])) for x in actions]
         if text_kb:
             trajectory = {
                 'total': total,

@@ -51,3 +51,9 @@ THE ENVIRONMENT
       to wrap alma in some kind of server the periodically restarts to
       clear leaks.  
 
+--------------------------------------------------------------------------------
+VARIATIONS
+   *  With the encoder, first pass will encode knowledge base and sentence completion
+      training will try to predict a viable consequence of the knowledge base.
+      It would be interesting to compare performance if we try to predict an
+      (action, consequence) pair instead.

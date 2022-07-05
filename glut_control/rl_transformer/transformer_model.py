@@ -19,7 +19,7 @@ The decoder is fed each individual action and uses the encoded context vector to
 
 
 
-class transformer_model_zero(nn.Module):
+class transformer_model(nn.Module):
     def __init__(self, input_size = 512, num_heads=4, debugging=False):
         self.debugging = debugging
         self.input_size = input_size
