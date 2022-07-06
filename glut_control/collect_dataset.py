@@ -95,7 +95,7 @@ def get_dataset(network, training_percent):
 
 def collect(reasoning_steps, num_observations, num_trajectories, outfile, subject_list,
             kb=None, gnn_nodes=-1, gnn=True, text_kb=False, classical_steps=False, width=1,
-            training_percent=0.8):
+            verbose=False, training_percent=0.8):
     trajectories = []
     for tnum in tqdm.trange(num_trajectories):
         network = resolution_prebuffer.res_prebuffer(subject_list, [], debug=True, use_tf=True,   # Torch not working at time of writing
@@ -122,9 +122,13 @@ def collect(reasoning_steps, num_observations, num_trajectories, outfile, subjec
         if not classical_steps:
             actions.append(alma_utils.next_action(alma_inst))
         for step in range(reasoning_steps):
+            print("Tnum: ", tnum, "Step: ", step)
             if classical_steps:
                 alma_utils.classical_step(alma_inst)
-                kb_over_time.append(alma_utils.current_kb_text(alma_inst))
+                new_kb = alma_utils.current_kb_text(alma_inst)
+                kb_over_time.append(new_kb)
+                if verbose:
+                    print("KB: ", new_kb)
                 res_task_buffer = alma.res_task_buf(alma_inst)
                 actions.append(res_task_buffer[0])
             else:
@@ -182,6 +186,8 @@ def main():
     parser.add_argument("--dgl_gnn", action='store_true')
     parser.add_argument("--classical_steps", action='store_true')
     parser.add_argument("--width", type=int, default=1)
+    parser.add_argument("--verbose", action='store_true')
+
     args = parser.parse_args()
     subject_list = kb_to_subjects_list(args.kb, True)
     if args.classical_steps:
@@ -190,8 +196,8 @@ def main():
             args.outfile, subject_list,
             kb = args.kb, gnn_nodes = args.gnn_nodes, gnn=args.gnn_nodes != -1,
             training_percent=args.training_percent,
-            text_kb = args.text_kb, classical_steps=args.classical_steps, width=args.width
-            )
+            text_kb = args.text_kb, classical_steps=args.classical_steps, width=args.width, verbose=args.verbose)
+
 
 
 
