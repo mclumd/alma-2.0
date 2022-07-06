@@ -141,7 +141,12 @@ def collect(reasoning_steps, num_observations, num_trajectories, outfile, subjec
                     res_task_input = [x[:2] for x in res_tasks]
                     if text_kb:
                         priorities = np.random.uniform(size = len(res_task_input))
-                        kb_over_time.append(alma_utils.current_kb_text(alma_inst))
+
+                        new_kb = alma_utils.current_kb_text(alma_inst)
+                        kb_over_time.append(new_kb)
+                        if verbose:
+                            print("KB: ", new_kb)
+
                         total += 1
                     else:
                         network.save_batch(res_task_input, res_lits)
