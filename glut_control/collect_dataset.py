@@ -93,36 +93,8 @@ def get_dataset(network, training_percent):
             'total': total}
 
 
-
-    
-def main():
-    print("Command line: ", ''.join(sys.argv))
-    
-    parser = argparse.ArgumentParser(description="Collect dataset for offline learning.")
-    parser.add_argument("num_observations", type=int, default=10)
-    parser.add_argument("reasoning_steps", type=int, default=500)
-    parser.add_argument("num_trajectories", type=int, default=5)
-    parser.add_argument("outfile", type=str)
-    parser.add_argument("--text_kb", action='store_true')
-    parser.add_argument("--training_percent", type=float, default=0.8)
-    parser.add_argument("--gnn_nodes", type=int, default=-1)
-    parser.add_argument("--kb", action='store', required=False, default="test1_kb.pl")
-    parser.add_argument("--dgl_gnn", action='store_true')
-    parser.add_argument("--classical_steps", action='store_true')
-    args = parser.parse_args()
-    subject_list = kb_to_subjects_list(args.kb, True)
-    collect(args.reasoning_steps, args.num_observations, args.num_trajectories,
-            args.outfile, subject_list,
-            kb = args.kb, gnn_nodes = args.gnn_nodes, gnn=args.gnn_nodes != -1,
-            training_percent=args.training_percent,
-            text_kb = args.text_kb, classical_steps=args.classical_steps
-            )
-
-
-
-
 def collect(reasoning_steps, num_observations, num_trajectories, outfile, subject_list,
-            kb=None, gnn_nodes=-1, gnn=True, text_kb=False, classical_steps=False,
+            kb=None, gnn_nodes=-1, gnn=True, text_kb=False, classical_steps=False, width=1,
             training_percent=0.8):
     trajectories = []
     for tnum in tqdm.trange(num_trajectories):
@@ -138,23 +110,26 @@ def collect(reasoning_steps, num_observations, num_trajectories, outfile, subjec
             kb_over_time = []
             kb_over_time.append(alma_utils.current_kb_text(alma_inst))
             total = 1
-        else:
+            alma.set_priors_prb(alma_inst, priorities.flatten().tolist())
+            alma.prb_to_res_task(alma_inst, 1.0)
+        elif not classical_steps:
             network.save_batch(res_task_input, res_lits)
             priorities = 1 - network.get_priorities(res_task_input)
-        alma.set_priors_prb(alma_inst, priorities.flatten().tolist())
-        alma.prb_to_res_task(alma_inst, 1.0)
+            alma.set_priors_prb(alma_inst, priorities.flatten().tolist())
+            alma.prb_to_res_task(alma_inst, 1.0)
         # Get the next action
         actions = []
         if not classical_steps:
             actions.append(alma_utils.next_action(alma_inst))
         for step in range(reasoning_steps):
             if classical_steps:
-                alma.step(alma_inst)
+                alma_utils.classical_step(alma_inst)
                 kb_over_time.append(alma_utils.current_kb_text(alma_inst))
                 res_task_buffer = alma.res_task_buf(alma_inst)
                 actions.append(res_task_buffer[0])
             else:
-                alma.astep(alma_inst)
+                for _ in range(width):
+                    alma.astep(alma_inst)
                 prb = alma.prebuf(alma_inst)
                 res_tasks = prb[0]
                 if len(res_tasks) > 0:
@@ -190,6 +165,37 @@ def collect(reasoning_steps, num_observations, num_trajectories, outfile, subjec
     
     with open(outfile, "wb") as pkl_file:
         pickle.dump(trajectories, pkl_file)
+
+    
+def main():
+    print("Command line: ", ''.join(sys.argv))
+    
+    parser = argparse.ArgumentParser(description="Collect dataset for offline learning.")
+    parser.add_argument("num_observations", type=int, default=10)
+    parser.add_argument("reasoning_steps", type=int, default=500)
+    parser.add_argument("num_trajectories", type=int, default=5)
+    parser.add_argument("outfile", type=str)
+    parser.add_argument("--text_kb", action='store_true')
+    parser.add_argument("--training_percent", type=float, default=0.8)
+    parser.add_argument("--gnn_nodes", type=int, default=-1)
+    parser.add_argument("--kb", action='store', required=False, default="test1_kb.pl")
+    parser.add_argument("--dgl_gnn", action='store_true')
+    parser.add_argument("--classical_steps", action='store_true')
+    parser.add_argument("--width", type=int, default=1)
+    args = parser.parse_args()
+    subject_list = kb_to_subjects_list(args.kb, True)
+    if args.classical_steps:
+        args.text_kb = True
+    collect(args.reasoning_steps, args.num_observations, args.num_trajectories,
+            args.outfile, subject_list,
+            kb = args.kb, gnn_nodes = args.gnn_nodes, gnn=args.gnn_nodes != -1,
+            training_percent=args.training_percent,
+            text_kb = args.text_kb, classical_steps=args.classical_steps, width=args.width
+            )
+
+
+
+
 
 
 if __name__ == "__main__":
