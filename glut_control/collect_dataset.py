@@ -108,7 +108,7 @@ def collect(reasoning_steps, num_observations, num_trajectories, outfile, subjec
         if text_kb:  # random walk
             priorities = np.random.uniform(size = len(res_task_input))
             kb_over_time = []
-            kb_over_time.append(alma_utils.current_kb_text(alma_inst))
+            kb_over_time.append(alma_utils.current_kb_text(alma_inst, True))
             total = 1
             alma.set_priors_prb(alma_inst, priorities.flatten().tolist())
             alma.prb_to_res_task(alma_inst, 1.0)
@@ -125,7 +125,7 @@ def collect(reasoning_steps, num_observations, num_trajectories, outfile, subjec
             print("Tnum: ", tnum, "Step: ", step)
             if classical_steps:
                 alma_utils.classical_step(alma_inst)
-                new_kb = alma_utils.current_kb_text(alma_inst)
+                new_kb = alma_utils.current_kb_text(alma_inst, True)
                 kb_over_time.append(new_kb)
                 if verbose:
                     print("KB: ", new_kb)
@@ -142,8 +142,12 @@ def collect(reasoning_steps, num_observations, num_trajectories, outfile, subjec
                     if text_kb:
                         priorities = np.random.uniform(size = len(res_task_input))
 
-                        new_kb = alma_utils.current_kb_text(alma_inst)
-                        kb_over_time.append(new_kb)
+                        try:
+                            new_kb = alma_utils.current_kb_text(alma_inst, True)
+                            kb_over_time.append(new_kb)
+                        except RecursionError:
+                            print("Recursion error")
+                            break
                         if verbose:
                             print("KB: ", new_kb)
 

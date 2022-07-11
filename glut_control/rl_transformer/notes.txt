@@ -78,3 +78,10 @@ VARIATIONS
       training will try to predict a viable consequence of the knowledge base.
       It would be interesting to compare performance if we try to predict an
       (action, consequence) pair instead.
+
+   *  Try different encodings.   For example, it would be interesting
+      to have a 1-1 correspondence between tokenizations and
+      sentences.  It seems we lose this immediately because there are
+      different embeddings for different numbers of parens.  Would it
+      help to have some kind of prefix code?  It would be interesting
+      to compares infix, prefix and postfix.  

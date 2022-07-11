@@ -55,7 +55,8 @@ def kb_to_subjects_list(kb, use_gnn=False):
         subjects = ['l', 'f', 'g', 'a']
     if "qlearning3.pl" in kb:
         subjects = ['loc', 'left', 'right', 'up', 'down', 'a']
-
+    if "qlearning4.pl" in kb:
+        subjects = ['loc', 'left', 'right', 'a']
     if subjects == None:
         print("Unknown vocabulary for {}".format(kb))
     else:
