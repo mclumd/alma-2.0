@@ -14,23 +14,29 @@ from tokenizers.processors import BertProcessing
 from torch.utils.data import Dataset
 
 class QL4Dataset(Dataset):
-    def __init__(self, src_files, train: bool = False, objective: None):
+    def __init__(self, src_files, train: bool = False, objective: str = None):
         if train:
             assert(objective in ["mlm", "nsp"])
         self.tokenizer = ByteLevelBPETokenizer(
             "./simple_rl1-vocab.json",
             "./simple_rl1-merges.txt"
         )
-        self.tokenizer._tokenizer.post_processor = BertProcessing(
-            ("</traj>", tokenizer.token_to_id("</traj>")),
-            ("<traj>", tokenizer.token_to_id("<traj>")),
-        )
+        if objective == "nsp":
+            self.tokenizer._tokenizer.post_processor = BertProcessing(
+                ("</traj>", self.tokenizer.token_to_id("</traj>")),
+                ("<traj>", self.tokenizer.token_to_id("<traj>")),
+            )
+        else:
+            self.tokenizer._tokenizer.post_processor = BertProcessing(
+                ("</kb>", self.tokenizer.token_to_id("</kb>")),
+                ("<kb>", self.tokenizer.token_to_id("<kb>")),
+            )
         self.tokenizer.enable_truncation(max_length=512)
         # or use the RobertaTokenizer from `transformers` directly.
         if objective == "nsp":
-            self.get_nsp_examples()
+            self.get_nsp_examples(src_files)
         else:
-            self.get_mlm_examples()
+            self.get_mlm_examples(src_files)
 
     def get_nsp_examples(self):
         self.examples = []
@@ -61,14 +67,15 @@ class QL4Dataset(Dataset):
         self.examples = []
         for src_file in src_files:
             print("🔥", src_file)
-            lines = src_file.read_text(encoding="utf-8").splitlines()
+            lines = open(src_file, "rt", encoding="utf-8").readlines()
             for line in lines:
+                line = line.strip("\n")
                 if "traj" in line:
                     continue
                 else:
-                    assert( line[:4] == "<kb>" and line[-4:] == "</kb>")
-                    kb = line[4:-4]
-                    self.examples += [self.tokenizer.encode(kb)]
+                    assert( line[:4] == "<kb>" and line[-5:] == "</kb>")
+                    kb = line[4:-5]
+                    self.examples += [self.tokenizer.encode(kb).ids]
 
     def __len__(self):
         return len(self.examples)
@@ -130,8 +137,8 @@ def main():
     preprocess_datafiles(src_files, "/tmp/off_data.txt")
     tokenizer = train_tokenizer("/tmp/off_data.txt")
     #train_encoder(["/tmp/off_data.txt"])
-    train_set = QL4Dataset(["/tmp/off_data.txt"])
-    
+    train_set = QL4Dataset(["/tmp/off_data.txt"], train=True, objective="mlm")
+    print("Train set size: ", len(train_set))
 
 if __name__ == "__main__":
     main()
