@@ -47,8 +47,9 @@ def full_kb_text(alma_inst):
     L = alma.kb_to_pyobject(alma_inst, 1)
     return [alma_tree_to_str(x) for x in L]
 
-def current_kb_text(alma_inst):
-    L = alma.kb_to_pyobject(alma_inst, 0)
+def current_kb_text(alma_inst, full_kb=False):
+    full = 1 if full_kb else 0
+    L = alma.kb_to_pyobject(alma_inst, full)
     return [alma_tree_to_str(x) for x in L]
 
 def alma_tree_to_str(tree):
