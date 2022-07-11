@@ -22,6 +22,8 @@ well.  [THIS WOULD BE A GOOD THING TO TEST AND DEMONSTRATE EMPIRICALLY
 IN THE FINAL PAPER].
 
 
+
+
 --------------------------------------------------------------------------------
 
 ENCODER-DECODER MODEL.
@@ -31,6 +33,25 @@ Some random thoughts
 *  The next sentence prediciton task corresponds exactly to learning
    whether sentence 2 is a logical consequence of the KB.  This seems
    like a good sign.
+
+   For the sentence pair encoding task, the right way to do the
+   tokenization seems to be
+   		<s> KB(t) </s> </s> KB(t+1) </s>
+     *Perhaps we want to the individual sentences in the KB to have their
+      own seperator tokens.
+      
+     * Also, we may want the new tokens in KB(t+1) to be listed first?
+       This is to avoid falling out of the context window
+
+     * In this context, it seems like it could be helpful to strip the
+       timestamp info out as this might distract from finding larger
+       structure.   Ultimately should try it both ways.  Similarly get
+       rid of walltime() predicates (always) and now() predicates (as
+       an experiment).
+
+    
+       
+   
 
 *  Ideally we should be invariant to the order of the sentences (but
    not the order of the tokens within each sentence.   This is maybe
