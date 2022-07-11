@@ -14,24 +14,61 @@ from tokenizers.processors import BertProcessing
 from torch.utils.data import Dataset
 
 class QL4Dataset(Dataset):
-    def __init__(self, src_files, evaluate: bool = False):
-        tokenizer = ByteLevelBPETokenizer(
+    def __init__(self, src_files, train: bool = False, objective: None):
+        if train:
+            assert(objective in ["mlm", "nsp"])
+        self.tokenizer = ByteLevelBPETokenizer(
             "./simple_rl1-vocab.json",
             "./simple_rl1-merges.txt"
         )
-        tokenizer._tokenizer.post_processor = BertProcessing(
+        self.tokenizer._tokenizer.post_processor = BertProcessing(
             ("</traj>", tokenizer.token_to_id("</traj>")),
             ("<traj>", tokenizer.token_to_id("<traj>")),
         )
-        tokenizer.enable_truncation(max_length=512)
+        self.tokenizer.enable_truncation(max_length=512)
         # or use the RobertaTokenizer from `transformers` directly.
+        if objective == "nsp":
+            self.get_nsp_examples()
+        else:
+            self.get_mlm_examples()
 
+    def get_nsp_examples(self):
         self.examples = []
-
         for src_file in src_files:
             print("🔥", src_file)
             lines = src_file.read_text(encoding="utf-8").splitlines()
-            self.examples += [x.ids for x in tokenizer.encode_batch(lines)]
+            for line in lines:
+                if "<traj>" in line:
+                    # New trajectory
+                    kb_num = 0
+                elif "</traj>" in line:
+                    # End of trajectory
+                    pass
+                else:
+                    assert( line[:4] == "<kb>" and line[-4:] == "</kb>")
+                    kb = line[4:-4]
+                    if kb_num == 0:
+                        kb0 = kb
+                    else:
+                        kb1 = kb
+                        self.examples += [self.tokenize_sp(kb0, kb1)]
+                        kb0 = kb1[:]
+
+    def tokenize_sp(self, kb0, kb1):
+        return self.tokenizer.encode(kb0) + self.tokenizer.encode(kb1)  # This will need some tweaking
+
+    def get_mlm_examples(self, src_files):
+        self.examples = []
+        for src_file in src_files:
+            print("🔥", src_file)
+            lines = src_file.read_text(encoding="utf-8").splitlines()
+            for line in lines:
+                if "traj" in line:
+                    continue
+                else:
+                    assert( line[:4] == "<kb>" and line[-4:] == "</kb>")
+                    kb = line[4:-4]
+                    self.examples += [self.tokenizer.encode(kb)]
 
     def __len__(self):
         return len(self.examples)
