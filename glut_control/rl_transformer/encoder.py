@@ -9,9 +9,12 @@ import numpy as np
 import os
 import pickle
 
+import torch
 from tokenizers import ByteLevelBPETokenizer
 from tokenizers.processors import BertProcessing
 from torch.utils.data import Dataset
+from transformers import BertConfig, BertForPreTraining,  Trainer, TrainingArguments
+from transformers import RobertaConfig, RobertaModel
 
 class QL4Dataset(Dataset):
     def __init__(self, src_files, train: bool = False, objective: str = None):
@@ -38,7 +41,7 @@ class QL4Dataset(Dataset):
         else:
             self.get_mlm_examples(src_files)
 
-    def get_nsp_examples(self):
+    def get_nsp_examples(self, src_files):
         self.examples = []
         for src_file in src_files:
             print("🔥", src_file)
@@ -75,14 +78,15 @@ class QL4Dataset(Dataset):
                 else:
                     assert( line[:4] == "<kb>" and line[-5:] == "</kb>")
                     kb = line[4:-5]
-                    self.examples += [self.tokenizer.encode(kb).ids]
+                    self.examples += [self.tokenizer.encode(kb)]
 
     def __len__(self):
         return len(self.examples)
 
     def __getitem__(self, i):
         # We’ll pad at the batch level.
-        return torch.tensor(self.examples[i])
+        #return torch.tensor(self.examples[i])
+        return self.examples[i]
 
 
 
@@ -130,15 +134,44 @@ def preprocess_datafiles(input_file_list, output_file):
                         print("Found: ", form)
                         of.write(form + "\n")
                     of.write("</traj>\n")
-
 def main():
     import glob
     src_files = glob.glob("/tmp/off*pkl")
-    preprocess_datafiles(src_files, "/tmp/off_data.txt")
-    tokenizer = train_tokenizer("/tmp/off_data.txt")
+    if not os.path.exists("/tmp/off_data.txt"):
+        preprocess_datafiles(src_files, "/tmp/off_data.txt")
+        tokenizer = train_tokenizer("/tmp/off_data.txt")
     #train_encoder(["/tmp/off_data.txt"])
-    train_set = QL4Dataset(["/tmp/off_data.txt"], train=True, objective="mlm")
-    print("Train set size: ", len(train_set))
+    train_dataset = QL4Dataset(["/tmp/off_data.txt"], train=True, objective="mlm")
+    print("Train set size: ", len(train_dataset))
+
+    model_config = RobertaConfig(
+      vocab_size=train_dataset.tokenizer.get_vocab_size()
+    )
+    model = RobertaModel(model_config)
+    #model = BertForPreTraining(model_config)
+    model.cuda()
+
+    training_args = TrainingArguments(
+      output_dir='./results',          # output directory
+      num_train_epochs=3,              # total number of training epochs
+      per_device_train_batch_size=16,  # batch size per device during training
+      per_device_eval_batch_size=64,   # batch size for evaluation
+      warmup_steps=500,                # number of warmup steps for learning rate scheduler
+      weight_decay=0.01,               # strength of weight decay
+      logging_dir='./logs',            # directory for storing logs
+      logging_steps=10,
+    )
+
+
+    trainer = Trainer(
+        model=model,                         # the instantiated 🤗 Transformers model to be trained
+        args=training_args,                  # training arguments, defined above
+        train_dataset=train_dataset
+        # ,         # training dataset
+        #  eval_dataset=val_dataset             # evaluation dataset
+    )
+
+    trainer.train()
 
 if __name__ == "__main__":
     main()
