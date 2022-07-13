@@ -14,32 +14,23 @@ from tokenizers import ByteLevelBPETokenizer
 from tokenizers.processors import BertProcessing
 from torch.utils.data import Dataset
 from transformers import BertConfig, BertForPreTraining,  Trainer, TrainingArguments
-from transformers import RobertaConfig, RobertaModel
+from transformers import RobertaConfig, RobertaForMaskedLM, RobertaTokenizer
+from transformers import DataCollatorForLanguageModeling
 
 class QL4Dataset(Dataset):
     def __init__(self, src_files, train: bool = False, objective: str = None):
         if train:
             assert(objective in ["mlm", "nsp"])
-        self.tokenizer = ByteLevelBPETokenizer(
+        self.tokenizer = RobertaTokenizer(
             "./simple_rl1-vocab.json",
             "./simple_rl1-merges.txt"
         )
         if objective == "nsp":
-            self.tokenizer._tokenizer.post_processor = BertProcessing(
-                ("</traj>", self.tokenizer.token_to_id("</traj>")),
-                ("<traj>", self.tokenizer.token_to_id("<traj>")),
-            )
-        else:
-            self.tokenizer._tokenizer.post_processor = BertProcessing(
-                ("</kb>", self.tokenizer.token_to_id("</kb>")),
-                ("<kb>", self.tokenizer.token_to_id("<kb>")),
-            )
-        self.tokenizer.enable_truncation(max_length=512)
-        # or use the RobertaTokenizer from `transformers` directly.
-        if objective == "nsp":
             self.get_nsp_examples(src_files)
         else:
             self.get_mlm_examples(src_files)
+
+
 
     def get_nsp_examples(self, src_files):
         self.examples = []
@@ -77,8 +68,8 @@ class QL4Dataset(Dataset):
                     continue
                 else:
                     assert( line[:4] == "<kb>" and line[-5:] == "</kb>")
-                    kb = line[4:-5]
-                    self.examples += [self.tokenizer.encode(kb)]
+                    kb = line[4:-5][:510]
+                    self.examples += [self.tokenizer(kb)]
 
     def __len__(self):
         return len(self.examples)
@@ -94,18 +85,18 @@ def train_tokenizer(datafiles):
     tokenizer = ByteLevelBPETokenizer()
     # Customize training
     tokenizer.train(files=datafiles, vocab_size=52_000, min_frequency=2, special_tokens=[
-        "<sep>",
+        "<s>", "</s>",
         "<kb>", "</kb>",
         "<traj>", "</traj>",
         "<unk>",
         "<mask>",
     ])
-    tokenizer.save_model(".",  "simple_rl1")
+    tokenizer.save_model(".", "simple_rl1")
     return tokenizer
 
 def train_encoder(args):
     if os.path.exists("simple_rl1-vocab.json"):
-        tokenizer = ByteLevelBPETokenizer(
+        tokenizer = RobertaTokenizer(
             "./simple_rl1-vocab.json",
             "./simple_rl1-merges.txt"
         )
@@ -143,12 +134,14 @@ def main():
     #train_encoder(["/tmp/off_data.txt"])
     train_dataset = QL4Dataset(["/tmp/off_data.txt"], train=True, objective="mlm")
     print("Train set size: ", len(train_dataset))
+    data_collator = DataCollatorForLanguageModeling(tokenizer=train_dataset.tokenizer,
+                                                    mlm=True, mlm_probability=0.15)
+    
 
     model_config = RobertaConfig(
-      vocab_size=train_dataset.tokenizer.get_vocab_size()
+      vocab_size=train_dataset.tokenizer.vocab_size
     )
-    model = RobertaModel(model_config)
-    #model = BertForPreTraining(model_config)
+    model = RobertaForMaskedLM(model_config)
     model.cuda()
 
     training_args = TrainingArguments(
@@ -166,7 +159,8 @@ def main():
     trainer = Trainer(
         model=model,                         # the instantiated 🤗 Transformers model to be trained
         args=training_args,                  # training arguments, defined above
-        train_dataset=train_dataset
+        train_dataset=train_dataset,
+        data_collator=data_collator
         # ,         # training dataset
         #  eval_dataset=val_dataset             # evaluation dataset
     )
