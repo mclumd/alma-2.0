@@ -16,6 +16,7 @@ from torch.utils.data import Dataset
 from transformers import BertConfig, BertForPreTraining,  Trainer, TrainingArguments
 from transformers import RobertaConfig, RobertaForMaskedLM, RobertaTokenizer
 from transformers import DataCollatorForLanguageModeling
+from transformers import pipeline
 
 class QL4Dataset(Dataset):
     def __init__(self, src_files, train: bool = False, objective: str = None):
@@ -166,6 +167,7 @@ def main():
     )
 
     trainer.train()
+    rmodel = RobertaForMaskedLM.from_pretrained("results/checkpoint-5000")
 
 if __name__ == "__main__":
     main()
