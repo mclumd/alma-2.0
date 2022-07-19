@@ -12,6 +12,7 @@ import pickle
 import torch
 from tokenizers import ByteLevelBPETokenizer
 from tokenizers.processors import BertProcessing
+from tokenizers.processors import RobertaProcessing
 from torch.utils.data import Dataset
 from transformers import BertConfig, BertForPreTraining,  Trainer, TrainingArguments
 from transformers import RobertaConfig, RobertaForMaskedLM, RobertaTokenizer
@@ -109,6 +110,17 @@ def train_encoder(args):
     )
     tokenizer.enable_truncation(max_length=512)
 
+def test_string(string, model, tokenizer):
+    from scipy.special import softmax
+    ids=tokenizer.encode_plus(string)
+    
+    output = model(torch.tensor(ids['input_ids']).unsqueeze(0))
+    logits = output['logits']
+    nlogits = logits.detach().numpy()
+    slogits = softmax(nlogits, axis=1)[0]
+    L = np.argmax(slogits, axis=1)
+    print("L=", L)
+    return tokenizer.decode(L)
 
 
 
@@ -147,7 +159,7 @@ def main():
 
     training_args = TrainingArguments(
       output_dir='./results',          # output directory
-      num_train_epochs=3,              # total number of training epochs
+      num_train_epochs=10,              # total number of training epochs
       per_device_train_batch_size=16,  # batch size per device during training
       per_device_eval_batch_size=64,   # batch size for evaluation
       warmup_steps=500,                # number of warmup steps for learning rate scheduler
