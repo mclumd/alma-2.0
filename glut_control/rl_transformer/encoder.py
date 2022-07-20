@@ -152,7 +152,8 @@ def main():
     
 
     model_config = RobertaConfig(
-      vocab_size=train_dataset.tokenizer.vocab_size
+        vocab_size=train_dataset.tokenizer.vocab_size,
+        num_hidden_layers = 2, num_attention_heads=4
     )
     model = RobertaForMaskedLM(model_config)
     model.cuda()
@@ -179,7 +180,8 @@ def main():
     )
 
     trainer.train()
-    rmodel = RobertaForMaskedLM.from_pretrained("results/checkpoint-5000")
+    rmodel = RobertaForMaskedLM.from_pretrained("./results/checkpoint-27000")
+    tokenizer = RobertaTokenizer("./simple_rl1-vocab.json", "./simple_rl1-merges.txt")
 
 if __name__ == "__main__":
     main()
