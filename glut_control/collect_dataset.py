@@ -30,6 +30,8 @@ from sklearn.utils import shuffle
 
 from utils import kb_to_subjects_list
 import tqdm
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 def get_dataset(network, training_percent):
     X = network.Xbuffer
