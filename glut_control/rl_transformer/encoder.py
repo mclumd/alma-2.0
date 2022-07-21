@@ -86,10 +86,9 @@ class QL4Dataset(Dataset):
 def train_tokenizer(datafiles):
     tokenizer = ByteLevelBPETokenizer()
     # Customize training
-    tokenizer.train(files=datafiles, vocab_size=52_000, min_frequency=2, special_tokens=[
-        "<s>", "</s>",
-        "<kb>", "</kb>",
-        "<traj>", "</traj>",
+    tokenizer.train(files=datafiles, vocab_size=52000, min_frequency=2, special_tokens=[
+        "<s>", "<pad>", "</s>",
+        "</kb>",
         "<unk>",
         "<mask>",
     ])
@@ -131,24 +130,31 @@ def preprocess_datafiles(input_file_list, output_file):
                 print("Processing file: {}".format(input_file))
                 data = pickle.load(f)
                 for traj in data:
-                    of.write("<traj>\n")
-                    for kb in traj['kb']:
-                        form = "<kb>{}</kb>".format("<sep>".join([
+                    #of.write("<cls>\n")
+                    for kb, action in zip(traj['kb'], traj['actions']):
+                        kb_form = "{}".format(".".join([
                             c for c in kb if "time" not in c and "now" not in c and "agentname" not in c]))
+                        action_form = action[0] + ";" + action[1]
+                        #form = kb_form + "</kb>" + action_form + "</sep>"
+                        form = kb_form + "</kb>" + action_form
                         print("Found: ", form)
                         of.write(form + "\n")
-                    of.write("</traj>\n")
+                    #of.write("</traj>\n")
+                    of.write("\n")
 def main():
     import glob
     src_files = glob.glob("/tmp/off*pkl")
-    if not os.path.exists("/tmp/off_data.txt"):
-        preprocess_datafiles(src_files, "/tmp/off_data.txt")
-        tokenizer = train_tokenizer("/tmp/off_data.txt")
+    if not os.path.exists("/tmp/off_data_tds.txt"):
+        preprocess_datafiles(src_files, "/tmp/off_data_tds.txt")
+        tokenizer = train_tokenizer("/tmp/off_data_tds.txt")
     #train_encoder(["/tmp/off_data.txt"])
-    train_dataset = QL4Dataset(["/tmp/off_data.txt"], train=True, objective="mlm")
+    
+    nsp_dataset = TextDatasetForNextSentencePrediction(tokenizer=rtokenizer, file_path="/tmp/off_data_tds.txt", block_size=512)
+    #mlm_dataset = TextDatasetForMaskedLM(tokenizer=rtokenizer, file_path="/tmp/off_data_tds.txt", block_size=512)
+    #train_dataset = QL4Dataset(["/tmp/off_data.txt"], train=True, objective="mlm")
     print("Train set size: ", len(train_dataset))
     data_collator = DataCollatorForLanguageModeling(tokenizer=train_dataset.tokenizer,
-                                                    mlm=True, mlm_probability=0.15)
+                                                    mlm=True, mlm_probability=0.15,)
     
 
     model_config = RobertaConfig(
@@ -159,27 +165,32 @@ def main():
     model.cuda()
 
     training_args = TrainingArguments(
-      output_dir='./results',          # output directory
-      num_train_epochs=10,              # total number of training epochs
-      per_device_train_batch_size=16,  # batch size per device during training
-      per_device_eval_batch_size=64,   # batch size for evaluation
-      warmup_steps=500,                # number of warmup steps for learning rate scheduler
-      weight_decay=0.01,               # strength of weight decay
-      logging_dir='./logs',            # directory for storing logs
-      logging_steps=10,
+        output_dir='./results',          # output directory
+        overwrite_output_dir=True,
+        num_train_epochs=10,              # total number of training epochs
+        per_device_train_batch_size=16,  # batch size per device during training
+        per_device_eval_batch_size=64,   # batch size for evaluation
+        warmup_steps=500,                # number of warmup steps for learning rate scheduler
+        weight_decay=0.01,               # strength of weight decay
+        logging_dir='./logs',            # directory for storing logs
+        logging_steps=10,
+        save_total_limit=2,
+        prediction_loss_only=True
+        
     )
 
 
     trainer = Trainer(
         model=model,                         # the instantiated 🤗 Transformers model to be trained
         args=training_args,                  # training arguments, defined above
-        train_dataset=train_dataset,
+        train_dataset=nsp_dataset,
         data_collator=data_collator
         # ,         # training dataset
         #  eval_dataset=val_dataset             # evaluation dataset
     )
 
     trainer.train()
+    trainer.save_model("rltrans1")
     rmodel = RobertaForMaskedLM.from_pretrained("./results/checkpoint-27000")
     tokenizer = RobertaTokenizer("./simple_rl1-vocab.json", "./simple_rl1-merges.txt")
 
