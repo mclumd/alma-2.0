@@ -14,7 +14,7 @@ from tokenizers import ByteLevelBPETokenizer, BertWordPieceTokenizer
 from tokenizers.processors import BertProcessing
 from tokenizers.processors import RobertaProcessing
 from torch.utils.data import Dataset
-from transformers import BertConfig, BertForPreTraining,  Trainer, TrainingArguments, BertTokenizerFast
+from transformers import BertConfig, BertForPreTraining,  Trainer, TrainingArguments, BertTokenizerFast, BertTokenizer
 from transformers import RobertaConfig, RobertaForMaskedLM, RobertaTokenizer
 from transformers import DataCollatorForLanguageModeling, TextDatasetForNextSentencePrediction, TextDataset
 from transformers import pipeline
@@ -175,13 +175,13 @@ def preprocess_datafiles(input_file_list, output_file):
                         of.write(form + "\n")
                     #of.write("</traj>\n")
                     of.write("\n")
-def main():
+def train():
     import glob
-    roberta = True
+    roberta = False
     
     src_files = glob.glob("/tmp/off*pkl")
     if not os.path.exists("/tmp/off_data_tds.txt"):
-        #preprocess_datafiles(src_files, "/tmp/off_data_tds.txt")
+        preprocess_datafiles(src_files, "/tmp/off_data_tds.txt")
         tokenizer = train_tokenizer("/tmp/off_data_tds.txt", roberta)
     else:
         train_tokenizer("/tmp/off_data_tds.txt", roberta)
@@ -196,7 +196,7 @@ def main():
         model.cuda()
         train_dataset = QL4Dataset(["/tmp/off_data_tds.txt"], tokenizer=tokenizer, train=True, objective="mlm")
     else:
-        tokenizer = BertTokenizerFast(
+        tokenizer = BertTokenizer(
             vocab_file= "./bert_rl1-vocab.txt",
             do_lower_case = False,
             max_len=512
@@ -251,5 +251,11 @@ def main():
     # else:
     #     pass
 
+def test_encoding():
+    tokenizer = RobertaTokenizer("./simple_rl1-vocab.json","./simple_rl1-merges.txt",model_max_length=512)
+    rmodel = RobertaForMaskedLM.from_pretrained("./results/checkpoint-1634000")
+    tokenizer.encode("<mask>")
 if __name__ == "__main__":
-    main()
+    train()
+    #test_encoding()
+
