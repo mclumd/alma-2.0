@@ -8,6 +8,7 @@ import transformers
 import numpy as np
 import os
 import pickle
+import random
 
 import torch
 from tokenizers import ByteLevelBPETokenizer, BertWordPieceTokenizer
@@ -155,33 +156,33 @@ def test_string(string, model, tokenizer):
     print("L=", L)
     return tokenizer.decode(L)
 
-
-
-def preprocess_datafiles(input_file_list, output_file):
-    with open(output_file, "w") as of:
-        for input_file in input_file_list:
-            with open(input_file, "rb") as f:
-                print("Processing file: {}".format(input_file))
-                data = pickle.load(f)
-                for traj in data:
-                    #of.write("<cls>\n")
-                    for kb, action in zip(traj['kb'], traj['actions']):
-                        kb_form = "{}".format(".".join([
-                            c for c in kb if "time" not in c and "now" not in c and "agentname" not in c]))
-                        action_form = action[0] + ";" + action[1]
-                        #form = kb_form + "</kb>" + action_form + "</sep>"
-                        form = kb_form + "</kb>" + action_form
-                        print("Found: ", form)
-                        of.write(form + "\n")
-                    #of.write("</traj>\n")
-                    of.write("\n")
+def preprocess_datafiles(input_file_list, output_file, val_file, val_threshold = 0.01):
+    with open(val_file, "w") as vf:
+        with open(output_file, "w") as of:
+            for input_file in input_file_list:
+                with open(input_file, "rb") as f:
+                    print("Processing file: {}".format(input_file))
+                    data = pickle.load(f)
+                    for traj in data:
+                        handle = vf if random.random() < val_threshold else of
+                        #of.write("<cls>\n")
+                        for kb, action in zip(traj['kb'], traj['actions']):
+                            kb_form = "{}".format(".".join([
+                                c for c in kb if "time" not in c and "now" not in c and "agentname" not in c]))
+                            action_form = action[0] + ";" + action[1]
+                            #form = kb_form + "</kb>" + action_form + "</sep>"
+                            form = kb_form + "</kb>" + action_form
+                            print("Found: ", form)
+                            handle.write(form + "\n")
+                        #of.write("</traj>\n")
+                        handle.write("\n")
 def train():
     import glob
     roberta = False
     
     src_files = glob.glob("/tmp/off*pkl")
     if not os.path.exists("/tmp/off_data_tds.txt"):
-        preprocess_datafiles(src_files, "/tmp/off_data_tds.txt")
+        preprocess_datafiles(src_files, "/tmp/off_data_tds.txt", "/tmp/off_data_tds_val.txt")
         tokenizer = train_tokenizer("/tmp/off_data_tds.txt", roberta)
     else:
         train_tokenizer("/tmp/off_data_tds.txt", roberta)
@@ -212,6 +213,7 @@ def train():
         model.cuda()
 
         train_dataset = TextDatasetForNextSentencePrediction(tokenizer=tokenizer, file_path="/tmp/off_data_tds.txt", block_size=512)
+        val_dataset = TextDatasetForNextSentencePrediction(tokenizer=tokenizer, file_path="/tmp/off_data_tds_val.txt", block_size=512)
 
     #mlm_dataset = TextDatasetForMaskedLM(tokenizer=rtokenizer, file_path="/tmp/off_data_tds.txt", block_size=512)
     #train_dataset = QL4Dataset(["/tmp/off_data.txt"], train=True, objective="mlm")
@@ -229,8 +231,9 @@ def train():
         logging_dir='./logs',            # directory for storing logs
         logging_steps=10,
         save_total_limit=2,
-        prediction_loss_only=True
-        
+        prediction_loss_only=True,
+        evaluation_strategy="steps",
+        eval_accumulation_steps=5000
     )
 
 
@@ -238,9 +241,9 @@ def train():
         model=model,                         # the instantiated 🤗 Transformers model to be trained
         args=training_args,                  # training arguments, defined above
         train_dataset=train_dataset,
-        data_collator=data_collator
+        data_collator=data_collator,
         # ,         # training dataset
-        #  eval_dataset=val_dataset             # evaluation dataset
+        eval_dataset=val_dataset             # evaluation dataset
     )
 
     trainer.train()
