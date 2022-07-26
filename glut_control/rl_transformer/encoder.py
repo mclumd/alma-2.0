@@ -10,23 +10,26 @@ import os
 import pickle
 
 import torch
-from tokenizers import ByteLevelBPETokenizer
+from tokenizers import ByteLevelBPETokenizer, BertWordPieceTokenizer
 from tokenizers.processors import BertProcessing
 from tokenizers.processors import RobertaProcessing
 from torch.utils.data import Dataset
-from transformers import BertConfig, BertForPreTraining,  Trainer, TrainingArguments
+from transformers import BertConfig, BertForPreTraining,  Trainer, TrainingArguments, BertTokenizerFast
 from transformers import RobertaConfig, RobertaForMaskedLM, RobertaTokenizer
-from transformers import DataCollatorForLanguageModeling
+from transformers import DataCollatorForLanguageModeling, TextDatasetForNextSentencePrediction, TextDataset
 from transformers import pipeline
 
 class QL4Dataset(Dataset):
-    def __init__(self, src_files, train: bool = False, objective: str = None):
+    def __init__(self, src_files, tokenizer=None, train: bool = False, objective: str = None):
         if train:
             assert(objective in ["mlm", "nsp"])
-        self.tokenizer = RobertaTokenizer(
-            "./simple_rl1-vocab.json",
-            "./simple_rl1-merges.txt"
-        )
+        if tokenizer is None:
+            self.tokenizer = RobertaTokenizer(
+                "./simple_rl1-vocab.json",
+                "./simple_rl1-merges.txt"
+            )
+        else:
+            self.tokenizer = tokenizer
         if objective == "nsp":
             self.get_nsp_examples(src_files)
         else:
@@ -61,17 +64,25 @@ class QL4Dataset(Dataset):
 
     def get_mlm_examples(self, src_files):
         self.examples = []
+        truncated_lines, total_lines = 0, 0
         for src_file in src_files:
             print("🔥", src_file)
             lines = open(src_file, "rt", encoding="utf-8").readlines()
             for line in lines:
                 line = line.strip("\n")
-                if "traj" in line:
+                if line == "":
                     continue
                 else:
-                    assert( line[:4] == "<kb>" and line[-5:] == "</kb>")
-                    kb = line[4:-5][:510]
-                    self.examples += [self.tokenizer(kb)]
+                    tokenized_line = self.tokenizer.encode(line, max_length=508)
+                    self.examples += [tokenized_line]
+                    total_lines += 1
+                    if len(tokenized_line) > 500:
+                        print("🔥", line)
+                        print("🔥", tokenized_line)
+                        print("🔥", len(tokenized_line))
+                        truncated_lines += 1
+        print("Truncated {} lines out of {} total; or {} percent".format(truncated_lines, total_lines, truncated_lines*100/total_lines))
+
 
     def __len__(self):
         return len(self.examples)
@@ -83,16 +94,39 @@ class QL4Dataset(Dataset):
 
 
 
-def train_tokenizer(datafiles):
-    tokenizer = ByteLevelBPETokenizer()
-    # Customize training
-    tokenizer.train(files=datafiles, vocab_size=52000, min_frequency=2, special_tokens=[
-        "<s>", "<pad>", "</s>",
-        "</kb>",
-        "<unk>",
-        "<mask>",
-    ])
-    tokenizer.save_model(".", "simple_rl1")
+def train_tokenizer(datafiles, roberta=False):
+    if roberta:
+        tokenizer = ByteLevelBPETokenizer()
+        # Customize training
+        tokenizer.train(files=datafiles, vocab_size=510, min_frequency=2, special_tokens=[
+            "<s>", "<pad>", "</s>",
+            "</kb>",
+            "<unk>",
+            "<mask>",
+        ])
+        tokenizer.save_model(".", "simple_rl1")
+    else:
+        tokenizer = BertWordPieceTokenizer(
+            clean_text=True,
+            strip_accents=True,
+            lowercase=False,
+        )
+        tokenizer.train(
+            datafiles,
+            vocab_size=510,
+            min_frequency=2,
+            show_progress=True,
+            special_tokens=[
+                "<s>", "<pad>", "</s>",
+                "</kb>",
+                "<unk>",
+                "<mask>"
+            ],
+            limit_alphabet=1000,
+            wordpieces_prefix="##",
+        )
+        tokenizer.save_model(".", "bert_rl1")
+        
     return tokenizer
 
 def train_encoder(args):
@@ -102,7 +136,7 @@ def train_encoder(args):
             "./simple_rl1-merges.txt"
         )
     else:
-        tokenizer = train_tokenizer(args.datafile)
+        tokenizer = train_tokenizer(args.datafile, args.roberta)
     tokenizer._tokenizer.post_processor = BertProcessing(
         ("</s>", tokenizer.token_to_id("</s>")),
         ("<s>", tokenizer.token_to_id("<s>")),
@@ -143,27 +177,47 @@ def preprocess_datafiles(input_file_list, output_file):
                     of.write("\n")
 def main():
     import glob
+    roberta = True
+    
     src_files = glob.glob("/tmp/off*pkl")
     if not os.path.exists("/tmp/off_data_tds.txt"):
-        preprocess_datafiles(src_files, "/tmp/off_data_tds.txt")
-        tokenizer = train_tokenizer("/tmp/off_data_tds.txt")
-    #train_encoder(["/tmp/off_data.txt"])
-    
-    nsp_dataset = TextDatasetForNextSentencePrediction(tokenizer=rtokenizer, file_path="/tmp/off_data_tds.txt", block_size=512)
+        #preprocess_datafiles(src_files, "/tmp/off_data_tds.txt")
+        tokenizer = train_tokenizer("/tmp/off_data_tds.txt", roberta)
+    else:
+        train_tokenizer("/tmp/off_data_tds.txt", roberta)
+
+    if roberta:
+        tokenizer = RobertaTokenizer("./simple_rl1-vocab.json","./simple_rl1-merges.txt",model_max_length=512)
+        model_config = RobertaConfig(
+            vocab_size=tokenizer.vocab_size,
+            num_hidden_layers = 2, num_attention_heads=4
+        )
+        model = RobertaForMaskedLM(model_config)
+        model.cuda()
+        train_dataset = QL4Dataset(["/tmp/off_data_tds.txt"], tokenizer=tokenizer, train=True, objective="mlm")
+    else:
+        tokenizer = BertTokenizerFast(
+            vocab_file= "./bert_rl1-vocab.txt",
+            do_lower_case = False,
+            max_len=512
+        )
+
+        model_config = BertConfig(
+            vocab_size=tokenizer.vocab_size,
+            num_hidden_layers = 2, num_attention_heads=4
+        )
+        print("model config", model_config)
+        model = BertForPreTraining(model_config)
+        print(model)
+        model.cuda()
+
+        train_dataset = TextDatasetForNextSentencePrediction(tokenizer=tokenizer, file_path="/tmp/off_data_tds.txt", block_size=512)
+
     #mlm_dataset = TextDatasetForMaskedLM(tokenizer=rtokenizer, file_path="/tmp/off_data_tds.txt", block_size=512)
     #train_dataset = QL4Dataset(["/tmp/off_data.txt"], train=True, objective="mlm")
-    print("Train set size: ", len(train_dataset))
-    data_collator = DataCollatorForLanguageModeling(tokenizer=train_dataset.tokenizer,
+    print("Train dataset set size: ", len(train_dataset))
+    data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer,
                                                     mlm=True, mlm_probability=0.15,)
-    
-
-    model_config = RobertaConfig(
-        vocab_size=train_dataset.tokenizer.vocab_size,
-        num_hidden_layers = 2, num_attention_heads=4
-    )
-    model = RobertaForMaskedLM(model_config)
-    model.cuda()
-
     training_args = TrainingArguments(
         output_dir='./results',          # output directory
         overwrite_output_dir=True,
@@ -183,16 +237,19 @@ def main():
     trainer = Trainer(
         model=model,                         # the instantiated 🤗 Transformers model to be trained
         args=training_args,                  # training arguments, defined above
-        train_dataset=nsp_dataset,
+        train_dataset=train_dataset,
         data_collator=data_collator
         # ,         # training dataset
         #  eval_dataset=val_dataset             # evaluation dataset
     )
 
     trainer.train()
-    trainer.save_model("rltrans1")
-    rmodel = RobertaForMaskedLM.from_pretrained("./results/checkpoint-27000")
-    tokenizer = RobertaTokenizer("./simple_rl1-vocab.json", "./simple_rl1-merges.txt")
+    # trainer.save_model("rltrans1")
+    # if roberta:
+    #     rmodel = RobertaForMaskedLM.from_pretrained("./results/checkpoint-27000")
+    #     tokenizer = RobertaTokenizer("./simple_rl1-vocab.json", "./simple_rl1-merges.txt")
+    # else:
+    #     pass
 
 if __name__ == "__main__":
     main()

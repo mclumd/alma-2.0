@@ -1,3 +1,21 @@
+BENCHMARK
+Rather than trying to create an embedded scenario, let's come up with
+a sequence of tasks of increasing complexity
+  1)  Original left/right scenario with rewards = num(rights)
+  2)  Left/right scenario with more complex (and sparse) reward
+  3)  Repeat 1 and 2 with 4 dimension
+  4)  Navigate a maze?   This was originally suggested, a priori there
+  aren't obvious easy places to control glut.  Should I, in general,
+  prefer a left turn or right turn?
+  5)  Scenario with lots of incoming observations.  Doesn't have to be
+  full ai2thor scenario, but maybe a flattented simulation.
+
+For 1 and 2, we can pretrain a model and fine-tune to specific task.
+Might be a good idea in general -- pretrain some large model that can
+be fine-tuned.  We can report on the relationship between the amount
+of finetuning data and performance.  
+
+--------------------------------------------------------------------------------
 TOKENIZATION
 
 It is somewhat tempting to try to train a BPE tokenizer; there are
