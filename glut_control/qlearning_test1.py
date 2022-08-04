@@ -22,9 +22,7 @@ import time, datetime
 #from memory_profiler import profile
 import psutil
 import rl_transformer
-import rl_transformer.rl_transformer_model
 import rl_transformer.rl_transformer
-from rl_transformer.rl_transformer_model import trans_dqn
 from rl_transformer.rl_transformer import rl_transformer
 
 
