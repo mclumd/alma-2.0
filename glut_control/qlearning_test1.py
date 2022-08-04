@@ -21,6 +21,11 @@ import time, datetime
 #import tracemalloc
 #from memory_profiler import profile
 import psutil
+import rl_transformer
+import rl_transformer.rl_transformer_model
+import rl_transformer.rl_transformer
+from rl_transformer.rl_transformer_model import trans_dqn
+from rl_transformer.rl_transformer import rl_transformer
 
 
 
@@ -43,7 +48,8 @@ def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000,
           update_target_network_interval=10000, debug_level=0, gnn_nodes = 20,
           exhaustive_training=False, kb='/home/justin/alma-2.0/glut_control/qlearning2.pl',
           subjects = ['a', 'f', 'g', 'l', 'now'], prior_network = None, debugging=False,
-          testing_interval=math.inf, tboard = True):
+          testing_interval=math.inf, tboard = False, transformer=False,
+          device="cpu"):
     """
     Train Q-network on the initial qlearning task.   
 
@@ -68,13 +74,25 @@ def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000,
     global alma_inst,res, alma
     #network = rpb_dqn(num_steps ** 2, subjects, [], use_gnn=use_gnn)
     #network = rpb_dqn(num_steps *2, subjects, [], use_gnn=use_gnn, gnn_nodes=gnn_nodes)
-    if "qlearning3.pl" in kb:
+    if "qlearning3.pl" in kb or "qlearning4.pl" in kb:
         reward_fn = get_rewards_test3
     else:
         reward_fn = get_rewards_test1
-    network = rpb_dqn(100, reward_fn, subjects, [], use_gnn=use_gnn,
-                      gnn_nodes=gnn_nodes, use_state=True,
-                      debugging=debugging, pytorch_backend = use_pytorch) if prior_network is None else prior_network    # Use max_reward of 10K
+
+    if prior_network is not None:
+        network = prior_network
+    elif transformer:
+        network = rl_transformer(max_reward=100,
+                                 reward_fn=reward_fn,
+                                 debugging=debugging)
+    else:
+        network = rpb_dqn(100, reward_fn,
+                          subjects, [], use_gnn=use_gnn,
+                          gnn_nodes=gnn_nodes, use_state=True,
+                          debugging=debugging,
+                          pytorch_backend = use_pytorch,
+                          transformer_based=transformer) # Use max_reward of 10K
+        
     replay_buffer = rl_dataset.experience_replay_buffer()
     start_time = time.time()
     if tboard:
@@ -87,22 +105,27 @@ def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000,
         reload(alma)
         alma_inst,res = alma.init(1,kb, '0', 1, 1000, [], [])
         print("Pre-collect")
-        print_gpu_mem()
+        if "cuda" in device:
+            print_gpu_mem()
         rl_utils.collect_episode(network, replay_buffer, alma_inst, num_steps)
         alma.halt(alma_inst)
         print("Post-collect")
-        print_gpu_mem()
+        if "cuda" in device:
+            print_gpu_mem()
         if (episode % train_interval == 0) and (episode > 0):
             print("Pre-train")
-            print_gpu_mem()
+            if "cuda" in device:
+                print_gpu_mem()
             rl_utils.replay_train(network, replay_buffer, exhaustive_training)
             print("Post-train")
-            print_gpu_mem()
+            if "cuda" in device:
+                print_gpu_mem()
             if episode % update_target_network_interval == 0:
                 print("Updating at: {}  \t Memory usage: {} \t   Replay buffer size: {} ".format( time.time() - start_time,
                                                                                                   psutil.Process().memory_info().rss / (1024 * 1024),
                                                                                                   replay_buffer.num_entries()))
-                network.target_model.model.set_weights(network.current_model.model.get_weights())
+                #network.target_model.model.set_weights(network.current_model.model.get_weights())
+                network.update_target()
         if episode % 200 == 0:
             del replay_buffer
             replay_buffer = rl_dataset.experience_replay_buffer()
@@ -110,13 +133,15 @@ def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000,
 
         if episode % testing_interval == 0:
             print("Pre-test")
-            print_gpu_mem()
+            if "cuda" in device:
+                print_gpu_mem()
             res = test(network, kb, num_steps)
             print("Post-test")
-            print_gpu_mem()
+            if "cuda" in device:
+                print_gpu_mem()
             print("-"*80)
             print("Rewards at episode {} (epsilon=={}): {}".format(episode, network.epsilon, res['rewards']))
-            network.model_save(model_name + "_ckpt" + str(episode))
+            network.model_save("test_models_delete", model_name + "_ckpt" + str(episode))
             print("-"*80)
             if tboard:
                 with reward_summary_writer.as_default():
@@ -132,7 +157,7 @@ def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000,
 
         network.epsilon_decay()
 
-    network.model_save(model_name)
+    network.model_save("test_models_delete", model_name)
     return network
 
 def test(network, kb, num_steps=500):
@@ -163,6 +188,7 @@ def main():
     parser.add_argument("--kb", default='/home/justin/alma-2.0/glut_control/qlearning2.pl', action='store')
     parser.add_argument("--debugging", action='store_true')
     parser.add_argument("--pytorch", help="use pytorch as backend (default is tensorflow)", action='store_true')
+    parser.add_argument("--transformer", help="use BERT-like transformer", action="store_true")
 
     args = parser.parse_args()
     print("Running with arguments ", args)
@@ -210,9 +236,34 @@ def main():
         print('Training; model name is ', args.train)
         model_name = args.train
         if network is None:
-            network = train(args.episode_length, args.train, True, args.num_episodes, train_interval=args.train_interval, update_target_network_interval=args.target_update_interval, gnn_nodes = args.gnn_nodes, exhaustive_training=args.exhaustive, kb=args.kb, subjects=subjects, debugging=args.debugging, testing_interval=args.testing_interval)
+            network = train(args.episode_length,
+                            args.train,
+                            True,
+                            args.num_episodes,
+                            train_interval=args.train_interval,
+                            update_target_network_interval=args.target_update_interval,
+                            gnn_nodes = args.gnn_nodes,
+                            exhaustive_training=args.exhaustive,
+                            kb=args.kb,
+                            subjects=subjects,
+                            debugging=args.debugging,
+                            testing_interval=args.testing_interval,
+                            transformer=args.transformer
+                            )
         else:
-            network = train(args.episode_length, args.train, True, args.num_episodes, train_interval=args.train_interval, update_target_network_interval=args.target_update_interval, gnn_nodes = args.gnn_nodes, exhaustive_training=args.exhaustive, kb=args.kb, subjects=subjects, prior_network=network, testing_interval=args.testing_interval)
+            network = train(args.episode_length,
+                            args.train,
+                            True,
+                            args.num_episodes,
+                            train_interval=args.train_interval,
+                            update_target_network_interval=args.target_update_interval,
+                            gnn_nodes = args.gnn_nodes,
+                            exhaustive_training=args.exhaustive,
+                            kb=args.kb,
+                            subjects=subjects,
+                            prior_network=network,
+                            testing_interval=args.testing_interval,
+                            transformer=args.transformer)
         use_net = True
     
     if args.random_network:

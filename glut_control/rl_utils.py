@@ -26,7 +26,7 @@ def collect_episode(network, replay_buffer, alma_inst, episode_length):
         prebuf = alma.prebuf(alma_inst)
         full_actions = prebuf[0]
         actions_no_priorities = [x[:2] for x in full_actions]
-        state0 = alma.kb_to_pyobject(alma_inst)
+        state0 = alma.kb_to_pyobject(alma_inst, True)
 
         #res_task_input = [x[:2] for x in prb]
         if len(full_actions) > 0:
@@ -49,7 +49,7 @@ def collect_episode(network, replay_buffer, alma_inst, episode_length):
             #reward = (network.reward_fn(kb) / network.max_reward) if i < (episode_length - 1) else -1  # -1 for the last episode
             reward = (network.reward_fn(kb) / network.max_reward) if i < (
                         episode_length - 1) else network.done_reward  #  for the last episode
-            state1 = alma.kb_to_pyobject(alma_inst)
+            state1 = alma.kb_to_pyobject(alma_inst, True)
             replay_buffer.append(state0, action, reward, state1)
 
 
@@ -70,7 +70,7 @@ def play_episode(network, alma_inst, episode_length):
         rth = alma.res_task_buf(alma_inst)
         record['heap'].append(list(enumerate(rth[1].split('\n')[:-1])))
         prb = prebuf[0]
-        kb = alma.kb_to_pyobject(alma_inst)
+        kb = alma.kb_to_pyobject(alma_inst, True)
         record['kb'].append(kb)
         
         if len(prb) > 0:

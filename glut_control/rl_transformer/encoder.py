@@ -11,7 +11,7 @@ import pickle
 import random
 
 import torch
-from tokenizers import ByteLevelBPETokenizer, BertWordPieceTokenizer
+from tokenizers import ByteLevelBPETokenizer, BertWordPieceTokenizer, AddedToken
 from tokenizers.processors import BertProcessing
 from tokenizers.processors import RobertaProcessing
 from torch.utils.data import Dataset
@@ -74,7 +74,7 @@ class QL4Dataset(Dataset):
                 if line == "":
                     continue
                 else:
-                    tokenized_line = self.tokenizer.encode(line, max_length=508)
+                    tokenized_line = self.tokenizer(line, max_length=510, truncation=True)
                     self.examples += [tokenized_line]
                     total_lines += 1
                     if len(tokenized_line) > 500:
@@ -178,7 +178,7 @@ def preprocess_datafiles(input_file_list, output_file, val_file, val_threshold =
                         handle.write("\n")
 def train():
     import glob
-    roberta = False
+    roberta = True
     
     src_files = glob.glob("/tmp/off*pkl")
     if not os.path.exists("/tmp/off_data_tds.txt"):
@@ -188,7 +188,37 @@ def train():
         train_tokenizer("/tmp/off_data_tds.txt", roberta)
 
     if roberta:
+        # SPECIAL_TOKENS = []
+        # SPECIAL_TOKENS.append(AddedToken("<s>"))
+        # SPECIAL_TOKENS.append(AddedToken("<pad>"))
+        # SPECIAL_TOKENS.append(AddedToken("</s>"))
+        # SPECIAL_TOKENS.append(AddedToken("</kb>"))
+
+        # SPECIAL_TOKENS.append(AddedToken("<unk>"))
+        # SPECIAL_TOKENS.append(AddedToken("<mask>", lstrip=False))
+
         tokenizer = RobertaTokenizer("./simple_rl1-vocab.json","./simple_rl1-merges.txt",model_max_length=512)
+
+        #tokenizer = ByteLevelBPETokenizer("./simple_rl1-vocab.json","./simple_rl1-merges.txt")
+        #tokenizer.add_special_tokens(SPECIAL_TOKENS)
+        tokenizer.add_special_tokens( {
+            'mask_token': '<mask>',
+            'sep_token': '</s>',
+            'pad_token': '<pad>',
+            'cls_token': '<s>',
+            'unk_token': '<unk>'
+        })
+
+        
+        # tokenizer._tokenizer.post_processor = RobertaProcessing(
+        #     sep=("</s>", tokenizer.token_to_id("</s>")),
+        #     cls=("<s>", tokenizer.token_to_id("<s>")),
+        # )
+        # tokenizer.mask_token = "<mask>"
+        # tokenizer.mask_token_id = tokenizer.token_to_id("<mask>")
+        
+        #tokenizer.enable_truncation(max_length=510)
+
         model_config = RobertaConfig(
             vocab_size=tokenizer.vocab_size,
             num_hidden_layers = 2, num_attention_heads=4
@@ -196,15 +226,32 @@ def train():
         model = RobertaForMaskedLM(model_config)
         model.cuda()
         train_dataset = QL4Dataset(["/tmp/off_data_tds.txt"], tokenizer=tokenizer, train=True, objective="mlm")
+        val_dataset = QL4Dataset(["/tmp/off_data_tds_val.txt"], tokenizer=tokenizer, train=False, objective="mlm")
     else:
-        tokenizer = BertTokenizer(
-            vocab_file= "./bert_rl1-vocab.txt",
-            do_lower_case = False,
-            max_len=512
-        )
+        SPECIAL_TOKENS = []
+        SPECIAL_TOKENS.append(AddedToken("<s>"))
+        SPECIAL_TOKENS.append(AddedToken("<pad>"))
+        SPECIAL_TOKENS.append(AddedToken("</s>"))
+        SPECIAL_TOKENS.append(AddedToken("</kb>"))
 
+        SPECIAL_TOKENS.append(AddedToken("<unk>"))
+        SPECIAL_TOKENS.append(AddedToken("<mask>", lstrip=False))
+
+        # Going to try working with BPE
+        # tokenizer = BertTokenizer(
+        #     vocab_file= "./bert_rl1-vocab.txt",
+        #     do_lower_case = False,
+        #     max_len=512
+        # )
+
+        tokenizer = ByteLevelBPETokenizer("./simple_rl1-vocab.json","./simple_rl1-merges.txt")
+        tokenizer.add_special_tokens(SPECIAL_TOKENS)
+        tokenizer._tokenizer.post_processor = RobertaProcessing(
+            sep=("</s>", tokenizer.token_to_id("</s>")),
+            cls=("<s>", tokenizer.token_to_id("<s>")),
+        )
         model_config = BertConfig(
-            vocab_size=tokenizer.vocab_size,
+            vocab_size=tokenizer.get_vocab_size(True),
             num_hidden_layers = 2, num_attention_heads=4
         )
         print("model config", model_config)
@@ -212,8 +259,12 @@ def train():
         print(model)
         model.cuda()
 
-        train_dataset = TextDatasetForNextSentencePrediction(tokenizer=tokenizer, file_path="/tmp/off_data_tds.txt", block_size=512)
-        val_dataset = TextDatasetForNextSentencePrediction(tokenizer=tokenizer, file_path="/tmp/off_data_tds_val.txt", block_size=512)
+        #train_dataset = TextDatasetForNextSentencePrediction(tokenizer=tokenizer, file_path="/tmp/off_data_tds.txt", block_size=512)
+        #val_dataset = TextDatasetForNextSentencePrediction(tokenizer=tokenizer, file_path="/tmp/off_data_tds_val.txt", block_size=512)
+        train_dataset = TextDataset(tokenizer=tokenizer, file_path="/tmp/off_data_tds.txt",
+                                                             block_size=512)
+        val_dataset = TextDataset(tokenizer=tokenizer, file_path="/tmp/off_data_tds_val.txt",
+                                                           block_size=512)
 
     #mlm_dataset = TextDatasetForMaskedLM(tokenizer=rtokenizer, file_path="/tmp/off_data_tds.txt", block_size=512)
     #train_dataset = QL4Dataset(["/tmp/off_data.txt"], train=True, objective="mlm")
@@ -225,15 +276,15 @@ def train():
         overwrite_output_dir=True,
         num_train_epochs=10,              # total number of training epochs
         per_device_train_batch_size=16,  # batch size per device during training
-        per_device_eval_batch_size=64,   # batch size for evaluation
+        per_device_eval_batch_size=16,   # batch size for evaluation  (was 64)
         warmup_steps=500,                # number of warmup steps for learning rate scheduler
         weight_decay=0.01,               # strength of weight decay
         logging_dir='./logs',            # directory for storing logs
-        logging_steps=10,
+        logging_steps=500,
         save_total_limit=2,
         prediction_loss_only=True,
         evaluation_strategy="steps",
-        eval_accumulation_steps=5000
+        eval_steps=100
     )
 
 
@@ -243,7 +294,7 @@ def train():
         train_dataset=train_dataset,
         data_collator=data_collator,
         # ,         # training dataset
-        eval_dataset=val_dataset             # evaluation dataset
+        eval_dataset=val_dataset,             # evaluation dataset
     )
 
     trainer.train()

@@ -1,5 +1,6 @@
 import rl_utils
 from resolution_prebuffer import res_prebuffer, gnn_model_zero
+
 import numpy as np
 #from rl_dataset import simple_graph_dataset
 #from spektral.data import DisjointLoader
@@ -17,6 +18,7 @@ class rpb_dqn(res_prebuffer):
                  seed=0, gamma=0.99, epsilon=1.0, eps_min=0.1,
                  eps_max=1.0, batch_size=16, starting_episode=0, use_state = False,
                  done_reward=0, debugging=False, pytorch_backend=False):
+
         """
         Params:
           max_reward:  maximum reward for an episode; used to scale rewards for Q-function
