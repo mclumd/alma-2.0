@@ -59,7 +59,7 @@ class trans_dqn(nn.Module):
     """  This will essentialy wrap the BERT model with a head that outputs a Q-value """
 
     
-    def __init__(self, debugging=False,base_model="rl_transformer/base_model/checkpoint-2400000", tokenizer_prefix="rl_transformer/simple_rl1", hidden_size=512):
+    def __init__(self, debugging=False,base_model="rl_transformer/base_model/2hidden_layers_4attention_heads/checkpoint-2400000", tokenizer_prefix="rl_transformer/simple_rl1", hidden_size=512):
         super().__init__()
         self.debugging = debugging
         self.base_model_dir = base_model
@@ -83,7 +83,7 @@ class trans_dqn(nn.Module):
         self.LayerNorm1 = torch.nn.LayerNorm(hidden_size)
         self.qvalue = torch.nn.Linear(in_features = hidden_size,
                                       out_features = 1)
-        self.q_activation = torch.nn.ReLU()
+        self.q_activation = torch.nn.Sigmoid()
 
         self.head_layers = [self.pooler,
                             self.qhead0, self.activation0, self.LayerNorm0,
