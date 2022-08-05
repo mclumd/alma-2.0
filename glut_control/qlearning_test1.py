@@ -102,20 +102,20 @@ def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000,
         #del alma
         reload(alma)
         alma_inst,res = alma.init(1,kb, '0', 1, 1000, [], [])
-        print("Pre-collect")
+        # print("Pre-collect")
         if "cuda" in device:
             print_gpu_mem()
         rl_utils.collect_episode(network, replay_buffer, alma_inst, num_steps)
         alma.halt(alma_inst)
-        print("Post-collect")
+        #print("Post-collect")
         if "cuda" in device:
             print_gpu_mem()
         if (episode % train_interval == 0) and (episode > 0):
-            print("Pre-train")
+            #print("Pre-train")
             if "cuda" in device:
                 print_gpu_mem()
             rl_utils.replay_train(network, replay_buffer, exhaustive_training)
-            print("Post-train")
+            #print("Post-train")
             if "cuda" in device:
                 print_gpu_mem()
             if episode % update_target_network_interval == 0:
