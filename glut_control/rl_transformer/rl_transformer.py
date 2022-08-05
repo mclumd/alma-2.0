@@ -13,7 +13,8 @@ class rl_transformer(res_prebuffer):
                  debug=True, 
                  seed=0, gamma=0.99, epsilon=1.0, eps_min=0.1,
                  eps_max=1.0, batch_size=16, starting_episode=0, use_state = True,
-                 done_reward=0, debugging=False):
+                 done_reward=0, debugging=False,
+                 finetune=False):
         """
         Params:
           max_reward:  maximum reward for an episode; used to scale rewards for Q-function
@@ -40,7 +41,14 @@ class rl_transformer(res_prebuffer):
         #self.bellman_loss = keras.losses.MeanSquaredError()
         self.bellman_loss = torch.nn.MSELoss()
 
-        self.optimizer = torch.optim.Adam(self.current_model.trainable_parameters())  #TODO: Be sure to update optimizer when switching current and target
+        if finetune:
+            params = self.current_model.parameters()
+            for p in params:
+                p.requires_grad = True
+        else:
+            params = self.current_model.trainable_parameters()
+        self.current_model.train()
+        self.optimizer = torch.optim.Adam(params)  #TODO: Be sure to update optimizer when switching current and target
 
         self.max_reward = max_reward
         #self.acc_fn = CategoricalAccuracy()

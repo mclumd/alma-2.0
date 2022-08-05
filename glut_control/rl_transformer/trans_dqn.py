@@ -98,6 +98,10 @@ class trans_dqn(nn.Module):
             res += list(layer.parameters())
         return res
 
+    def train(self):
+        for p in self.trainable_parameters():
+            p.requires_grad = True
+
     def forward(self, inp):
         base_out = self.base_model(**self.tokenizer(inp, return_tensors="pt"))
         x0 = self.pooler(base_out.last_hidden_state)
