@@ -38,9 +38,9 @@ def res_task_lits(lit_str):
     L = lit_str.split('\n')[:-1]
     return [ x.split('\t') for x in L]
 
-def print_gpu_mem():
-    print(tf.config.experimental.get_memory_info('GPU:0'))
-    print(tf.config.experimental.get_memory_info('GPU:1'))
+def print_gpu_mem(pytorch=False):
+    # This should be handled by wandb
+    pass
 #@profile
 def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000, train_interval=500,
           update_target_network_interval=10000, debug_level=0, gnn_nodes = 20,
@@ -82,7 +82,8 @@ def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000,
     elif transformer:
         network = rl_transformer(max_reward=100,
                                  reward_fn=reward_fn,
-                                 debugging=debugging)
+                                 debugging=debugging,
+                                 device=device)
     else:
         network = rpb_dqn(100, reward_fn,
                           subjects, [], use_gnn=use_gnn,
@@ -191,9 +192,11 @@ def main():
     args = parser.parse_args()
     print("Running with arguments ", args)
 
+    pytorch_device = "cuda"
     if args.cpu_only:
         # TODO:  This may need to be done before any tensorflow imports
         os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+        pytorch_device = "cpu"
     import resolution_prebuffer as rpb 
 
     global use_tensorflow
@@ -246,7 +249,7 @@ def main():
                             subjects=subjects,
                             debugging=args.debugging,
                             testing_interval=args.testing_interval,
-                            transformer=args.transformer
+                            transformer=args.transformer, device=pytorch_device
                             )
         else:
             network = train(args.episode_length,
@@ -261,7 +264,7 @@ def main():
                             subjects=subjects,
                             prior_network=network,
                             testing_interval=args.testing_interval,
-                            transformer=args.transformer)
+                            transformer=args.transformer, device=pytorch_device)
         use_net = True
     
     if args.random_network:

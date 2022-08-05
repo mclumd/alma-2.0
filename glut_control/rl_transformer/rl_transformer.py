@@ -14,13 +14,14 @@ class rl_transformer(res_prebuffer):
                  seed=0, gamma=0.99, epsilon=1.0, eps_min=0.1,
                  eps_max=1.0, batch_size=16, starting_episode=0, use_state = True,
                  done_reward=0, debugging=False,
-                 finetune=True):
+                 finetune=True, device="cpu"):
         """
         Params:
           max_reward:  maximum reward for an episode; used to scale rewards for Q-function
 
         """
         #super().__init__([], [], False, debug, [], ())
+        self.device = device
         self.seed=seed
         self.gamma=gamma
         self.epsilon=epsilon
@@ -31,11 +32,12 @@ class rl_transformer(res_prebuffer):
 
         self.batch_size = batch_size
         self.debugging=debugging
-
         
         self.log_dir = "logs/fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-        self.current_model = trans_dqn(self.debugging)
-        self.target_model =  trans_dqn(self.debugging)
+        self.current_model = trans_dqn(self.debugging, device=device)
+        self.target_model =  trans_dqn(self.debugging, device=device)
+        self.current_model.to(device)
+        self.target_model.to(device)
 
         #self.loss_fn = keras.losses.Huber()
         #self.bellman_loss = keras.losses.MeanSquaredError()
@@ -51,7 +53,6 @@ class rl_transformer(res_prebuffer):
         self.optimizer = torch.optim.Adam(self.params)  # TODO: Be sure to update optimizer when switching current and target
         self.max_reward = max_reward
         #self.acc_fn = CategoricalAccuracy()
-
 
         if self.debugging:
             pass
@@ -75,6 +76,7 @@ class rl_transformer(res_prebuffer):
     def preprocess(self, list_of_states, list_of_actions):
         texts =  [kb_action_to_text(alma_collection_to_strings(list_of_states[0]),
                                     alma_collection_to_strings(action)) for action in list_of_actions]
+        print("Preprocess:", texts)
         return texts
 
 
@@ -83,16 +85,18 @@ class rl_transformer(res_prebuffer):
         """
         inputs is either a list of actions (pre-inferences) or else a pair (state,action).
         In the latter case, the state is repeated, once for each action.
+
+        This is only used in evalutation and episode collection; we'll make sure the returned preditions are numpy arrays.
         """
         inputs_text = self.preprocess(inputs[0], inputs[1])
 
 
         # TODO:  Figure out the exact form here; BERT model won't take strings as input, maybe result of preprocessing?   
         model = self.current_model if current_model else self.target_model
-        preds = [ self.current_model(inp) for inp in inputs_text]
+        preds = [ self.current_model(inp).to(self.device) for inp in inputs_text]
         preds = torch.tensor(preds)
 
-        return preds
+        return preds.detach().numpy()
 
     #@profile
     def fit(self, batch, verbose=True):
@@ -101,8 +105,9 @@ class rl_transformer(res_prebuffer):
         """
         inputs_text = self.preprocess(batch.states0, batch.actions)
         batch_size = len(inputs_text)
-        future_rewards = [self.target_model(inp) for inp in inputs_text]
-        updated_q_values = torch.tensor(batch.rewards) + self.gamma * torch.tensor(future_rewards)
+        #future_rewards = [self.target_model(inp) for inp in inputs_text]
+        future_rewards = self.target_model(inputs_text)
+        updated_q_values = torch.tensor(batch.rewards).to(self.device) + self.gamma * future_rewards
 
         #for p in self.current_model.parameters():
         #    p.grad = None
