@@ -1,5 +1,5 @@
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+#os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 
 import transformers
@@ -103,7 +103,7 @@ class trans_dqn(nn.Module):
             p.requires_grad = True
 
     def forward(self, inp):
-        base_out = self.base_model(**self.tokenizer(inp, return_tensors="pt"))
+        base_out = self.base_model(**self.tokenizer(inp, return_tensors="pt", padding=True, truncation=True))
         x0 = self.pooler(base_out.last_hidden_state)
         y0 = self.activation0(self.qhead0(x0))
         l0 = self.LayerNorm0(y0)
