@@ -1,5 +1,5 @@
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+#os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 
 import transformers
@@ -59,7 +59,7 @@ class trans_dqn(nn.Module):
     """  This will essentialy wrap the BERT model with a head that outputs a Q-value """
 
     
-    def __init__(self, debugging=False,base_model="rl_transformer/base_model/checkpoint-2400000", tokenizer_prefix="rl_transformer/simple_rl1", hidden_size=512):
+    def __init__(self, debugging=False,base_model="rl_transformer/base_model/2hidden_layers_4attention_heads/checkpoint-2400000", tokenizer_prefix="rl_transformer/simple_rl1", hidden_size=512):
         super().__init__()
         self.debugging = debugging
         self.base_model_dir = base_model
@@ -83,7 +83,7 @@ class trans_dqn(nn.Module):
         self.LayerNorm1 = torch.nn.LayerNorm(hidden_size)
         self.qvalue = torch.nn.Linear(in_features = hidden_size,
                                       out_features = 1)
-        self.q_activation = torch.nn.ReLU()
+        self.q_activation = torch.nn.Sigmoid()
 
         self.head_layers = [self.pooler,
                             self.qhead0, self.activation0, self.LayerNorm0,
@@ -98,8 +98,12 @@ class trans_dqn(nn.Module):
             res += list(layer.parameters())
         return res
 
+    def train(self):
+        for p in self.trainable_parameters():
+            p.requires_grad = True
+
     def forward(self, inp):
-        base_out = self.base_model(**self.tokenizer(inp, return_tensors="pt"))
+        base_out = self.base_model(**self.tokenizer(inp, return_tensors="pt", padding=True, truncation=True))
         x0 = self.pooler(base_out.last_hidden_state)
         y0 = self.activation0(self.qhead0(x0))
         l0 = self.LayerNorm0(y0)

@@ -13,7 +13,8 @@ class rl_transformer(res_prebuffer):
                  debug=True, 
                  seed=0, gamma=0.99, epsilon=1.0, eps_min=0.1,
                  eps_max=1.0, batch_size=16, starting_episode=0, use_state = True,
-                 done_reward=0, debugging=False):
+                 done_reward=0, debugging=False,
+                 finetune=True):
         """
         Params:
           max_reward:  maximum reward for an episode; used to scale rewards for Q-function
@@ -40,8 +41,14 @@ class rl_transformer(res_prebuffer):
         #self.bellman_loss = keras.losses.MeanSquaredError()
         self.bellman_loss = torch.nn.MSELoss()
 
-        self.optimizer = torch.optim.Adam(self.current_model.trainable_parameters())  #TODO: Be sure to update optimizer when switching current and target
-
+        if finetune:
+            self.params = list(self.current_model.parameters())
+            for p in self.params:
+                p.requires_grad = True
+        else:
+            self.params = self.current_model.trainable_parameters()
+        self.current_model.train()
+        self.optimizer = torch.optim.Adam(self.params)  # TODO: Be sure to update optimizer when switching current and target
         self.max_reward = max_reward
         #self.acc_fn = CategoricalAccuracy()
 
@@ -100,9 +107,9 @@ class rl_transformer(res_prebuffer):
         #for p in self.current_model.parameters():
         #    p.grad = None
         self.optimizer.zero_grad(set_to_none=True)
-        predictions = torch.tensor([self.current_model.forward(inp) for inp in inputs_text],
-                                   requires_grad=True)
-        loss = self.bellman_loss(predictions, updated_q_values)
+        #predictions = torch.tensor([self.current_model(inp) for inp in inputs_text],                                 requires_grad=True)
+        predictions = self.current_model(inputs_text)
+        loss = self.bellman_loss(predictions, updated_q_values.unsqueeze(1))
         loss.backward()
         self.optimizer.step()
         #return self.current_model.fit(inputs_text, updated_q_values, batch_size)  # This should just be a step of optimizaiton; need to redo for pytorch though.
