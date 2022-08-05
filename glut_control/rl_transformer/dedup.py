@@ -38,5 +38,5 @@ def dedup(primary_fname, secondary_fname):
         if linenum not in skiplines:
             print(line, end="")
 
-dedup("/tmp/primary.txt", "/tmp/secondary.txt")
+dedup("/tmp/off_data_tds.txt", "/tmp/off_data_tds_val.txt")
 

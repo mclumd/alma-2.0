@@ -9,6 +9,7 @@ import numpy as np
 import os
 import pickle
 import random
+import argparse
 
 import torch
 from tokenizers import ByteLevelBPETokenizer, BertWordPieceTokenizer, AddedToken
@@ -176,16 +177,18 @@ def preprocess_datafiles(input_file_list, output_file, val_file, val_threshold =
                             handle.write(form + "\n")
                         #of.write("</traj>\n")
                         handle.write("\n")
-def train():
+def train(args):
     import glob
     roberta = True
     
     src_files = glob.glob("/tmp/off*pkl")
-    if not os.path.exists("/tmp/off_data_tds.txt"):
+    if not os.path.exists("/tmp/off_data_tds.txt") or args.preprocess_only:
         preprocess_datafiles(src_files, "/tmp/off_data_tds.txt", "/tmp/off_data_tds_val.txt")
         tokenizer = train_tokenizer("/tmp/off_data_tds.txt", roberta)
     else:
         train_tokenizer("/tmp/off_data_tds.txt", roberta)
+    if args.preprocess_only:
+        return
 
     if roberta:
         # SPECIAL_TOKENS = []
@@ -221,7 +224,7 @@ def train():
 
         model_config = RobertaConfig(
             vocab_size=tokenizer.vocab_size,
-            num_hidden_layers = 2, num_attention_heads=4
+            num_hidden_layers = 4, num_attention_heads=4
         )
         model = RobertaForMaskedLM(model_config)
         model.cuda()
@@ -282,9 +285,12 @@ def train():
         logging_dir='./logs',            # directory for storing logs
         logging_steps=500,
         save_total_limit=2,
+        load_best_model_at_end=True,
         prediction_loss_only=True,
         evaluation_strategy="steps",
-        eval_steps=100
+        eval_steps=100,
+        save_stratgey="steps",
+        save_steps=5000
     )
 
 
@@ -307,9 +313,32 @@ def train():
 
 def test_encoding():
     tokenizer = RobertaTokenizer("./simple_rl1-vocab.json","./simple_rl1-merges.txt",model_max_length=512)
-    rmodel = RobertaForMaskedLM.from_pretrained("./results/checkpoint-1634000")
-    tokenizer.encode("<mask>")
+    tokenizer.add_special_tokens( {
+        'mask_token': '<mask>',
+        'sep_token': '</s>',
+        'pad_token': '<pad>',
+        'cls_token': '<s>',
+        'unk_token': '<unk>'
+    })
+    print(tokenizer.encode("<mask>"))
+    rmodel = RobertaForMaskedLM.from_pretrained("./base_model/checkpoint-4347000")
+
+    fmp0 = pipeline("fill-mask",
+                   model="./base_model/checkpoint-2400000",
+                   tokenizer=tokenizer)
+    print(fmp0("left(<mask>)."))
+
+    fmp1 = pipeline("fill-mask",
+                   model="./base_model/checkpoint-4347000",
+                   tokenizer=tokenizer)
+    print(fmp1("left(<mask>)."))
+
 if __name__ == "__main__":
-    train()
+    parser = argparse.ArgumentParser(description="Run test with specified parameters.")
+    parser.add_argument("--preprocess_only", action='store_true')
+    args = parser.parse_args()
+    print("Running with arguments ", args)
+          
+    train(args)
     #test_encoding()
 
