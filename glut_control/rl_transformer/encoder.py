@@ -22,7 +22,8 @@ from transformers import DataCollatorForLanguageModeling, TextDatasetForNextSent
 from transformers import pipeline
 
 class QL4Dataset(Dataset):
-    def __init__(self, src_files, tokenizer=None, train: bool = False, objective: str = None):
+    def __init__(self, src_files, tokenizer=None, train: bool = False, objective: str = None, device: str = "cuda"):
+        self.device = device
         if train:
             assert(objective in ["mlm", "nsp"])
         if tokenizer is None:
@@ -75,7 +76,7 @@ class QL4Dataset(Dataset):
                 if line == "":
                     continue
                 else:
-                    tokenized_line = self.tokenizer(line, max_length=510, truncation=True)
+                    tokenized_line = self.tokenizer(line, max_length=512, truncation=True)
                     self.examples += [tokenized_line]
                     total_lines += 1
                     if len(tokenized_line) > 500:
@@ -92,11 +93,11 @@ class QL4Dataset(Dataset):
     def __getitem__(self, i):
         # We’ll pad at the batch level.
         #return torch.tensor(self.examples[i])
-        return self.examples[i]
+        return self.examples[i].to(self.device)
 
 
 
-def train_tokenizer(datafiles, roberta=False):
+def train_tokenizer(datafiles, roberta=False, tok_folder="."):
     if roberta:
         tokenizer = ByteLevelBPETokenizer()
         # Customize training
@@ -106,7 +107,7 @@ def train_tokenizer(datafiles, roberta=False):
             "<unk>",
             "<mask>",
         ])
-        tokenizer.save_model(".", "simple_rl1")
+        tokenizer.save_model(tok_folder, "simple_rl1")
     else:
         tokenizer = BertWordPieceTokenizer(
             clean_text=True,
@@ -127,7 +128,7 @@ def train_tokenizer(datafiles, roberta=False):
             limit_alphabet=1000,
             wordpieces_prefix="##",
         )
-        tokenizer.save_model(".", "bert_rl1")
+        tokenizer.save_model(tok_folder, "bert_rl1")
         
     return tokenizer
 
@@ -157,7 +158,7 @@ def test_string(string, model, tokenizer):
     print("L=", L)
     return tokenizer.decode(L)
 
-def preprocess_datafiles(input_file_list, output_file, val_file, val_threshold = 0.01):
+def preprocess_datafiles(input_file_list, output_file, val_file, val_threshold = 0.01, use_now=False):
     with open(val_file, "w") as vf:
         with open(output_file, "w") as of:
             for input_file in input_file_list:
@@ -166,27 +167,29 @@ def preprocess_datafiles(input_file_list, output_file, val_file, val_threshold =
                     data = pickle.load(f)
                     for traj in data:
                         handle = vf if random.random() < val_threshold else of
-                        #of.write("<cls>\n")
                         for kb, action in zip(traj['kb'], traj['actions']):
-                            kb_form = "{}".format(".".join([
-                                c for c in kb if "time" not in c and "now" not in c and "agentname" not in c]))
+                            if use_now:
+                                kbitems = [c for c in kb if "time" not in c and "wallnow" not in c and "agentname" not in c]
+                            else:
+                                kbitems = [c for c in kb if "time" not in c and "now" not in c and "agentname" not in c]
+                            kb_form = "{}".format(".".join(kbitems))
                             action_form = action[0] + ";" + action[1]
-                            #form = kb_form + "</kb>" + action_form + "</sep>"
                             form = kb_form + "</kb>" + action_form
                             print("Found: ", form)
                             handle.write(form + "\n")
-                        #of.write("</traj>\n")
                         handle.write("\n")
 def train(args):
     import glob
     roberta = True
     
     src_files = glob.glob("/tmp/off*pkl")
-    if not os.path.exists("/tmp/off_data_tds.txt") or args.preprocess_only:
-        preprocess_datafiles(src_files, "/tmp/off_data_tds.txt", "/tmp/off_data_tds_val.txt")
-        tokenizer = train_tokenizer("/tmp/off_data_tds.txt", roberta)
+    main_datafile = os.path.join("/tmp/", args.data_prefix + ".txt")
+    val_datafile = os.path.join("/tmp/", args.data_prefix + "_val.txt")
+    if not os.path.exists(main_datafile) or args.preprocess_only:
+        preprocess_datafiles(src_files, main_datafile, val_datafile, use_now=args.use_now)
+        tokenizer = train_tokenizer(main_datafile, roberta, args.tokenizer_folder)
     else:
-        train_tokenizer("/tmp/off_data_tds.txt", roberta)
+        train_tokenizer(main_datafile, roberta, args.tokenizer_folder)
     if args.preprocess_only:
         return
 
@@ -200,7 +203,9 @@ def train(args):
         # SPECIAL_TOKENS.append(AddedToken("<unk>"))
         # SPECIAL_TOKENS.append(AddedToken("<mask>", lstrip=False))
 
-        tokenizer = RobertaTokenizer("./simple_rl1-vocab.json","./simple_rl1-merges.txt",model_max_length=512)
+        tokenizer = RobertaTokenizer(os.path.join(args.tokenizer_folder, "simple_rl1-vocab.json"),
+                                     os.path.join(args.tokenizer_folder,  "simple_rl1-merges.txt"),
+                                     model_max_length=512)
 
         #tokenizer = ByteLevelBPETokenizer("./simple_rl1-vocab.json","./simple_rl1-merges.txt")
         #tokenizer.add_special_tokens(SPECIAL_TOKENS)
@@ -224,12 +229,14 @@ def train(args):
 
         model_config = RobertaConfig(
             vocab_size=tokenizer.vocab_size,
-            num_hidden_layers = 4, num_attention_heads=4
+            num_hidden_layers = args.num_hidden_layers, num_attention_heads=4
         )
         model = RobertaForMaskedLM(model_config)
-        model.cuda()
-        train_dataset = QL4Dataset(["/tmp/off_data_tds.txt"], tokenizer=tokenizer, train=True, objective="mlm")
-        val_dataset = QL4Dataset(["/tmp/off_data_tds_val.txt"], tokenizer=tokenizer, train=False, objective="mlm")
+        model.to(args.device)
+        from dedup import dedup
+        dedup(main_datafile, val_datafile, replace=True)
+        train_dataset = QL4Dataset([main_datafile], tokenizer=tokenizer, train=True, objective="mlm", device=args.device)
+        val_dataset = QL4Dataset([val_datafile], tokenizer=tokenizer, train=False, objective="mlm", device=args.device)
     else:
         SPECIAL_TOKENS = []
         SPECIAL_TOKENS.append(AddedToken("<s>"))
@@ -289,7 +296,7 @@ def train(args):
         prediction_loss_only=True,
         evaluation_strategy="steps",
         eval_steps=100,
-        save_stratgey="steps",
+        save_strategy="steps",
         save_steps=5000
     )
 
@@ -336,6 +343,12 @@ def test_encoding():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run test with specified parameters.")
     parser.add_argument("--preprocess_only", action='store_true')
+    parser.add_argument("--data_prefix", type=str, default="off_data_tds")
+    parser.add_argument("--result_folder", type=str, default="results")
+    parser.add_argument("--tokenizer_folder", type=str, default="rl_tokenizer")
+    parser.add_argument("--num_hidden_layers", type=int, default=4)
+    parser.add_argument("--use_now", action='store_true')
+    parser.add_argument("--device", type=str, default="cuda")
     args = parser.parse_args()
     print("Running with arguments ", args)
           

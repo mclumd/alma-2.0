@@ -4,9 +4,15 @@ secondary file is likely to be significantly shorter, we'll do our
 preprocessing on it.
 """
 
-def dedup(primary_fname, secondary_fname):
+import argparse
+import tempfile
+import os
+
+def dedup(primary_fname, secondary_fname, replace=False):
     pfile = open(primary_fname, "rt")
     sfile = open(secondary_fname, "rt")
+    if replace:
+        tmpfile = tempfile.NamedTemporaryFile(mode="wt", delete=False)
 
     slines = set()
     sline_locations = {}
@@ -36,7 +42,20 @@ def dedup(primary_fname, secondary_fname):
         else:
             prev_newline = False
         if linenum not in skiplines:
-            print(line, end="")
+            if replace:
+                tmpfile.write(line)
+            else:
+                print(line, end="")
+    pfile.close()
+    sfile.close()
+    if replace:
+        tname = tmpfile.name
+        tmpfile.close()
+        os.rename(tname, secondary_fname)
 
-dedup("/tmp/off_data_tds.txt", "/tmp/off_data_tds_val.txt")
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Remove duplicate lines from a file")
+    parser.add_argument("--primary_fname", default="/tmp/off_data_tds.txt", help="The primary file")
+    parser.add_argument("--secondary_fname", default="/tmp/off_data_tds_val.txt", help="The secondary file")
+    dedup(args.primary_fname, args.secondary_fname)
 
