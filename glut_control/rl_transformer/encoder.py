@@ -21,9 +21,12 @@ from transformers import RobertaConfig, RobertaForMaskedLM, RobertaTokenizer
 from transformers import DataCollatorForLanguageModeling, TextDatasetForNextSentencePrediction, TextDataset
 from transformers import pipeline
 
+from dedup import dedup
+
 class QL4Dataset(Dataset):
     def __init__(self, src_files, tokenizer=None, train: bool = False, objective: str = None, device: str = "cuda"):
         self.device = device
+        print("Q$LDataset with src {} and objective {}".format(src_files, objective))
         if train:
             assert(objective in ["mlm", "nsp"])
         if tokenizer is None:
@@ -34,9 +37,14 @@ class QL4Dataset(Dataset):
         else:
             self.tokenizer = tokenizer
         if objective == "nsp":
+            print("loading raw nsp dataset")
             self.get_nsp_examples(src_files)
-        else:
             self.get_mlm_examples(src_files)
+            print("finish raw loading")
+        else:
+            print("loading raw dataset")
+            self.get_mlm_examples(src_files)
+            print("finish raw loading")
 
 
 
@@ -76,6 +84,7 @@ class QL4Dataset(Dataset):
                 if line == "":
                     continue
                 else:
+                    #self.examples += [line]
                     tokenized_line = self.tokenizer(line, max_length=512, truncation=True)
                     self.examples += [tokenized_line]
                     total_lines += 1
@@ -93,7 +102,8 @@ class QL4Dataset(Dataset):
     def __getitem__(self, i):
         # We’ll pad at the batch level.
         #return torch.tensor(self.examples[i])
-        return self.examples[i].to(self.device)
+        return self.examples[i]
+        #return self.tokenizer(examples[i], max_length=512, truncation=True)
 
 
 
@@ -187,9 +197,10 @@ def train(args):
     val_datafile = os.path.join("/tmp/", args.data_prefix + "_val.txt")
     if not os.path.exists(main_datafile) or args.preprocess_only:
         preprocess_datafiles(src_files, main_datafile, val_datafile, use_now=args.use_now)
+        dedup(main_datafile, val_datafile, replace=True)
         tokenizer = train_tokenizer(main_datafile, roberta, args.tokenizer_folder)
-    else:
-        train_tokenizer(main_datafile, roberta, args.tokenizer_folder)
+    #else:
+    #    train_tokenizer(main_datafile, roberta, args.tokenizer_folder)
     if args.preprocess_only:
         return
 
@@ -233,8 +244,7 @@ def train(args):
         )
         model = RobertaForMaskedLM(model_config)
         model.to(args.device)
-        from dedup import dedup
-        dedup(main_datafile, val_datafile, replace=True)
+
         train_dataset = QL4Dataset([main_datafile], tokenizer=tokenizer, train=True, objective="mlm", device=args.device)
         val_dataset = QL4Dataset([val_datafile], tokenizer=tokenizer, train=False, objective="mlm", device=args.device)
     else:
