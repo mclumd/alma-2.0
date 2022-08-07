@@ -84,16 +84,16 @@ class QL4Dataset(Dataset):
                 if line == "":
                     continue
                 else:
-                    #self.examples += [line]
-                    tokenized_line = self.tokenizer(line, max_length=512, truncation=True)
-                    self.examples += [tokenized_line]
-                    total_lines += 1
-                    if len(tokenized_line) > 500:
-                        print("🔥", line)
-                        print("🔥", tokenized_line)
-                        print("🔥", len(tokenized_line))
-                        truncated_lines += 1
-        print("Truncated {} lines out of {} total; or {} percent".format(truncated_lines, total_lines, truncated_lines*100/total_lines))
+                    self.examples += [line]
+                    # tokenized_line = self.tokenizer(line, max_length=512, truncation=True)
+                    # self.examples += [tokenized_line]
+                    # total_lines += 1
+                    # if len(tokenized_line) > 500:
+                    #     print("🔥", line)
+                    #     print("🔥", tokenized_line)
+                    #     print("🔥", len(tokenized_line))
+                    #     truncated_lines += 1
+        #print("Truncated {} lines out of {} total; or {} percent".format(truncated_lines, total_lines, truncated_lines*100/total_lines))
 
 
     def __len__(self):
@@ -102,8 +102,8 @@ class QL4Dataset(Dataset):
     def __getitem__(self, i):
         # We’ll pad at the batch level.
         #return torch.tensor(self.examples[i])
-        return self.examples[i]
-        #return self.tokenizer(examples[i], max_length=512, truncation=True)
+        #return self.examples[i]
+        return self.tokenizer(examples[i], max_length=512, truncation=True)
 
 
 
