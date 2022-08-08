@@ -14,7 +14,8 @@ class rl_transformer(res_prebuffer):
                  seed=0, gamma=0.99, epsilon=1.0, eps_min=0.1,
                  eps_max=1.0, batch_size=16, starting_episode=0, use_state = True,
                  done_reward=0, debugging=False,
-                 finetune=True, device="cpu"):
+                 finetune=True, device="cpu",
+                 dqn_base="rl_transformer/base_model/2hidden_layers_4attention_heads/checkpoint-2400000"):
         """
         Params:
           max_reward:  maximum reward for an episode; used to scale rewards for Q-function
@@ -34,8 +35,8 @@ class rl_transformer(res_prebuffer):
         self.debugging=debugging
         
         self.log_dir = "logs/fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-        self.current_model = trans_dqn(self.debugging, device=device)
-        self.target_model =  trans_dqn(self.debugging, device=device)
+        self.current_model = trans_dqn(self.debugging, device=device, base_model=dqn_base)
+        self.target_model =  trans_dqn(self.debugging, device=device, base_model=dqn_base)
         self.current_model.to(device)
         self.target_model.to(device)
 
