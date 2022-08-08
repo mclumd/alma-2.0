@@ -2,11 +2,14 @@ import sys
 sys.path.append('..')
 import os, pickle
 import datetime
+import wandb
+
 import torch
 from alma_utils import kb_action_to_text, alma_collection_to_strings
 
 from resolution_prebuffer import res_prebuffer
 from rl_transformer.trans_dqn import trans_dqn
+
 
 class rl_transformer(res_prebuffer):
     def __init__(self, max_reward, reward_fn,
@@ -15,13 +18,15 @@ class rl_transformer(res_prebuffer):
                  eps_max=1.0, batch_size=16, starting_episode=0, use_state = True,
                  done_reward=0, debugging=False,
                  finetune=True, device="cpu",
-                 dqn_base="rl_transformer/base_model/2hidden_layers_4attention_heads/checkpoint-2400000"):
+                 dqn_base="rl_transformer/base_model/2hidden_layers_4attention_heads/checkpoint-2400000",
+                 use_now=False):
         """
         Params:
           max_reward:  maximum reward for an episode; used to scale rewards for Q-function
 
         """
         #super().__init__([], [], False, debug, [], ())
+        self.use_now = use_now
         self.device = device
         self.seed=seed
         self.gamma=gamma
@@ -76,7 +81,7 @@ class rl_transformer(res_prebuffer):
 
     def preprocess(self, list_of_states, list_of_actions):
         texts =  [kb_action_to_text(alma_collection_to_strings(list_of_states[0]),
-                                    alma_collection_to_strings(action)) for action in list_of_actions]
+                                    alma_collection_to_strings(action), self.use_now) for action in list_of_actions]
         print("Preprocess:", texts)
         return texts
 
@@ -119,6 +124,7 @@ class rl_transformer(res_prebuffer):
         loss.backward()
         self.optimizer.step()
         #return self.current_model.fit(inputs_text, updated_q_values, batch_size)  # This should just be a step of optimizaiton; need to redo for pytorch though.
+        wandb.log({"loss": loss.item()})
         return loss
 
     def train_on_given_batch(self, inputs, target):

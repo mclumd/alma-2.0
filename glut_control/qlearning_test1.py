@@ -25,6 +25,7 @@ import rl_transformer
 import rl_transformer.rl_transformer
 from rl_transformer.rl_transformer import rl_transformer
 
+import wandb
 
 
 test_params = {
@@ -47,7 +48,7 @@ def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000,
           exhaustive_training=False, kb='/home/justin/alma-2.0/glut_control/qlearning2.pl',
           subjects = ['a', 'f', 'g', 'l', 'now'], prior_network = None, debugging=False,
           testing_interval=math.inf, tboard = False, transformer=False,
-          device="cpu"):
+          device="cpu", use_now=False):
     """
     Train Q-network on the initial qlearning task.   
 
@@ -84,7 +85,8 @@ def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000,
                                  reward_fn=reward_fn,
                                  debugging=debugging,
                                  device=device,
-                                 dqn_base="rl_transformer/base_model/4h4a_with_now/checkpoint-90000/")
+                                 dqn_base="rl_transformer/base_model/4h4a_with_now/checkpoint-105000/",
+                                 use_now = use_now)
     else:
         network = rpb_dqn(100, reward_fn,
                           subjects, [], use_gnn=use_gnn,
@@ -147,6 +149,9 @@ def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000,
                 with reward_summary_writer.as_default():
                     for (i, rew) in enumerate(res['rewards']):
                         tf.summary.scalar("reward{}".format(i), rew, step=episode)
+            else:
+                for (i, rew) in enumerate(res['rewards']):
+                    wandb.log({"reward{}".format(i): rew})
 
 
         if debug_level > 2:
@@ -189,6 +194,7 @@ def main():
     parser.add_argument("--debugging", action='store_true')
     parser.add_argument("--pytorch", help="use pytorch as backend (default is tensorflow)", action='store_true')
     parser.add_argument("--transformer", help="use BERT-like transformer", action="store_true")
+    parser.add_argument("--use_now", help="use now() sentences from KB", action="store_true")
 
     args = parser.parse_args()
     print("Running with arguments ", args)
@@ -205,6 +211,7 @@ def main():
     use_pytorch = args.pytorch
     use_tensorflow = not use_pytorch
     
+    wandb.init(project='qlearning', entity='jdbrody')
 
     if use_tensorflow:
         import tensorflow as tf
@@ -250,8 +257,9 @@ def main():
                             subjects=subjects,
                             debugging=args.debugging,
                             testing_interval=args.testing_interval,
-                            transformer=args.transformer, device=pytorch_device
-                            )
+                            transformer=args.transformer, device=pytorch_device,
+                            use_now=args.use_now
+                        )
         else:
             network = train(args.episode_length,
                             args.train,
