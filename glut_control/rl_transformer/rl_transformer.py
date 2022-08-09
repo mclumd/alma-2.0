@@ -93,7 +93,7 @@ class rl_transformer(res_prebuffer):
         # we have to get max_a Q(s,a).
 
         return [self.preprocess( [kb]*len(actions), actions) for kb, actions in zip(list_of_states, list_of_actions)]
-    
+
     def get_qvalues(self, inputs, current_model=True, training=False, numpy=True):
         """
         inputs is either a list of actions (pre-inferences) or else a pair (state,action).
@@ -111,9 +111,10 @@ class rl_transformer(res_prebuffer):
         preds = torch.tensor(preds)
 
         return preds.detach().numpy()
-    
 
-        
+    def get_priorities(self, inputs, current_model=True, training=False, numpy=True):
+        return self.get_qvalues(inputs, current_model, training, numpy)
+
     #@profile
     def fit(self, batch, verbose=True):
         """ A batch consists of 4 lists, each of lenth batch_size:

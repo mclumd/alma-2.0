@@ -85,7 +85,7 @@ def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000,
                                  reward_fn=reward_fn,
                                  debugging=debugging,
                                  device=device,
-                                 dqn_base="rl_transformer/base_model/4h4a_with_now/checkpoint-115000/",
+                                 dqn_base="rl_transformer/base_model/4h4a_with_now/checkpoint-105000/",
                                  use_now = use_now)
     else:
         network = rpb_dqn(100, reward_fn,
