@@ -120,7 +120,7 @@ class rl_transformer(res_prebuffer):
         """ A batch consists of 4 lists, each of lenth batch_size:
             actions, rewards, states0, states1
         """
-        inputs_text = self.preprocess_multiple_actions(batch.states1, batch.potential_actions)
+        inputs_text = self.multi_preprocess(batch.states1, batch.potential_actions)
         batch_size = len(inputs_text)
         #future_rewards = [self.target_model(inp) for inp in inputs_text]
         future_rewards = self.target_model(inputs_text)
