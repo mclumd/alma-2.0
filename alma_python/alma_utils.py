@@ -1,5 +1,6 @@
 import alma
 import math
+import numpy as np
 
 
 def prebuf_print(alma_inst, print_size=math.inf):
@@ -93,5 +94,3 @@ def classical_step(alma_inst):
     """
     alma.prb_to_res_task(alma_inst, 2.0)
     alma.step(alma_inst)
-
-

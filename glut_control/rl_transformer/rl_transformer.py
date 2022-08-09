@@ -81,20 +81,28 @@ class rl_transformer(res_prebuffer):
 
     def preprocess(self, list_of_states, list_of_actions):
         texts =  [kb_action_to_text(alma_collection_to_strings(list_of_states[0]),
-                                    alma_collection_to_strings(action), self.use_now) for action in list_of_actions]
+                                    alma_collection_to_strings(action), self.use_now)
+                  for action in list_of_actions]
         print("Preprocess:", texts)
         return texts
 
+    def multi_preprocess(self, list_of_states, list_of_actions):
 
+        # here we assume that each element of list of actions
+        # corresponds to multiple actions.  this will be useful when
+        # we have to get max_a Q(s,a).
+
+        return [self.preprocess( [kb]*len(actions), actions) for kb, actions in zip(list_of_states, list_of_actions)]
     
-    def get_priorities(self, inputs, current_model=True, training=False, numpy=True):
+    def get_qvalues(self, inputs, current_model=True, training=False, numpy=True):
         """
         inputs is either a list of actions (pre-inferences) or else a pair (state,action).
         In the latter case, the state is repeated, once for each action.
 
         This is only used in evalutation and episode collection; we'll make sure the returned preditions are numpy arrays.
         """
-        inputs_text = self.preprocess(inputs[0], inputs[1])
+        kbs, actions = inputs
+        inputs_text = self.preprocess(kbs, actions)
 
 
         # TODO:  Figure out the exact form here; BERT model won't take strings as input, maybe result of preprocessing?   
@@ -103,13 +111,15 @@ class rl_transformer(res_prebuffer):
         preds = torch.tensor(preds)
 
         return preds.detach().numpy()
+    
 
+        
     #@profile
     def fit(self, batch, verbose=True):
         """ A batch consists of 4 lists, each of lenth batch_size:
             actions, rewards, states0, states1
         """
-        inputs_text = self.preprocess(batch.states0, batch.actions)
+        inputs_text = self.preprocess_multiple_actions(batch.states1, batch.potential_actions)
         batch_size = len(inputs_text)
         #future_rewards = [self.target_model(inp) for inp in inputs_text]
         future_rewards = self.target_model(inputs_text)

@@ -493,6 +493,9 @@ static PyObject *set_prb_priorities(PyObject *self, PyObject *args) {
       prb_elmnt = prb_elmnt->next;
     }
   }
+
+  // Reheapify the res_task_heap
+  heapify_pre_res_buffer(collection);
   Py_INCREF(Py_None);
   return Py_None;
 }
