@@ -120,4 +120,4 @@ class experience_replay_buffer:
             res_r.append(self.rewards.pop())
             res_s1.append(self.states1.pop())
             res_pa.append(self.potential_actions.pop())
-        return replay_batch(res_s0, res_a, res_r, res_s1)
+        return replay_batch(res_s0, res_a, res_r, res_s1, res_pa)
