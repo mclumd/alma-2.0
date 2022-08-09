@@ -120,17 +120,20 @@ class rl_transformer(res_prebuffer):
         """ A batch consists of 4 lists, each of lenth batch_size:
             actions, rewards, states0, states1
         """
-        inputs_text = self.multi_preprocess(batch.states1, batch.potential_actions)
-        batch_size = len(inputs_text)
-        #future_rewards = [self.target_model(inp) for inp in inputs_text]
-        future_rewards = self.target_model(inputs_text)
+        next_sa = self.multi_preprocess(batch.states1, batch.potential_actions)
+        batch_size = len(next_sa)
+        future_rewards = torch.tensor([torch.max(self.target_model(sa)) for sa in next_sa]).to(self.device)
+        #future_rewards = self.target_model(inputs_text)
         updated_q_values = torch.tensor(batch.rewards).to(self.device) + self.gamma * future_rewards
 
         #for p in self.current_model.parameters():
         #    p.grad = None
         self.optimizer.zero_grad(set_to_none=True)
-        #predictions = torch.tensor([self.current_model(inp) for inp in inputs_text],                                 requires_grad=True)
-        predictions = self.current_model(inputs_text)
+        #predictions = torch.tensor([self.current_model(inp) for inp in inputs_text],
+        # requires_grad=True)
+
+        current_sa = self.preprocess(batch.states0, batch.actions)
+        predictions = self.current_model(current_sa).to(self.device)
         loss = self.bellman_loss(predictions, updated_q_values.unsqueeze(1))
         loss.backward()
         self.optimizer.step()

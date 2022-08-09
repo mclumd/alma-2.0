@@ -41,7 +41,7 @@ def collect_episode(network, replay_buffer, alma_inst, episode_length):
                 else:
                     priorities = 1 - (network.get_priorities(actions_no_priorities) * 0.9).flatten()
                 min_idx = np.argmin(priorities)
-
+                
             action = full_actions[min_idx][:2]
             # This is a bit of a hack -- we want to only send the minimum priority action to the
             # resolution heap.  We do this by decreasing it's corresponding priority and using

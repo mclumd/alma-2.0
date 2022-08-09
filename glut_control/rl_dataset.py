@@ -99,6 +99,7 @@ class experience_replay_buffer:
         new_rb.actions = copy.deepcopy(self.actions)
         new_rb.rewards = copy.deepcopy(self.rewards)
         new_rb.states1 = copy.deepcopy(self.states1)
+        new_rb.potential_actions = copy.deepcopy(self.potential_actions)
         return new_rb
 
     def extend(self, states0, actions, rewards, states1, potential_actions):
@@ -110,9 +111,14 @@ class experience_replay_buffer:
         self.rewards.extend(rewards)
         self.states1.extend(states1)
         self.potential_actions.extend(potential_actions)
+
         
     def get_batch(self, size):
-        self.states0, self.actions, self.rewards, self.states1, self.potential_actions = shuffle(self.states0, self.actions, self.rewards, self.states1, self.potential_actions)
+        self.states0, self.actions, self.rewards, self.states1, self.potential_actions = shuffle(self.states0,
+                                                                                                 self.actions,
+                                                                                                 self.rewards,
+                                                                                                 self.states1,
+                                                                                                 self.potential_actions)
         res_s0, res_a, res_r, res_s1, res_pa = [], [], [], [], []
         for _ in range(size):
             res_s0.append(self.states0.pop())
