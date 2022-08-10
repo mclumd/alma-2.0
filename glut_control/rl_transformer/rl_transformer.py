@@ -42,17 +42,18 @@ class rl_transformer(res_prebuffer):
         
         self.log_dir = "logs/fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         if reload_fldr is None:
-            self.current_model = trans_dqn(self.debugging, device=device, base_model=dqn_base)
-            self.target_model =  trans_dqn(self.debugging, device=device, base_model=dqn_base)
+            self.current_model = trans_dqn(self.debugging, device=device, base_model=dqn_base, max_reward=max_reward)
+            self.target_model =  trans_dqn(self.debugging, device=device, base_model=dqn_base, max_reward=max_reward)
         else:
-            self.model_load(reload_fldr, reload_id)
+            self.model_load(reload_fldr, reload_id, device=device)
 
         self.current_model.to(device)
         self.target_model.to(device)
 
         #self.loss_fn = keras.losses.Huber()
         #self.bellman_loss = keras.losses.MeanSquaredError()
-        self.bellman_loss = torch.nn.MSELoss()
+        #self.bellman_loss = torch.nn.MSELoss()
+        self.bellman_loss = torch.nn.HuberLoss()
 
         if finetune:
             self.params = list(self.current_model.parameters())
@@ -111,7 +112,6 @@ class rl_transformer(res_prebuffer):
 
 
         # TODO:  Figure out the exact form here; BERT model won't take strings as input, maybe result of preprocessing?   
-        model = self.current_model if current_model else self.target_model
         preds = [ self.current_model(inp).to(self.device) for inp in inputs_text]
         preds = torch.tensor(preds)
 
@@ -197,22 +197,26 @@ class rl_transformer(res_prebuffer):
                      self.seed, self.gamma,
                      self.epsilon, self.eps_min, self.eps_max,
                      self.batch_size, self.max_reward,
-                     self.starting_episode, self.current_episode), pkl_file)
+                     self.starting_episode, self.current_episode,
+                     self.device, self.max_reward), pkl_file)
         self.current_model.save(folder, "trans_dqn_current_model_{}".format(id_str))
         self.target_model.save(folder, "trans_dqn_target_model_{}".format(id_str))
-    def model_load(self, folder, id_str):
+    def model_load(self, folder, id_str, device):  
         pkl_file = open(os.path.join(folder, "rl_trans_model_{}.pkl".format(id_str)), "rb")
         (self.debugging, base_model_dir,
          tokenizer_prefix, hidden_size,
          self.seed, self.gamma,
          self.epsilon, self.eps_min, self.eps_max,
          self.batch_size, self.max_reward,
-         self.starting_episode, self.current_episode) = pickle.load(pkl_file)
+         self.starting_episode, self.current_episode,
+         self.device, self.max_reward) = pickle.load(pkl_file)
         self.current_model = trans_dqn(debugging=self.debugging,
                                        tokenizer_prefix=tokenizer_prefix,
-                                       hidden_size=hidden_size)
+                                       hidden_size=hidden_size,
+                                       device=device)
         self.current_model.load_state_dict(torch.load(os.path.join(folder, "rl_model_trans_dqn_current_model_{}".format(id_str))))
         self.target_model = trans_dqn(debugging=self.debugging,
                                        tokenizer_prefix=tokenizer_prefix,
-                                       hidden_size=hidden_size)
+                                       hidden_size=hidden_size,
+                                      device=device)
         self.target_model.load_state_dict(torch.load(os.path.join(folder, "rl_model_trans_dqn_target_model_{}".format(id_str))))

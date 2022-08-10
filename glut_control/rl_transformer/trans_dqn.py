@@ -59,8 +59,9 @@ class trans_dqn(nn.Module):
     """  This will essentialy wrap the BERT model with a head that outputs a Q-value """
 
     
-    def __init__(self, debugging=False,base_model="rl_transformer/base_model/2hidden_layers_4attention_heads/checkpoint-2400000", tokenizer_prefix="rl_transformer/simple_rl1", hidden_size=512, device="cpu"):
+    def __init__(self, debugging=False,base_model="rl_transformer/base_model/2hidden_layers_4attention_heads/checkpoint-2400000", tokenizer_prefix="rl_transformer/simple_rl1", hidden_size=512, device="cpu", max_reward=1.0):
         super().__init__()
+        self.max_reward = max_reward
         self.debugging = debugging
         self.base_model_dir = base_model
         self.tokenizer_prefix = tokenizer_prefix
@@ -68,6 +69,7 @@ class trans_dqn(nn.Module):
         self.device = device
         self.base_model, self.tokenizer = load_base(base_model, tokenizer_prefix)
         self.base_model.to(device)
+        self.base_model.train()
         for p in self.base_model.parameters():
             p.requires_grad = False
         last_layer = self.base_model.encoder.layer[-1]
@@ -112,7 +114,7 @@ class trans_dqn(nn.Module):
         y1 = self.activation1(self.qhead1(l0))
         l1 = self.LayerNorm1(y1)
         q = self.q_activation(self.qvalue(l1))
-        return q
+        return self.max_reward*q
     
     def save(self, folder, id_str):
         #self.model.save("rl_model_{}".format(id_str))

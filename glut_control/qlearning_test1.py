@@ -81,7 +81,7 @@ def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000,
     if prior_network is not None:
         network = prior_network
     elif transformer:
-        network = rl_transformer(max_reward=100,
+        network = rl_transformer(100,
                                  reward_fn=reward_fn,
                                  debugging=debugging,
                                  device=device,
@@ -114,6 +114,9 @@ def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000,
         #print("Post-collect")
         if "cuda" in device:
             print_gpu_mem()
+
+        if episode == 3000:
+            print("In debugging spot.")
         if (episode % train_interval == 0) and (episode > 0):
             #print("Pre-train")
             if "cuda" in device:
@@ -243,15 +246,16 @@ def main():
                                       reload_fldr="test_models_delete",  #TODO:  make this an argument
                                       reload_id=model_name
                                       )
+            network.reset_start()
 
         else:
             network = rpb_dqn(10000, subjects, [], use_gnn=args.gnn) #TODO: Should be able to read most of this from pkl file.
-        if "qlearning3.pl" in args.kb:
-            network.reward_fn = get_rewards_test3
-        else:
-            network.reward_fn = get_rewards_test1
-        network.model_load(model_name)
-        network.reset_start()
+            if "qlearning3.pl" in args.kb:
+                network.reward_fn = get_rewards_test3
+            else:
+                network.reward_fn = get_rewards_test1
+                network.model_load(model_name)
+                network.reset_start()
             
     if args.train != "NONE":
         print('Training; model name is ', args.train)

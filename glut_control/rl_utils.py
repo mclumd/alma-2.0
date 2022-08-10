@@ -55,8 +55,13 @@ def collect_episode(network, replay_buffer, alma_inst, episode_length):
             alma.astep(alma_inst)
             kb = alma.kbprint(alma_inst)[0]
             #reward = (network.reward_fn(kb) / network.max_reward) if i < (episode_length - 1) else -1  # -1 for the last episode
-            reward = (network.reward_fn(kb) / network.max_reward) if i < (
-                        episode_length - 1) else network.done_reward  #  for the last episode
+            #reward = (network.reward_fn(kb) / network.max_reward) if i < (
+            #            episode_length - 1) else network.done_reward  #  for the last episode
+            reward = network.reward_fn(kb) #if i < (                    episode_length ) else network.done_reward  # for the last episode
+
+            # I don't think we need to worry about done's because the
+            # episodes are all of a fixed length.
+
             state1 = alma.kb_to_pyobject(alma_inst, True)
             prebuf = alma.prebuf(alma_inst)
             full_actions = prebuf[0]
