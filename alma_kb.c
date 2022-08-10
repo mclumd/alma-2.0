@@ -1871,11 +1871,14 @@ void pre_res_buffer_to_heap(kb *collection, int single) {
       rtask->res_task = t;
       rtask->priority = data->priority;
       res_task_heap_push(&collection->res_tasks, rtask);
+      next = i->next;
+      tommy_list_remove_existing(&collection->pre_res_task_buffer, i);
+      free(data);
+      i = single ? NULL : next; // Hacky -- set i to NULL if we only want to process at most one.
+    } else {
+      i = i->next;
     }
-    next = i->next;
-    tommy_list_remove_existing(&collection->pre_res_task_buffer, i);
     //fprintf(stderr, "free preres_buffer2heap ");
-    free(data);
-    i = single ? NULL : next; // Hacky -- set i to NULL if we only want to process at most one.
   }
 }
+

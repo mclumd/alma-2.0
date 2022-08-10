@@ -2,11 +2,14 @@ import sys
 sys.path.append('..')
 import os, pickle
 import datetime
+import wandb
+
 import torch
 from alma_utils import kb_action_to_text, alma_collection_to_strings
 
 from resolution_prebuffer import res_prebuffer
 from rl_transformer.trans_dqn import trans_dqn
+
 
 class rl_transformer(res_prebuffer):
     def __init__(self, max_reward, reward_fn,
@@ -14,13 +17,16 @@ class rl_transformer(res_prebuffer):
                  seed=0, gamma=0.99, epsilon=1.0, eps_min=0.1,
                  eps_max=1.0, batch_size=16, starting_episode=0, use_state = True,
                  done_reward=0, debugging=False,
-                 finetune=True, device="cpu"):
+                 finetune=True, device="cpu",
+                 dqn_base="rl_transformer/base_model/2hidden_layers_4attention_heads/checkpoint-2400000",
+                 use_now=False):
         """
         Params:
           max_reward:  maximum reward for an episode; used to scale rewards for Q-function
 
         """
         #super().__init__([], [], False, debug, [], ())
+        self.use_now = use_now
         self.device = device
         self.seed=seed
         self.gamma=gamma
@@ -34,8 +40,8 @@ class rl_transformer(res_prebuffer):
         self.debugging=debugging
         
         self.log_dir = "logs/fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-        self.current_model = trans_dqn(self.debugging, device=device)
-        self.target_model =  trans_dqn(self.debugging, device=device)
+        self.current_model = trans_dqn(self.debugging, device=device, base_model=dqn_base)
+        self.target_model =  trans_dqn(self.debugging, device=device, base_model=dqn_base)
         self.current_model.to(device)
         self.target_model.to(device)
 
@@ -75,20 +81,28 @@ class rl_transformer(res_prebuffer):
 
     def preprocess(self, list_of_states, list_of_actions):
         texts =  [kb_action_to_text(alma_collection_to_strings(list_of_states[0]),
-                                    alma_collection_to_strings(action)) for action in list_of_actions]
+                                    alma_collection_to_strings(action), self.use_now)
+                  for action in list_of_actions]
         print("Preprocess:", texts)
         return texts
 
+    def multi_preprocess(self, list_of_states, list_of_actions):
 
-    
-    def get_priorities(self, inputs, current_model=True, training=False, numpy=True):
+        # here we assume that each element of list of actions
+        # corresponds to multiple actions.  this will be useful when
+        # we have to get max_a Q(s,a).
+
+        return [self.preprocess( [kb]*len(actions), actions) for kb, actions in zip(list_of_states, list_of_actions)]
+
+    def get_qvalues(self, inputs, current_model=True, training=False, numpy=True):
         """
         inputs is either a list of actions (pre-inferences) or else a pair (state,action).
         In the latter case, the state is repeated, once for each action.
 
         This is only used in evalutation and episode collection; we'll make sure the returned preditions are numpy arrays.
         """
-        inputs_text = self.preprocess(inputs[0], inputs[1])
+        kbs, actions = inputs
+        inputs_text = self.preprocess(kbs, actions)
 
 
         # TODO:  Figure out the exact form here; BERT model won't take strings as input, maybe result of preprocessing?   
@@ -98,26 +112,33 @@ class rl_transformer(res_prebuffer):
 
         return preds.detach().numpy()
 
+    def get_priorities(self, inputs, current_model=True, training=False, numpy=True):
+        return self.get_qvalues(inputs, current_model, training, numpy)
+
     #@profile
     def fit(self, batch, verbose=True):
         """ A batch consists of 4 lists, each of lenth batch_size:
             actions, rewards, states0, states1
         """
-        inputs_text = self.preprocess(batch.states0, batch.actions)
-        batch_size = len(inputs_text)
-        #future_rewards = [self.target_model(inp) for inp in inputs_text]
-        future_rewards = self.target_model(inputs_text)
+        next_sa = self.multi_preprocess(batch.states1, batch.potential_actions)
+        batch_size = len(next_sa)
+        future_rewards = torch.tensor([torch.max(self.target_model(sa)) for sa in next_sa]).to(self.device)
+        #future_rewards = self.target_model(inputs_text)
         updated_q_values = torch.tensor(batch.rewards).to(self.device) + self.gamma * future_rewards
 
         #for p in self.current_model.parameters():
         #    p.grad = None
         self.optimizer.zero_grad(set_to_none=True)
-        #predictions = torch.tensor([self.current_model(inp) for inp in inputs_text],                                 requires_grad=True)
-        predictions = self.current_model(inputs_text)
+        #predictions = torch.tensor([self.current_model(inp) for inp in inputs_text],
+        # requires_grad=True)
+
+        current_sa = self.preprocess(batch.states0, batch.actions)
+        predictions = self.current_model(current_sa).to(self.device)
         loss = self.bellman_loss(predictions, updated_q_values.unsqueeze(1))
         loss.backward()
         self.optimizer.step()
         #return self.current_model.fit(inputs_text, updated_q_values, batch_size)  # This should just be a step of optimizaiton; need to redo for pytorch though.
+        wandb.log({"loss": loss.item()})
         return loss
 
     def train_on_given_batch(self, inputs, target):

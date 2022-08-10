@@ -20,12 +20,14 @@ def collect_episode(network, replay_buffer, alma_inst, episode_length):
     Run an episode, appending results to replay buffer.
     """
     import sys
+
+    prebuf = alma.prebuf(alma_inst)
+    full_actions = prebuf[0]
+    actions_no_priorities = [x[:2] for x in full_actions]
+
     for i in range(episode_length):
         #import objgraph
         #objgraph.show_most_common_types(limit=20)
-        prebuf = alma.prebuf(alma_inst)
-        full_actions = prebuf[0]
-        actions_no_priorities = [x[:2] for x in full_actions]
         state0 = alma.kb_to_pyobject(alma_inst, True)
 
         #res_task_input = [x[:2] for x in prb]
@@ -39,10 +41,16 @@ def collect_episode(network, replay_buffer, alma_inst, episode_length):
                 else:
                     priorities = 1 - (network.get_priorities(actions_no_priorities) * 0.9).flatten()
                 min_idx = np.argmin(priorities)
-
+                
             action = full_actions[min_idx][:2]
+            # This is a bit of a hack -- we want to only send the minimum priority action to the
+            # resolution heap.  We do this by decreasing it's corresponding priority and using
+            # the originial priority as a threhold for set_priors_prb (which look for items strictly
+            # below the given threshold).
+            min_priority = priorities[min_idx]
+            priorities[min_idx] = min_priority / 2.0
             alma.set_priors_prb(alma_inst, priorities.tolist())
-            alma.single_prb_to_res_task(alma_inst, 1.0)   # Note the 1.0 is a threshold, not a priority
+            alma.single_prb_to_res_task(alma_inst, min_priority)
             #priorities = 1 - (network.get_priorities([action])*0.9).flatten()
             alma.astep(alma_inst)
             kb = alma.kbprint(alma_inst)[0]
@@ -50,7 +58,10 @@ def collect_episode(network, replay_buffer, alma_inst, episode_length):
             reward = (network.reward_fn(kb) / network.max_reward) if i < (
                         episode_length - 1) else network.done_reward  #  for the last episode
             state1 = alma.kb_to_pyobject(alma_inst, True)
-            replay_buffer.append(state0, action, reward, state1)
+            prebuf = alma.prebuf(alma_inst)
+            full_actions = prebuf[0]
+            actions_no_priorities = [x[:2] for x in full_actions]
+            replay_buffer.append(state0, action, reward, state1, actions_no_priorities)
 
 
 
@@ -80,8 +91,19 @@ def play_episode(network, alma_inst, episode_length):
                 priorities = 1 - network.get_priorities( ([kb]*len(actions), actions)  )
             else:
                 priorities = 1 - network.get_priorities(actions)*0.9
+
+            min_idx = np.argmin(priorities)
+            min_priority = priorities[min_idx]
+            action = actions[min_idx][:2]
+            # This is a bit of a hack -- we want to only send the minimum priority action to the
+            # resolution heap.  We do this by decreasing it's corresponding priority and using
+            # the originial priority as a threhold for set_priors_prb (which look for items strictly
+            # below the given threshold).
+
+            priorities[min_idx] = min_priority / 2.0
             alma.set_priors_prb(alma_inst, priorities.flatten().tolist())
-            alma.prb_to_res_task(alma_inst, 1.0)   # Note the 1.0 is a threshold, not a priority
+            alma.single_prb_to_res_task(alma_inst, min_priority)
+
             alma.astep(alma_inst)
             kb = alma.kbprint(alma_inst)[0]
             reward = network.reward_fn(kb)

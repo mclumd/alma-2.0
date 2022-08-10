@@ -1,5 +1,6 @@
 import alma
 import math
+import numpy as np
 
 
 def prebuf_print(alma_inst, print_size=math.inf):
@@ -76,9 +77,12 @@ def alma_collection_to_strings(collection):
 def actions_to_strings(acts):
     return [ [alma_tree_to_str(t0), alma_tree_to_str(t1)] for [t0, t1] in acts  ]
 
-def kb_action_to_text(kb, action):
-    kb_form = "{}".format(".".join([
-        c for c in kb if "time" not in c and "now" not in c and "agentname" not in c]))
+def kb_action_to_text(kb, action, use_now = False):
+    if use_now:
+        filtered_kb = [c for c in kb if "time" not in c and "wallnow" not in c and "agentname" not in c]
+    else:
+        filtered_kb = [c for c in kb if "time" not in c and "now" not in c and "agentname" not in c]
+    kb_form = ".".join(filtered_kb)
     action_form = action[0] + ";" + action[1]
     form = kb_form + "</kb>" + action_form
     return form
@@ -90,5 +94,3 @@ def classical_step(alma_inst):
     """
     alma.prb_to_res_task(alma_inst, 2.0)
     alma.step(alma_inst)
-
-

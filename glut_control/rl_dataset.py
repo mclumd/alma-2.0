@@ -71,25 +71,27 @@ Eventually, this should be a good way to do the experience replay.
     
         
 class replay_batch:
-    def __init__(self, s0, a, r, s1):
+    def __init__(self, s0, a, r, s1, pa):
         self.states0 = s0
         self.actions = a
         self.rewards = r
         self.states1 = s1
+        self.potential_actions = pa
 
 class experience_replay_buffer:
     def __init__(self):
-        self.states0, self.actions, self.rewards, self.states1 = [], [], [], []
+        self.states0, self.actions, self.rewards, self.states1, self.potential_actions = [], [], [], [], []
 
     def num_entries(self):
         return len(self.actions)
 
-    def append(self, states0, actions, rewards, states1):
+    def append(self, states0, actions, rewards, states1, potential_actions):
         if actions != []:
             self.states0.append(states0)
             self.actions.append(actions)
             self.rewards.append(rewards)
             self.states1.append(states1)
+            self.potential_actions.append(potential_actions)
 
     def copy(self):
         new_rb = experience_replay_buffer()
@@ -97,9 +99,10 @@ class experience_replay_buffer:
         new_rb.actions = copy.deepcopy(self.actions)
         new_rb.rewards = copy.deepcopy(self.rewards)
         new_rb.states1 = copy.deepcopy(self.states1)
+        new_rb.potential_actions = copy.deepcopy(self.potential_actions)
         return new_rb
 
-    def extend(self, states0, actions, rewards, states1):
+    def extend(self, states0, actions, rewards, states1, potential_actions):
         assert(len(states0) == len(actions))
         assert(len(states0) == len(rewards))
         assert(len(states0) == len(states1))
@@ -107,13 +110,20 @@ class experience_replay_buffer:
         self.actions.extend(actions)
         self.rewards.extend(rewards)
         self.states1.extend(states1)
+        self.potential_actions.extend(potential_actions)
+
         
     def get_batch(self, size):
-        self.states0, self.actions, self.rewards, self.states1 = shuffle(self.states0, self.actions, self.rewards, self.states1)
-        res_s0, res_a, res_r, res_s1 = [], [], [], []
+        self.states0, self.actions, self.rewards, self.states1, self.potential_actions = shuffle(self.states0,
+                                                                                                 self.actions,
+                                                                                                 self.rewards,
+                                                                                                 self.states1,
+                                                                                                 self.potential_actions)
+        res_s0, res_a, res_r, res_s1, res_pa = [], [], [], [], []
         for _ in range(size):
             res_s0.append(self.states0.pop())
             res_a.append(self.actions.pop())
             res_r.append(self.rewards.pop())
             res_s1.append(self.states1.pop())
-        return replay_batch(res_s0, res_a, res_r, res_s1)
+            res_pa.append(self.potential_actions.pop())
+        return replay_batch(res_s0, res_a, res_r, res_s1, res_pa)
