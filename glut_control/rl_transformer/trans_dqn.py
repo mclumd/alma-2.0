@@ -113,62 +113,6 @@ class trans_dqn(nn.Module):
         l1 = self.LayerNorm1(y1)
         q = self.q_activation(self.qvalue(l1))
         return q
-        
-        
-    def fit_old(self, inputs, y, batch_size, verbose=True, callbacks=[]):
-        """Inherited from GNN code.  Don't use; delete when new code is
-        finished."""
-        if self.use_state:
-            # Coming in, we have inputs = (states, actions) where:
-            #            actions is a list of batch_size pairs (graph, features)
-            #            states is a list of batch_size, each element of which is
-            #                   a variable-length list of (graph, features) pairs
-            # What we want to feed into the network should flatten the pairs:
-            #    stateX should be a tensor of rank (batch_size, ???, graph_size + feature_size)
-            #    actions should be a tensor of rank (batch_size, graph_size + feature_size)
-            states = inputs[0]
-            actions = inputs[1]
-            stateX = [np.array([self.flatten_input(Xi) for Xi in kb]) for kb in states]
-        else:
-            actions = inputs
-        actionX = np.array([self.flatten_input(Xi) for Xi in actions])   # TODO:  Make this more efficient
-        y = np.array(y)
-        if self.use_state:
-            #Iterate through the batch manually so that we can use variable length states.
-            #TODO:  Find a way to process a batch at a time -- this might involve using ragged tensors
-            #       or padding.  
-            for j in range(len(actions)):
-                state, action = stateX[j], actionX[j]
-                ybatch = y[j]
-                H = self.model.fit({"action_input": np.expand_dims(action, axis=0),
-                                    "state_input": np.expand_dims(state, axis=0)},
-                                    ybatch, callbacks=callbacks, epochs=1)
-        else:
-            num_batches = len(actions) // batch_size
-            if len(actionX) % batch_size != 0:
-                num_batches += 1    # Extra batch for remainder
-            for i in range(num_batches):
-                actionXbatch = actionX[i*batch_size:(i+1)*batch_size]
-                ybatch = y[i*batch_size:(i+1)*batch_size]
-                #loss, acc, tacc = self.model.fit(Xbatch, ybatch)
-                H = self.model.fit(actionXbatch, ybatch, callbacks=callbacks)
-
-            return H
-
-    def predict(self, X):
-        """Inherited from GNN code.  Don't use; delete when new code is
-        finished.
-        """
-        if self.use_state:
-            states = X[0]
-            actions = X[1]
-            actionX = np.array([self.flatten_input(Xi) for Xi in actions])   # TODO:  Make this more efficient
-            stateX = [np.array([self.flatten_input(Xi) for Xi in kb]) for kb in states]
-            preds = np.array([self.model.predict({"action_input": np.expand_dims(action,axis=0), "state_input": np.expand_dims(state, axis=0)}) for action, state in zip(actionX, stateX)]).reshape(-1,1)
-        else:
-            X = np.array([self.flatten_input(Xi) for Xi in X])
-            preds = self.model.predict(X)
-        return preds
     
     def save(self, folder, id_str):
         #self.model.save("rl_model_{}".format(id_str))

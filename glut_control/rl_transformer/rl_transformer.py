@@ -19,7 +19,8 @@ class rl_transformer(res_prebuffer):
                  done_reward=0, debugging=False,
                  finetune=True, device="cpu",
                  dqn_base="rl_transformer/base_model/2hidden_layers_4attention_heads/checkpoint-2400000",
-                 use_now=False):
+                 use_now=False,
+                 reload_fldr=None, reload_id=None):
         """
         Params:
           max_reward:  maximum reward for an episode; used to scale rewards for Q-function
@@ -40,8 +41,12 @@ class rl_transformer(res_prebuffer):
         self.debugging=debugging
         
         self.log_dir = "logs/fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-        self.current_model = trans_dqn(self.debugging, device=device, base_model=dqn_base)
-        self.target_model =  trans_dqn(self.debugging, device=device, base_model=dqn_base)
+        if reload_fldr is None:
+            self.current_model = trans_dqn(self.debugging, device=device, base_model=dqn_base)
+            self.target_model =  trans_dqn(self.debugging, device=device, base_model=dqn_base)
+        else:
+            self.model_load(reload_fldr, reload_id)
+
         self.current_model.to(device)
         self.target_model.to(device)
 
@@ -83,7 +88,7 @@ class rl_transformer(res_prebuffer):
         texts =  [kb_action_to_text(alma_collection_to_strings(list_of_states[0]),
                                     alma_collection_to_strings(action), self.use_now)
                   for action in list_of_actions]
-        print("Preprocess:", texts)
+        #print("Preprocess:", texts)
         return texts
 
     def multi_preprocess(self, list_of_states, list_of_actions):
@@ -196,7 +201,7 @@ class rl_transformer(res_prebuffer):
         self.current_model.save(folder, "trans_dqn_current_model_{}".format(id_str))
         self.target_model.save(folder, "trans_dqn_target_model_{}".format(id_str))
     def model_load(self, folder, id_str):
-        pkl_file = open(os.path.join(model_prefix, "rl_trans_model_{}.pkl".format(id_str)), "rb")
+        pkl_file = open(os.path.join(folder, "rl_trans_model_{}.pkl".format(id_str)), "rb")
         (self.debugging, base_model_dir,
          tokenizer_prefix, hidden_size,
          self.seed, self.gamma,
@@ -204,12 +209,10 @@ class rl_transformer(res_prebuffer):
          self.batch_size, self.max_reward,
          self.starting_episode, self.current_episode) = pickle.load(pkl_file)
         self.current_model = trans_dqn(debugging=self.debugging,
-                                       base_model=base_model_dir,
                                        tokenizer_prefix=tokenizer_prefix,
                                        hidden_size=hidden_size)
-        self.current_model.load_state_dict(torch.load(os.path.join(folder, "trans_dqn_current_model_{}".format(id_str))))
+        self.current_model.load_state_dict(torch.load(os.path.join(folder, "rl_model_trans_dqn_current_model_{}".format(id_str))))
         self.target_model = trans_dqn(debugging=self.debugging,
-                                       base_model=base_model_dir,
                                        tokenizer_prefix=tokenizer_prefix,
                                        hidden_size=hidden_size)
-        self.target_model.load_state_dict(torch.load(os.path.join(folder, "trans_dqn_target_model_{}".format(id_str))))
+        self.target_model.load_state_dict(torch.load(os.path.join(folder, "rl_model_trans_dqn_target_model_{}".format(id_str))))

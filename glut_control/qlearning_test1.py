@@ -233,7 +233,19 @@ def main():
     if args.reload != "NONE":
         model_name = args.reload
         #network = rpb_dqn(args.episode_length * 2, ['a', 'f', 'g'], [], use_gnn=args.gnn) #TODO: Should be able to read most of this from pkl file.
-        network = rpb_dqn(10000, subjects, [], use_gnn=args.gnn) #TODO: Should be able to read most of this from pkl file.
+        if args.transformer:
+            reward_fn = get_rewards_test3 if "qlearning3.pl" in args.kb or "qlearning4.pl" in args.kb else get_rewards_test1
+            
+            network =  rl_transformer(max_reward=100,
+                                      reward_fn=reward_fn,
+                                      device=pytorch_device,
+                                      use_now = args.use_now,
+                                      reload_fldr="test_models_delete",  #TODO:  make this an argument
+                                      reload_id=model_name
+                                      )
+
+        else:
+            network = rpb_dqn(10000, subjects, [], use_gnn=args.gnn) #TODO: Should be able to read most of this from pkl file.
         if "qlearning3.pl" in args.kb:
             network.reward_fn = get_rewards_test3
         else:
