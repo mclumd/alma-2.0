@@ -103,7 +103,7 @@ class QL4Dataset(Dataset):
         # We’ll pad at the batch level.
         #return torch.tensor(self.examples[i])
         #return self.examples[i]
-        return self.tokenizer(examples[i], max_length=512, truncation=True)
+        return self.tokenizer(self.examples[i], max_length=510, truncation=True, padding=True)
 
 
 
@@ -240,7 +240,9 @@ def train(args):
 
         model_config = RobertaConfig(
             vocab_size=tokenizer.vocab_size,
-            num_hidden_layers = args.num_hidden_layers, num_attention_heads=4
+            num_hidden_layers = args.num_hidden_layers,
+            num_attention_heads=4,
+            max_position_embeddings=1024
         )
         model = RobertaForMaskedLM(model_config)
         model.to(args.device)
@@ -292,7 +294,7 @@ def train(args):
     data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer,
                                                     mlm=True, mlm_probability=0.15,)
     training_args = TrainingArguments(
-        output_dir='./results',          # output directory
+        output_dir=args.result_folder,          # output directory
         overwrite_output_dir=True,
         num_train_epochs=10,              # total number of training epochs
         per_device_train_batch_size=16,  # batch size per device during training
@@ -305,7 +307,7 @@ def train(args):
         load_best_model_at_end=True,
         prediction_loss_only=True,
         evaluation_strategy="steps",
-        eval_steps=100,
+        eval_steps=1000,
         save_strategy="steps",
         save_steps=5000
     )
@@ -350,6 +352,69 @@ def test_encoding():
                    tokenizer=tokenizer)
     print(fmp1("left(<mask>)."))
 
+def resume(args):
+    main_datafile = os.path.join("/tmp/", args.data_prefix + ".txt")
+    val_datafile = os.path.join("/tmp/", args.data_prefix + "_val.txt")
+    
+    tokenizer = RobertaTokenizer(os.path.join(args.tokenizer_folder, "simple_rl1-vocab.json"),
+                                     os.path.join(args.tokenizer_folder,  "simple_rl1-merges.txt"),
+                                     model_max_length=512)
+    tokenizer.add_special_tokens( {
+        'mask_token': '<mask>',
+        'sep_token': '</s>',
+        'pad_token': '<pad>',
+        'cls_token': '<s>',
+        'unk_token': '<unk>'
+    })
+
+        
+    model_config = RobertaConfig(
+        vocab_size=tokenizer.vocab_size,
+        num_hidden_layers = args.num_hidden_layers,
+        num_attention_heads=4,
+        max_position_embeddings=1024
+    )
+    chkpt = os.path.join(args.result_folder, args.result_folder)
+    model = RobertaForMaskedLM(chkpt)
+    model.to(args.device)
+    
+    train_dataset = QL4Dataset([main_datafile], tokenizer=tokenizer, train=True, objective="mlm", device=args.device)
+    val_dataset = QL4Dataset([val_datafile], tokenizer=tokenizer, train=False, objective="mlm", device=args.device)
+
+    data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer,
+                                                    mlm=True, mlm_probability=0.15,)
+    training_args = TrainingArguments(
+        output_dir=args.result_folder,          # output directory
+        overwrite_output_dir=True,
+        num_train_epochs=10,              # total number of training epochs
+        per_device_train_batch_size=16,  # batch size per device during training
+        per_device_eval_batch_size=16,   # batch size for evaluation  (was 64)
+        warmup_steps=500,                # number of warmup steps for learning rate scheduler
+        weight_decay=0.01,               # strength of weight decay
+        logging_dir='./logs',            # directory for storing logs
+        logging_steps=500,
+        save_total_limit=2,
+        load_best_model_at_end=True,
+        prediction_loss_only=True,
+        evaluation_strategy="steps",
+        eval_steps=1000,
+        save_strategy="steps",
+        save_steps=5000
+    )
+
+
+    trainer = Trainer(
+        model=model,                         # the instantiated 🤗 Transformers model to be trained
+        args=training_args,                  # training arguments, defined above
+        train_dataset=train_dataset,
+        data_collator=data_collator,
+        # ,         # training dataset
+        eval_dataset=val_dataset,             # evaluation dataset
+    )
+
+    trainer.train(chkpt)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run test with specified parameters.")
     parser.add_argument("--preprocess_only", action='store_true')
@@ -359,9 +424,10 @@ if __name__ == "__main__":
     parser.add_argument("--num_hidden_layers", type=int, default=4)
     parser.add_argument("--use_now", action='store_true')
     parser.add_argument("--device", type=str, default="cuda")
+    parser.add_argument("--resume", type=str)
     args = parser.parse_args()
     print("Running with arguments ", args)
           
     train(args)
     #test_encoding()
-
+    #resume(args)
