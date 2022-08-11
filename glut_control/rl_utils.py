@@ -37,7 +37,7 @@ def collect_episode(network, replay_buffer, alma_inst, episode_length):
                 min_idx = np.argmin(priorities)
             else:
                 if network.use_state:
-                    priorities = 1 - (network.get_priorities(([state0]*len(actions_no_priorities), actions_no_priorities)) * 0.9).flatten()
+                    priorities = (network.get_priorities([state0]*len(actions_no_priorities), actions_no_priorities) * 0.9).flatten()
                 else:
                     priorities = 1 - (network.get_priorities(actions_no_priorities) * 0.9).flatten()
                 min_idx = np.argmin(priorities)
@@ -93,7 +93,7 @@ def play_episode(network, alma_inst, episode_length):
             #action = [prebuf[0][0][:2]]
             actions = [pres[:2] for pres in prb]
             if network.use_state:
-                priorities = 1 - network.get_priorities( ([kb]*len(actions), actions)  )
+                priorities = network.get_priorities( ([kb]*len(actions), actions)  )
             else:
                 priorities = 1 - network.get_priorities(actions)*0.9
 

@@ -119,7 +119,7 @@ class rl_transformer(res_prebuffer):
         return preds.detach().numpy()
 
     def get_priorities(self, inputs, current_model=True, training=False, numpy=True):
-        return self.get_qvalues(inputs, current_model, training, numpy)
+        return 1 - (self.get_qvalues(inputs, current_model, training, numpy) / self.max_reward)
 
     #@profile
     def fit(self, batch, verbose=True):
