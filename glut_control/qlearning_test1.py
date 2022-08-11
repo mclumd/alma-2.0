@@ -81,7 +81,7 @@ def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000,
     if prior_network is not None:
         network = prior_network
     elif transformer:
-        network = rl_transformer(100,
+        network = rl_transformer(10,
                                  reward_fn=reward_fn,
                                  debugging=debugging,
                                  device=device,

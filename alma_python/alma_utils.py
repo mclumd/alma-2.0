@@ -83,6 +83,7 @@ def kb_action_to_text(kb, action, use_now = False):
     else:
         filtered_kb = [c for c in kb if "time" not in c and "now" not in c and "agentname" not in c]
     kb_form = ".".join(filtered_kb)
+    action = sorted(action)
     action_form = action[0] + ";" + action[1]
     form = kb_form + "</kb>" + action_form
     return form

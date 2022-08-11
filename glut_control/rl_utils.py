@@ -23,7 +23,7 @@ def collect_episode(network, replay_buffer, alma_inst, episode_length):
 
     prebuf = alma.prebuf(alma_inst)
     full_actions = prebuf[0]
-    actions_no_priorities = sorted([x[:2] for x in full_actions])
+    actions_no_priorities = [x[:2] for x in full_actions]
 
     for i in range(episode_length):
         #import objgraph
@@ -91,7 +91,7 @@ def play_episode(network, alma_inst, episode_length):
         
         if len(prb) > 0:
             #action = [prebuf[0][0][:2]]
-            actions = sorted([pres[:2] for pres in prb])
+            actions = [pres[:2] for pres in prb]
             if network.use_state:
                 priorities = 1 - network.get_priorities( ([kb]*len(actions), actions)  )
             else:
