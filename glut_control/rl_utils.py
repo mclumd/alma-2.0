@@ -37,7 +37,7 @@ def collect_episode(network, replay_buffer, alma_inst, episode_length):
                 min_idx = np.argmin(priorities)
             else:
                 if network.use_state:
-                    priorities = (network.get_priorities([state0]*len(actions_no_priorities), actions_no_priorities) * 0.9).flatten()
+                    priorities = (network.get_priorities( ([state0]*len(actions_no_priorities), actions_no_priorities)) * 0.9).flatten()
                 else:
                     priorities = 1 - (network.get_priorities(actions_no_priorities) * 0.9).flatten()
                 min_idx = np.argmin(priorities)
