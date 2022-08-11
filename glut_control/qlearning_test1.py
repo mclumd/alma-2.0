@@ -48,7 +48,7 @@ def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000,
           exhaustive_training=False, kb='/home/justin/alma-2.0/glut_control/qlearning2.pl',
           subjects = ['a', 'f', 'g', 'l', 'now'], prior_network = None, debugging=False,
           testing_interval=math.inf, tboard = False, transformer=False,
-          device="cpu", use_now=False):
+          device="cpu", use_now=False, max_rtg=10, normalize_rewards=True):
     """
     Train Q-network on the initial qlearning task.   
 
@@ -81,12 +81,13 @@ def train(num_steps=50, model_name="test1", use_gnn = True, num_episodes=100000,
     if prior_network is not None:
         network = prior_network
     elif transformer:
-        network = rl_transformer(10,
+        network = rl_transformer(max_rtg,
                                  reward_fn=reward_fn,
                                  debugging=debugging,
                                  device=device,
                                  dqn_base="rl_transformer/base_model/4h4a_with_now/checkpoint-105000/",
-                                 use_now = use_now)
+                                 use_now = use_now,
+                                 normalize_rewards=normalize_rewards)
     else:
         network = rpb_dqn(100, reward_fn,
                           subjects, [], use_gnn=use_gnn,
@@ -198,6 +199,8 @@ def main():
     parser.add_argument("--pytorch", help="use pytorch as backend (default is tensorflow)", action='store_true')
     parser.add_argument("--transformer", help="use BERT-like transformer", action="store_true")
     parser.add_argument("--use_now", help="use now() sentences from KB", action="store_true")
+    parser.add_argument("--max_rtg", help="maximum return-to-go", type=int, default=10)
+    parser.add_argument("--normalize_rewards", help="work with Q-values in [0,1]", action="store_true")
 
     args = parser.parse_args()
     print("Running with arguments ", args)
@@ -274,7 +277,9 @@ def main():
                             debugging=args.debugging,
                             testing_interval=args.testing_interval,
                             transformer=args.transformer, device=pytorch_device,
-                            use_now=args.use_now
+                            use_now=args.use_now,
+                            max_rtg=args.max_rtg,
+                            normalize_rewards=args.normalize_rewards
                         )
         else:
             network = train(args.episode_length,
