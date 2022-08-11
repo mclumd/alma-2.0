@@ -25,7 +25,7 @@ def collect_episode(network, replay_buffer, alma_inst, episode_length):
     full_actions = prebuf[0]
     actions_no_priorities = [x[:2] for x in full_actions]
 
-    for i in range(episode_length):
+    for i in range(episode_length+1):
         #import objgraph
         #objgraph.show_most_common_types(limit=20)
         state0 = sorted(alma.kb_to_pyobject(alma_inst, True))
@@ -57,10 +57,15 @@ def collect_episode(network, replay_buffer, alma_inst, episode_length):
             #reward = (network.reward_fn(kb) / network.max_reward) if i < (episode_length - 1) else -1  # -1 for the last episode
             #reward = (network.reward_fn(kb) / network.max_reward) if i < (
             #            episode_length - 1) else network.done_reward  #  for the last episode
-            reward = network.reward_fn(kb) #if i < (                    episode_length ) else network.done_reward  # for the last episode
+            reward = network.reward_fn(kb) if i < episode_length else network.done_reward  # for the last episode
 
             # I don't think we need to worry about done's because the
-            # episodes are all of a fixed length.
+            # episodes are all of a fixed length.  Not true; on the
+            # last move of an episode, we need the network to know
+            # that the next state has a reward of done_reward.  This
+            # is most straightforwardly accomplished by running for an
+            # extra turn and assigning the appropriate reward.
+            
 
             state1 = sorted(alma.kb_to_pyobject(alma_inst, True))
             prebuf = alma.prebuf(alma_inst)
