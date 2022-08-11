@@ -23,12 +23,12 @@ def collect_episode(network, replay_buffer, alma_inst, episode_length):
 
     prebuf = alma.prebuf(alma_inst)
     full_actions = prebuf[0]
-    actions_no_priorities = [x[:2] for x in full_actions]
+    actions_no_priorities = sorted([x[:2] for x in full_actions])
 
     for i in range(episode_length):
         #import objgraph
         #objgraph.show_most_common_types(limit=20)
-        state0 = alma.kb_to_pyobject(alma_inst, True)
+        state0 = sorted(alma.kb_to_pyobject(alma_inst, True))
 
         #res_task_input = [x[:2] for x in prb]
         if len(full_actions) > 0:
@@ -62,7 +62,7 @@ def collect_episode(network, replay_buffer, alma_inst, episode_length):
             # I don't think we need to worry about done's because the
             # episodes are all of a fixed length.
 
-            state1 = alma.kb_to_pyobject(alma_inst, True)
+            state1 = sorted(alma.kb_to_pyobject(alma_inst, True))
             prebuf = alma.prebuf(alma_inst)
             full_actions = prebuf[0]
             actions_no_priorities = [x[:2] for x in full_actions]
@@ -86,12 +86,12 @@ def play_episode(network, alma_inst, episode_length):
         rth = alma.res_task_buf(alma_inst)
         record['heap'].append(list(enumerate(rth[1].split('\n')[:-1])))
         prb = prebuf[0]
-        kb = alma.kb_to_pyobject(alma_inst, True)
+        kb = sorted(alma.kb_to_pyobject(alma_inst, True))
         record['kb'].append(kb)
         
         if len(prb) > 0:
             #action = [prebuf[0][0][:2]]
-            actions = [pres[:2] for pres in prb]
+            actions = sorted([pres[:2] for pres in prb])
             if network.use_state:
                 priorities = 1 - network.get_priorities( ([kb]*len(actions), actions)  )
             else:
