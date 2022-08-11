@@ -44,6 +44,7 @@ class rl_transformer(res_prebuffer):
         if reload_fldr is None:
             self.current_model = trans_dqn(self.debugging, device=device, base_model=dqn_base, max_reward=max_reward)
             self.target_model =  trans_dqn(self.debugging, device=device, base_model=dqn_base, max_reward=max_reward)
+            self.update_target()
         else:
             self.model_load(reload_fldr, reload_id, device=device)
 
