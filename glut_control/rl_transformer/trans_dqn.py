@@ -70,8 +70,6 @@ class trans_dqn(nn.Module):
         self.base_model, self.tokenizer = load_base(base_model, tokenizer_prefix)
         self.base_model.to(device)
         self.base_model.train()
-        for p in self.base_model.parameters():
-            p.requires_grad = False
         last_layer = self.base_model.encoder.layer[-1]
         base_output_size = last_layer.output.dense.out_features
 
