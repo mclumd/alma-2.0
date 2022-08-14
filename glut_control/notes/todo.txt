@@ -1,0 +1,14 @@
+1.   Go over Q-learning algortihm, look for mistakes (maybe dones?)
+1.1  Add new things to wandb:
+	number of actions (testing)
+	size of heap (testing)
+	estimated q-values for current
+	estimated q-values for target
+1.2:  modify algorithm
+      a.  now that we're sorting kbs/actions in rl portion, should sort them
+      in base model training as well
+2.   Create a quick and dirty way to reload alma so we can run q-learning for
+a week.
+3.   Look at using all the features from the transformer rather than just the
+[cls] token; problem is that this is variable length, and the self-attention
+means different things on different steps.  
