@@ -1,6 +1,11 @@
 """
 Define, train and test the encoder of the transformer model.
 This will basically be a BERT model that we train from scratch.
+
+TODO:
+  1)  Modify training of base model:
+    a)  Sort KB and actions  (or switch to permutation invariant model; i.e. xlnet)
+    b)  Add in next sentence prediction head.
 """
 
 
