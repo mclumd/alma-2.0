@@ -93,11 +93,13 @@ class trans_dqn(nn.Module):
                             self.qvalue, self.q_activation]
                             
 
-    def trainable_parameters(self):
+    def trainable_parameters(self, add_pooler=True):
         """ Return paramters not from base model """
-        res = []
+        res = list(self.pooler.parameters()) if add_pooler else []
+        
         for layer in self.head_layers:
             res += list(layer.parameters())
+        
         return res
 
     def train(self):
