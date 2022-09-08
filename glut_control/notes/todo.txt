@@ -12,3 +12,12 @@ a week.
 3.   Look at using all the features from the transformer rather than just the
 [cls] token; problem is that this is variable length, and the self-attention
 means different things on different steps.  
+
+
+
+A)  Rerun pre-training with sorted KB
+B)  Also get model with NSP head; compare the two (since I don't
+believe that NSP doesn't help!)
+C)  Try using raw CLS output in q-learning rather than using pooled
+output
+D)  Debug!
