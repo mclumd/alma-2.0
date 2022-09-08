@@ -31,7 +31,7 @@ from dedup import dedup
 class QL4Dataset(Dataset):
     def __init__(self, src_files, tokenizer=None, train: bool = False, objective: str = None, device: str = "cuda"):
         self.device = device
-        print("Q$LDataset with src {} and objective {}".format(src_files, objective))
+        print("QL4Dataset with src {} and objective {}".format(src_files, objective))
         if train:
             assert(objective in ["mlm", "nsp"])
         if tokenizer is None:
@@ -243,10 +243,13 @@ def train(args):
         
         #tokenizer.enable_truncation(max_length=510)
 
+        # Note that according to https://huggingface.co/blog/how-to-train distillibert
+        # uses 6 layers, 768 hidden size, 12 attention heads
+        # they train on 3GB of data, so we should be able to do at least as well.
         model_config = RobertaConfig(
             vocab_size=tokenizer.vocab_size,
             num_hidden_layers = args.num_hidden_layers,
-            num_attention_heads=4,
+            num_attention_heads=12,   # Was 4
             max_position_embeddings=1024
         )
         model = RobertaForMaskedLM(model_config)
