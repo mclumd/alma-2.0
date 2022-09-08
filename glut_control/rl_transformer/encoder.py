@@ -21,8 +21,8 @@ from tokenizers import ByteLevelBPETokenizer, BertWordPieceTokenizer, AddedToken
 from tokenizers.processors import BertProcessing
 from tokenizers.processors import RobertaProcessing
 from torch.utils.data import Dataset
-from transformers import BertConfig, BertForPreTraining,  Trainer, TrainingArguments, BertTokenizerFast, BertTokenizer
-from transformers import RobertaConfig, RobertaForMaskedLM, RobertaTokenizer
+#from transformers import BertConfig, BertForPreTraining,  Trainer, TrainingArguments, BertTokenizerFast, BertTokenizer
+#from transformers import RobertaConfig, RobertaForMaskedLM, RobertaTokenizer, Trainer, TrainingArguments
 from transformers import DataCollatorForLanguageModeling, TextDatasetForNextSentencePrediction, TextDataset
 from transformers import pipeline
 
@@ -173,7 +173,7 @@ def test_string(string, model, tokenizer):
     print("L=", L)
     return tokenizer.decode(L)
 
-def preprocess_datafiles(input_file_list, output_file, val_file, val_threshold = 0.01, use_now=False):
+def preprocess_datafiles(input_file_list, output_file, val_file, val_threshold = 0.001, use_now=False):
     with open(val_file, "w") as vf:
         with open(output_file, "w") as of:
             for input_file in input_file_list:
@@ -187,7 +187,10 @@ def preprocess_datafiles(input_file_list, output_file, val_file, val_threshold =
                                 kbitems = [c for c in kb if "time" not in c and "wallnow" not in c and "agentname" not in c]
                             else:
                                 kbitems = [c for c in kb if "time" not in c and "now" not in c and "agentname" not in c]
-                            kb_form = "{}".format(".".join(kbitems))
+                            kb_form = "{}".format(".".join(sorted(kbitems)))
+                            if action[1] < action[0]:
+                                # Swap the order of the arguments
+                                action = (action[1], action[0])
                             action_form = action[0] + ";" + action[1]
                             form = kb_form + "</kb>" + action_form
                             print("Found: ", form)
@@ -426,7 +429,7 @@ if __name__ == "__main__":
     parser.add_argument("--data_prefix", type=str, default="off_data_tds")
     parser.add_argument("--result_folder", type=str, default="results")
     parser.add_argument("--tokenizer_folder", type=str, default="rl_tokenizer")
-    parser.add_argument("--num_hidden_layers", type=int, default=4)
+    parser.add_argument("--num_hidden_layers", type=int, default=6)
     parser.add_argument("--use_now", action='store_true')
     parser.add_argument("--device", type=str, default="cuda")
     parser.add_argument("--resume", type=str)
