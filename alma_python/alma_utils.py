@@ -70,6 +70,14 @@ def alma_tree_to_str(tree):
         for clause in tree[1][1:]:
             result += ' and ' +alma_tree_to_str(clause)
         return result
+    elif tree[0] == 'or':
+        result = alma_tree_to_str(tree[1][0])
+        for clause in tree[1][1:]:
+            result += ' or ' +alma_tree_to_str(clause)
+        return result
+    elif tree[0] == 'neg':
+        return 'not(' + alma_tree_to_str(tree[1]) + ')'
+        
 
 def alma_collection_to_strings(collection):
     return [ alma_tree_to_str(tree) for tree in collection]
