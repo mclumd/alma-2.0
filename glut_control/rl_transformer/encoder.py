@@ -208,8 +208,8 @@ def train(args):
     roberta = True
     
     src_files = glob.glob("/tmp/off*pkl")
-    main_datafile = os.path.join("/home/justin/alma-2.0/glut_control/rl_transformer/processed_files", args.data_prefix + ".txt")
-    val_datafile = os.path.join("/home/justin/alma-2.0/glut_control/rl_transformer/processed_files", args.data_prefix + "_val.txt")
+    main_datafile = os.path.join(args.datafolder, args.data_prefix + ".txt")
+    val_datafile = os.path.join(args.datafolder, args.data_prefix + "_val.txt")
     if not os.path.exists(main_datafile) or args.preprocess_only:
         preprocess_datafiles(src_files, main_datafile, val_datafile, use_now=args.use_now)
         dedup(main_datafile, val_datafile, replace=True)
@@ -349,8 +349,12 @@ def train(args):
     # else:
     #     pass
 
-def test_encoding():
-    tokenizer = RobertaTokenizer("./simple_rl1-vocab.json","./simple_rl1-merges.txt",model_max_length=512)
+def test_encoding(tok_folder="./tokenizer_sorted_now",
+                  checkpoint_folder="results_sorted_now/checkpoint-1760000/"
+):
+    tokenizer = RobertaTokenizer(os.path.join(tok_folder, "simple_rl1-vocab.json"),
+                                 os.path.join(tok_folder, "./simple_rl1-merges.txt"),
+                                 model_max_length=512)
     tokenizer.add_special_tokens( {
         'mask_token': '<mask>',
         'sep_token': '</s>',
@@ -359,17 +363,15 @@ def test_encoding():
         'unk_token': '<unk>'
     })
     print(tokenizer.encode("<mask>"))
-    rmodel = RobertaForMaskedLM.from_pretrained("./base_model/checkpoint-4347000")
+
+    rmodel = RobertaForMaskedLM.from_pretrained(checkpoint_folder)
 
     fmp0 = pipeline("fill-mask",
-                   model="./base_model/checkpoint-2400000",
+                    model=checkpoint_folder,
                    tokenizer=tokenizer)
     print(fmp0("left(<mask>)."))
 
-    fmp1 = pipeline("fill-mask",
-                   model="./base_model/checkpoint-4347000",
-                   tokenizer=tokenizer)
-    print(fmp1("left(<mask>)."))
+
 
 def resume(args):
     main_datafile = os.path.join("/tmp/", args.data_prefix + ".txt")
@@ -438,6 +440,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run test with specified parameters.")
     parser.add_argument("--preprocess_only", action='store_true')
     parser.add_argument("--data_prefix", type=str, default="off_data_tds", help="Prefix of data files")
+    parser.add_argument("--data_folder", type=str, default="/home/justin/alma-2.0/glut_control/rl_transformer/processed_files", help="Folder for processed data files")
     parser.add_argument("--result_folder", type=str, default="results")
     parser.add_argument("--tokenizer_folder", type=str, default="rl_tokenizer")
     parser.add_argument("--num_hidden_layers", type=int, default=6)
