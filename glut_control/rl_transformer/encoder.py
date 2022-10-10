@@ -208,8 +208,8 @@ def train(args):
     roberta = True
     
     src_files = glob.glob("/tmp/off*pkl")
-    main_datafile = os.path.join(args.datafolder, args.data_prefix + ".txt")
-    val_datafile = os.path.join(args.datafolder, args.data_prefix + "_val.txt")
+    main_datafile = os.path.join(args.data_folder, args.data_prefix + ".txt")
+    val_datafile = os.path.join(args.data_folder, args.data_prefix + "_val.txt")
     if not os.path.exists(main_datafile) or args.preprocess_only:
         preprocess_datafiles(src_files, main_datafile, val_datafile, use_now=args.use_now)
         dedup(main_datafile, val_datafile, replace=True)
@@ -259,7 +259,7 @@ def train(args):
         model_config = RobertaConfig(
             vocab_size=tokenizer.vocab_size,
             num_hidden_layers = args.num_hidden_layers,
-            num_attention_heads=12,   # Was 4
+            num_attention_heads=args.num_attention_heads,   # Was 4
             max_position_embeddings=1024
         )
         model = RobertaForMaskedLM(model_config)
@@ -444,6 +444,7 @@ if __name__ == "__main__":
     parser.add_argument("--result_folder", type=str, default="results")
     parser.add_argument("--tokenizer_folder", type=str, default="rl_tokenizer")
     parser.add_argument("--num_hidden_layers", type=int, default=6)
+    parser.add_argument("--num_attention_heads", type=int, default=122)
     parser.add_argument("--use_now", action='store_true')
     parser.add_argument("--device", type=str, default="cuda")
     parser.add_argument("--resume", type=str)
