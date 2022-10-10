@@ -22,7 +22,7 @@ from tokenizers.processors import BertProcessing
 from tokenizers.processors import RobertaProcessing
 from torch.utils.data import Dataset
 #from transformers import BertConfig, BertForPreTraining,  Trainer, TrainingArguments, BertTokenizerFast, BertTokenizer
-#from transformers import RobertaConfig, RobertaForMaskedLM, RobertaTokenizer, Trainer, TrainingArguments
+from transformers import RobertaConfig, RobertaForMaskedLM, RobertaTokenizer, Trainer, TrainingArguments
 from transformers import DataCollatorForLanguageModeling, TextDatasetForNextSentencePrediction, TextDataset
 from transformers import pipeline
 
@@ -108,9 +108,14 @@ class QL4Dataset(Dataset):
         # We’ll pad at the batch level.
         #return torch.tensor(self.examples[i])
         #return self.examples[i]
-        return self.tokenizer(self.examples[i], max_length=510, truncation=True, padding=True)
-
-
+        #return self.tokenizer([self.examples[j] for j in i], max_length=512, truncation=True, padding="max_length", return_tensors="pt").to(self.device)
+        enc = self.tokenizer(self.examples[i] , max_length=512, truncation=True, padding="max_length",
+                              return_tensors="pt")
+        denc = {}
+        for k in enc.keys():
+            denc[k] = enc[k].squeeze()
+        res = transformers.tokenization_utils_base.BatchEncoding(denc).to(self.device)
+        return res
 
 def train_tokenizer(datafiles, roberta=False, tok_folder="."):
     if roberta:
@@ -143,6 +148,8 @@ def train_tokenizer(datafiles, roberta=False, tok_folder="."):
             limit_alphabet=1000,
             wordpieces_prefix="##",
         )
+        if not os.path.exists(tok_folder):
+            os.makedirs(tok_folder)
         tokenizer.save_model(tok_folder, "bert_rl1")
         
     return tokenizer
@@ -201,12 +208,12 @@ def train(args):
     roberta = True
     
     src_files = glob.glob("/tmp/off*pkl")
-    main_datafile = os.path.join("/tmp/", args.data_prefix + ".txt")
-    val_datafile = os.path.join("/tmp/", args.data_prefix + "_val.txt")
+    main_datafile = os.path.join("/home/justin/alma-2.0/glut_control/rl_transformer/processed_files", args.data_prefix + ".txt")
+    val_datafile = os.path.join("/home/justin/alma-2.0/glut_control/rl_transformer/processed_files", args.data_prefix + "_val.txt")
     if not os.path.exists(main_datafile) or args.preprocess_only:
         preprocess_datafiles(src_files, main_datafile, val_datafile, use_now=args.use_now)
         dedup(main_datafile, val_datafile, replace=True)
-        tokenizer = train_tokenizer(main_datafile, roberta, args.tokenizer_folder)
+        _ = train_tokenizer(main_datafile, roberta, args.tokenizer_folder)
     #else:
     #    train_tokenizer(main_datafile, roberta, args.tokenizer_folder)
     if args.preprocess_only:
@@ -303,13 +310,14 @@ def train(args):
     #train_dataset = QL4Dataset(["/tmp/off_data.txt"], train=True, objective="mlm")
     print("Train dataset set size: ", len(train_dataset))
     data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer,
-                                                    mlm=True, mlm_probability=0.15,)
+                                                    mlm=True, mlm_probability=0.15)
+#                                                    auto_collation=False)
     training_args = TrainingArguments(
         output_dir=args.result_folder,          # output directory
         overwrite_output_dir=True,
-        num_train_epochs=10,              # total number of training epochs
-        per_device_train_batch_size=16,  # batch size per device during training
-        per_device_eval_batch_size=16,   # batch size for evaluation  (was 64)
+        num_train_epochs=3,              # total number of training epochs
+        per_device_train_batch_size=32,  # batch size per device during training
+        per_device_eval_batch_size=32,   # batch size for evaluation  (was 64)
         warmup_steps=500,                # number of warmup steps for learning rate scheduler
         weight_decay=0.01,               # strength of weight decay
         logging_dir='./logs',            # directory for storing logs
@@ -429,7 +437,7 @@ def resume(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run test with specified parameters.")
     parser.add_argument("--preprocess_only", action='store_true')
-    parser.add_argument("--data_prefix", type=str, default="off_data_tds")
+    parser.add_argument("--data_prefix", type=str, default="off_data_tds", help="Prefix of data files")
     parser.add_argument("--result_folder", type=str, default="results")
     parser.add_argument("--tokenizer_folder", type=str, default="rl_tokenizer")
     parser.add_argument("--num_hidden_layers", type=int, default=6)

@@ -17,7 +17,7 @@ means different things on different steps.
 
 A)  Rerun pre-training with sorted KB
 B)  Also get model with NSP head; compare the two (since I don't
-believe that NSP doesn't help!)
+believe that NSP doesn't help!).  This should be part of the paper.
 C)  Try using raw CLS output in q-learning rather than using pooled
 output
 D)  Debug!

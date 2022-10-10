@@ -6,7 +6,8 @@ preprocessing on it.
 
 import argparse
 import tempfile
-import os
+import os,shutil
+from tqdm import tqdm
 
 def dedup(primary_fname, secondary_fname, replace=False):
     pfile = open(primary_fname, "rt")
@@ -16,7 +17,8 @@ def dedup(primary_fname, secondary_fname, replace=False):
 
     slines = set()
     sline_locations = {}
-    for linenum, line in enumerate(sfile):
+    print("Processing secondary file...")
+    for linenum, line in enumerate(tqdm(sfile)):
         if line == "\n":
             continue
         slines.add(line)
@@ -26,14 +28,17 @@ def dedup(primary_fname, secondary_fname, replace=False):
             sline_locations[line] = [linenum]
 
     skiplines = []
-    for pline in pfile:
+    print("Processing primary file...")
+    for pline in tqdm(pfile):
         if pline in slines:
             #print("Found duplicate line: {}".format(pline))
             skiplines.extend(sline_locations[pline])
 
     sfile.seek(0)
     prev_newline = False
-    for linenum, line in enumerate(sfile):
+    print("Deleting duplicate lines...")
+    skiplines = set(skiplines)
+    for linenum, line in enumerate(tqdm(sfile)):
         if line == "\n":
             if prev_newline:
                 continue
@@ -51,7 +56,8 @@ def dedup(primary_fname, secondary_fname, replace=False):
     if replace:
         tname = tmpfile.name
         tmpfile.close()
-        os.rename(tname, secondary_fname)
+        #os.rename(tname, secondary_fname)
+        shutil.copyfile(tname, secondary_fname)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Remove duplicate lines from a file")
