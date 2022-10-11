@@ -96,6 +96,30 @@ def kb_action_to_text(kb, action, use_now = False):
     form = kb_form + "</kb>" + action_form
     return form
     
+def get_pred_names(alma_inst):
+    L = alma.kb_to_pyobject(alma_inst, 1)
+    K= [get_predicates(x) for x in L]
+    M = [y for x in K for y in x]
+    return sorted(list(set(M)))
+
+def get_predicates(tree):
+    # Predicates are 0-ary functions (this means constants count as well).
+    if len(tree) == 0:
+        return []
+    elif tree[0] == 'if':
+        return [get_predicates(tree[1])]+ [get_predicates(tree[2])]
+    elif tree[0] == 'func' and len(tree[2]) == 0:
+            return tree[1]
+    elif tree[0] == 'var':
+        return []
+    elif tree[0] == 'and':
+        return [get_predicates(clause) for clause in tree[1]]
+    elif tree[0] == 'or':
+        return [get_predicates(clause) for clause in tree[1]]
+    elif tree[0] == 'neg':
+        return get_predicates(tree[1])
+    else:
+        return []
 
 def classical_step(alma_inst):
     """
