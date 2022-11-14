@@ -6,9 +6,18 @@ cwd = os.getcwd()
 #compile_args = ['-std=c11', '-pedantic-errors', '-Wall', '-Werror', '-Wshadow', '-Wpedantic', '-g', '-fPIC']
 compile_args = ['-std=c11', '-pedantic-errors', '-Wall', '-Wshadow', '-Wpedantic', '-g', '-fPIC', '-O0']
 
+def get_version(rel_path):
+    for line in read(rel_path).splitlines():
+        if line.startswith('__version__'):
+            delim = '"' if '"' in line else "'"
+            return line.split(delim)[1]
+    else:
+        raise RuntimeError("Unable to find version string.")
+    
+
 def main():
     setup(name="alma",
-          version="2.0.0",
+          version="2.1.0",
           description="Python interface for the alma C library",
           ext_modules=[Extension("alma",
                                  sources = ["almamodule.c"],
