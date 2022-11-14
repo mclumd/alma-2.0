@@ -214,8 +214,8 @@ def train(args):
         preprocess_datafiles(src_files, main_datafile, val_datafile, use_now=args.use_now)
         dedup(main_datafile, val_datafile, replace=True)
         _ = train_tokenizer(main_datafile, roberta, args.tokenizer_folder)
-    #else:
-    #    train_tokenizer(main_datafile, roberta, args.tokenizer_folder)
+    else:
+        train_tokenizer(main_datafile, roberta, args.tokenizer_folder)
     if args.preprocess_only:
         return
 

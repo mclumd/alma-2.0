@@ -38,6 +38,9 @@ def kb_print(alma_inst):
     for s in kb.split('\n'):
         print(s)
 
+def kb_str(alma_inst):
+    return alma.kbprint(alma_inst)[0]
+
 
 def next_action(alma_inst):        
     res_task_buffer = alma.res_task_buf(alma_inst)
@@ -104,12 +107,18 @@ def get_pred_names(alma_inst):
 
 def get_predicates(tree):
     # Predicates are 0-ary functions (this means constants count as well).
+    # Right now "fif" objects come in as functions, this is probably wrong but
+    # we'll treat them as a special case for now.
     if len(tree) == 0:
         return []
     elif tree[0] == 'if':
         return [get_predicates(tree[1])]+ [get_predicates(tree[2])]
+    elif tree[0] == 'func' and tree[1] == 'fif':
+        return [get_predicates(tree[2][0])]+ [get_predicates(tree[2][1])]
     elif tree[0] == 'func' and len(tree[2]) == 0:
             return tree[1]
+    elif tree[0] == 'func' and tree[1] == 'not':
+            return get_predicates(tree[2][0])
     elif tree[0] == 'var':
         return []
     elif tree[0] == 'and':
