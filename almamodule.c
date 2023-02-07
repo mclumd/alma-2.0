@@ -7,6 +7,7 @@
 #include "alma_kb.h"
 #include "alma_print.h"
 #include "tommy.h"
+#include "res_task_heap.h"
 
 #if PY_MAJOR_VERSION >= 3
 #define PY3
@@ -465,6 +466,7 @@ static PyObject *set_prb_priorities(PyObject *self, PyObject *args) {
   long alma_kb;
   kb *collection;
   tommy_list *collection_prb;
+  res_task_heap *collection_res_tasks;
   PyObject *priority_list;
   //char *subj_copy;
   //int subj_len;
@@ -478,6 +480,7 @@ static PyObject *set_prb_priorities(PyObject *self, PyObject *args) {
 
   collection = (kb *) alma_kb;
   collection_prb = &collection->pre_res_task_buffer;
+  collection_res_tasks = &collection->res_tasks;
   list_len = PyList_Size(priority_list);
   prb_elmnt = tommy_list_head(collection_prb);
 
@@ -495,7 +498,8 @@ static PyObject *set_prb_priorities(PyObject *self, PyObject *args) {
   }
 
   // Reheapify the res_task_heap
-  heapify_pre_res_buffer(collection);
+  //heapify_pre_res_buffer(collection);
+  res_task_heap_heapify(collection_res_tasks);
   Py_INCREF(Py_None);
   return Py_None;
 }
