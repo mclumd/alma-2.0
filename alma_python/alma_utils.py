@@ -61,6 +61,8 @@ def alma_tree_to_str(tree):
         return ""
     elif tree[0] == 'if':
         return alma_tree_to_str(tree[1]) + " --> " + alma_tree_to_str(tree[2])
+    elif tree[0] == 'fif':
+        return alma_tree_to_str(tree[1]) + " -f-> " + alma_tree_to_str(tree[2])
     elif tree[0] == 'func':
         if len(tree[2]) > 0:
             return tree[1] + '(' + ''.join([alma_tree_to_str(term) + ', ' for term in tree[2]   ])[:-2] + ')'
@@ -103,7 +105,13 @@ def get_pred_names(alma_inst):
     L = alma.kb_to_pyobject(alma_inst, 1)
     K= [get_predicates(x) for x in L]
     M = [y for x in K for y in x]
-    return sorted(list(set(M)))
+    M2 = []
+    for m in M:
+        if type(m) == type([]):
+            M2 += m
+        else:
+            M2.append(m)
+    return sorted(list(set(M2)))
 
 def get_predicates(tree):
     # Predicates are 0-ary functions (this means constants count as well).
@@ -111,7 +119,7 @@ def get_predicates(tree):
     # we'll treat them as a special case for now.
     if len(tree) == 0:
         return []
-    elif tree[0] == 'if':
+    elif tree[0] == 'if' or tree[0] == 'fif':
         return [get_predicates(tree[1])]+ [get_predicates(tree[2])]
     elif tree[0] == 'func' and tree[1] == 'fif':
         return [get_predicates(tree[2][0])]+ [get_predicates(tree[2][1])]
