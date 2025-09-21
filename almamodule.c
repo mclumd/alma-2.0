@@ -407,9 +407,9 @@ static PyObject *alma_set_priorities(PyObject *self, PyObject *args) {
       PyErr_SetString(PyExc_TypeError, "list items must be strings.");
     } else {
       //LOG( "Got subject name %s\n", PyUnicode_AS_DATA(list_item));
-      subj_len = strlen(PyUnicode_AS_DATA(list_item)) + 1;
+      subj_len = strlen(PyUnicode_DATA(list_item)) + 1;
       subj_copy = malloc( subj_len * sizeof(char));
-      strcpy(subj_copy, PyUnicode_AS_DATA(list_item));
+      strcpy(subj_copy, PyUnicode_DATA(list_item));
       tommy_array_insert(collection->subject_list, subj_copy);
     }
   }
@@ -1098,7 +1098,7 @@ static PyObject * alma_init(PyObject *self, PyObject *args) {
 	PyErr_SetString(PyExc_TypeError, "list items must be strings.");
 #endif
     } else {
-      LOG( "Got subject name %s\n", PyUnicode_AS_DATA(list_item));
+      LOG( "Got subject name %s\n", PyUnicode_DATA(list_item));
 #ifndef PY3
       subj_len = strlen(PyString_AsString(list_item)) + 1;
       subj_copy = malloc( subj_len * sizeof(char));
@@ -1106,9 +1106,9 @@ static PyObject * alma_init(PyObject *self, PyObject *args) {
       subj_copy[subj_len-2] = '\0';
       tommy_array_insert(collection_subjects, subj_copy);
 #else
-      subj_len = strlen(PyUnicode_AS_DATA(list_item)) + 1;
+      subj_len = strlen(PyUnicode_DATA(list_item)) + 1;
       subj_copy = malloc( subj_len * sizeof(char));
-      strncpy(subj_copy, PyUnicode_AS_DATA(list_item), subj_len);
+      strncpy(subj_copy, PyUnicode_DATA(list_item), subj_len);
       subj_copy[subj_len-1] = '\0';
       tommy_array_insert(collection_subjects, subj_copy);
 #endif

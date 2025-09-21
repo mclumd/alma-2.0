@@ -26,7 +26,7 @@ def main():
 #                                  "alma_kb.h",
 #                                  "alma_print.h"],
                                  extra_compile_args=compile_args,
-                                 library_dirs=["/home/justin/alma-2.0"],
+                                 library_dirs=["/home/justin/projects/alma-2.0"],
 #                                 library_dirs=["/usr/local/lib"],
                                  libraries=["alma"])])
 
