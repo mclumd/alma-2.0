@@ -22,13 +22,11 @@ def main():
           ext_modules=[Extension("alma",
                                  sources = ["almamodule.c"],
                                  include_dirs = ["/usr/lib/python2.7/dist-packages/numpy/core/include/numpy"],
-#                                 include_dirs = ["alma_command.h",
-#                                  "alma_kb.h",
-#                                  "alma_print.h"],
                                  extra_compile_args=compile_args,
-                                 library_dirs=["/home/justin/projects/alma-2.0"],
-#                                 library_dirs=["/usr/local/lib"],
-                                 libraries=["alma"])])
+                                 library_dirs=["/home/uav/alma-2.0"],
+                                 libraries=["alma"])],
+          packages=["alma_utils"]
+          )
 
 if __name__ == "__main__":
     main()

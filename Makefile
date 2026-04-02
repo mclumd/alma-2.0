@@ -1,6 +1,6 @@
 CC = gcc
-#CFLAGS = -std=c11 -pedantic-errors -Wall -Werror -Wshadow -Wpedantic -g
-CFLAGS = -std=gnu11 -pedantic-errors -Wall -Wshadow -Wpedantic -g -mno-avx2 -mtune=generic -mno-avx2 -fPIC -O0
+CFLAGS = -D_POSIX_C_SOURCE=200809L -std=c11 -pedantic-errors -Wall -Werror -Wshadow -Wpedantic -g -fPIC
+#CFLAGS = -std=gnu11 -pedantic-errors -Wall -Wshadow -Wpedantic -g -mno-avx2 -mtune=generic -mno-avx2 -fPIC -O0
 
 TOMMY = tommyds/tommyds/
 
