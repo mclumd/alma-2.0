@@ -108,7 +108,7 @@ int parse_string(char *string, mpc_ast_t **ast) {
     return 1;
   }
   else {
-    fprintf(stderr, "Error processing string %s\n", string);
+    fprintf(stderr, "Error processing string '%s'\n", string);
     mpc_err_print(r.error);
     mpc_err_delete(r.error);
     return 0;

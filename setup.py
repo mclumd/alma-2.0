@@ -1,34 +1,45 @@
-from distutils.core import setup, Extension
 import os
+from setuptools import setup, Extension
+import numpy
 
-cwd = os.getcwd()
+def read(rel_path: str) -> str:
+    here = os.path.abspath(os.path.dirname(__file__))
+    with open(os.path.join(here, rel_path), 'r') as f:
+        return f.read()
 
-#compile_args = ['-std=c11', '-pedantic-errors', '-Wall', '-Werror', '-Wshadow', '-Wpedantic', '-g', '-fPIC']
-compile_args = ['-std=c11', '-pedantic-errors', '-Wall', '-Wshadow', '-Wpedantic', '-g', '-fPIC', '-O0']
-
-def get_version(rel_path):
+def get_version(rel_path: str) -> str:
     for line in read(rel_path).splitlines():
-        if line.startswith('__version__'):
+        if line.startswith("__version__"):
             delim = '"' if '"' in line else "'"
             return line.split(delim)[1]
-    else:
-        raise RuntimeError("Unable to find version string.")
-    
+    raise RuntimeError("Unable to find version string.")
 
-def main():
-    setup(name="alma",
-          version="2.1.0",
-          description="Python interface for the alma C library",
-          ext_modules=[Extension("alma",
-                                 sources = ["almamodule.c"],
-                                 include_dirs = ["/usr/lib/python2.7/dist-packages/numpy/core/include/numpy"],
-#                                 include_dirs = ["alma_command.h",
-#                                  "alma_kb.h",
-#                                  "alma_print.h"],
-                                 extra_compile_args=compile_args,
-                                 library_dirs=["/home/justin/alma-2.0"],
-#                                 library_dirs=["/usr/local/lib"],
-                                 libraries=["alma"])])
+compile_args = [
+    "-std=c11",
+    "-pedantic-errors",
+    "-Wall",
+    "-Wshadow",
+    "-Wpedantic",
+    "-g",
+    "-fPIC",
+    "-O0",
+]
 
-if __name__ == "__main__":
-    main()
+alma_ext = Extension(
+    "alma",
+    sources=["almamodule.c"],
+    include_dirs=[numpy.get_include()],        # use numpy.get_include() rather than a hard path
+    library_dirs=["/home/justin/alma-2.0"],
+    libraries=["alma"],
+    extra_compile_args=compile_args,
+)
+
+setup(
+    name="alma",
+    # either hard-code the version or read it dynamically:
+    version=get_version("/home/justin/alma-2.0/alma_python/__init__.py"),
+    description="Python interface for alma",
+    ext_modules=[alma_ext],
+    setup_requires=["numpy"],  # ensure numpy is available for include_dirs
+    zip_safe=False,
+)

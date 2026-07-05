@@ -100,41 +100,69 @@ def kb_action_to_text(kb, action, use_now = False):
     action_form = action[0] + ";" + action[1]
     form = kb_form + "</kb>" + action_form
     return form
-    
-def get_pred_names(alma_inst):
+
+def is_recursively_empty(m):
+    if type(m) != type([]):
+        return False
+    else:
+        if m == []:
+            return True
+        else:
+            for n in m:
+                if not is_recursively_empty(n):
+                    return False
+            return True
+        
+def get_prop_names(alma_inst):
+    def flatten(A):
+        result = []
+        for x in A:
+            if type(x) != list:
+                result.append(x)
+            else:
+                result.extend(flatten(x))
+        return result
+
     L = alma.kb_to_pyobject(alma_inst, 1)
-    K= [get_predicates(x) for x in L]
+    K= [get_propositions(x) for x in L if get_propositions(x) != []]
     M = [y for x in K for y in x]
     M2 = []
     for m in M:
-        if type(m) == type([]):
-            M2 += m
-        else:
-            M2.append(m)
-    return sorted(list(set(M2)))
+        if not is_recursively_empty(m):
+            if type(m) == type([]):
+                M2 += m
+            else:
+                M2.append(m)
+    return sorted(list(set(flatten(M2))))
 
-def get_predicates(tree):
+def get_propositions(tree):
     # Predicates are 0-ary functions (this means constants count as well).
     # Right now "fif" objects come in as functions, this is probably wrong but
     # we'll treat them as a special case for now.
     if len(tree) == 0:
         return []
     elif tree[0] == 'if' or tree[0] == 'fif':
-        return [get_predicates(tree[1])]+ [get_predicates(tree[2])]
+        return [get_propositions(tree[1])]+ [get_propositions(tree[2])]
     elif tree[0] == 'func' and tree[1] == 'fif':
-        return [get_predicates(tree[2][0])]+ [get_predicates(tree[2][1])]
-    elif tree[0] == 'func' and len(tree[2]) == 0:
-            return tree[1]
+        return [get_propositions(tree[2][0])]+ [get_propositions(tree[2][1])]
     elif tree[0] == 'func' and tree[1] == 'not':
-            return get_predicates(tree[2][0])
+        return get_propositions(tree[2][0])
+    elif tree[0] == 'func' and (tree[1] == 'or' or tree[1] == 'and'):
+        return [get_propositions(clause) for clause in tree[2]]
+        #return get_propositions(tree[2])
+    elif tree[0] == 'func' and len(tree[2]) == 0:
+        return tree[1]
     elif tree[0] == 'var':
         return []
     elif tree[0] == 'and':
-        return [get_predicates(clause) for clause in tree[1]]
+        if len(tree[1]) == 1:
+            return get_propositions(tree[1][0])
+        else:
+            return [get_propositions(clause) for clause in tree[1]]
     elif tree[0] == 'or':
-        return [get_predicates(clause) for clause in tree[1]]
+        return [get_propositions(clause) for clause in tree[1]]
     elif tree[0] == 'neg':
-        return get_predicates(tree[1])
+        return get_propositions(tree[1])
     else:
         return []
 
