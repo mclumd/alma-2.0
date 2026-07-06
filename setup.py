@@ -42,6 +42,8 @@ setup(
     version=get_version(os.path.join("alma_python", "__init__.py")),
     description="Python interface for alma",
     ext_modules=[alma_ext],
-    setup_requires=["numpy"],
+    package_dir={"": "alma_python"}, # Treat the contents of this folder as root
+    py_modules=["alma_utils"],       # Explicitly expose this specific module
+     setup_requires=["numpy"],
     zip_safe=False,
 )
