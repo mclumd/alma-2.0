@@ -1,3 +1,4 @@
+from distutils.core import setup, Extension
 import os
 from setuptools import setup, Extension
 import numpy

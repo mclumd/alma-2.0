@@ -323,8 +323,8 @@ STATIC int NAME(_delete)(struct heap_name *heap, heap_type *value) {
       NAME(_pop)(heap);
       return 1;
     }
-    return 0;
   }
+  return 0;
 }
 
 // Delete any heap element that contains the given clause (a prelude to clause deletion).
@@ -348,23 +348,23 @@ STATIC int NAME(_clausal_delete)(struct heap_name *heap, clause *c) {
 }
 
 STATIC void NAME(_destroy)(struct heap_name *heap) {
-        res_task_pri *current_item;
-   res_task *current_res_task;
+        //res_task_pri *current_item;
+   //res_task *current_res_task;
    //for (int i = 0; i < heap->count; i++) {
-   for (int i = 0; i < tommy_array_size(&heap->data); i++) {
-     current_item = res_task_heap_item(heap, i);
-     if (i < heap->count) {
+   //for (int i = 0; i < tommy_array_size(&heap->data); i++) {
+    // current_item = res_task_heap_item(heap, i);
+   //  if (i < heap->count) {
        //fprintf(stderr, "free RTHD0");
-       current_res_task = current_item->res_task;
+   //    current_res_task = current_item->res_task;
        //free_clause(current_res_task->x);
        //free_clause(current_res_task->y);
        // Not explicitly free pos and neg; guess they're part of x and y and
        // thus handled above.
        //free(current_res_task);
-     }
+   //  }
      //fprintf(stderr, "free RTHD");
      // if (current_item) free(current_item);  // Free current item if not NULL; this may not work.
-   }
+  // }
    tommy_array_done(&heap->data);
    /*   TODO:  Why do we need the condititional?
    if (heap->count > 0) {

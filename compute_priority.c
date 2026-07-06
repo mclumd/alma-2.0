@@ -15,7 +15,7 @@
 double compute_priority(kb *knowledge_base, res_task *t) {
   /* The priority of a funciton will be the minimum of the priorities of any associated term in the task. */
   char *subject;
-  double subject_priority;
+  //double subject_priority;
   double priority = DBL_MAX;
 
 
